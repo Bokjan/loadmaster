@@ -15,6 +15,14 @@ void MemoryResourceManager::CreateWorkerThreads() {}
 MemoryResourceManagerSimple::MemoryResourceManagerSimple(const Options &options)
     : MemoryResourceManager(options) {}
 
+MemoryResourceManagerSimple::~MemoryResourceManagerSimple() {
+  // Delete allocated memory
+  // dtor is invoked after wg.Done(), no race conditions
+  if (block_ptr_ != nullptr) {
+    delete[] block_ptr_;
+  }
+}
+
 void MemoryResourceManagerSimple::Schedule(TimePoint time_point) {
   do {
     if (!this->WillSchedule(time_point)) {

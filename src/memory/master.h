@@ -23,6 +23,7 @@ class MemoryResourceManager : public ResourceManager {
 class MemoryResourceManagerSimple final : public MemoryResourceManager {
  public:
   explicit MemoryResourceManagerSimple(const Options &options);
+  ~MemoryResourceManagerSimple();
 
  protected:
   virtual void Schedule(TimePoint time_point);
