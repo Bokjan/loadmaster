@@ -1,20 +1,34 @@
 #include "runtime.h"
 
 #include "constants.h"
-#include "cpu/master.h"
+#include "cpu/cpu.h"
 #include "global.h"
+#include "memory/memory.h"
 #include "options.h"
 #include "util/log.h"
+
+#include <functional>
+
+using FnCreateResourceManager =
+    std::function<std::unique_ptr<ResourceManager>(const Options &options)>;
+
+static const FnCreateResourceManager resmgr_creators[] = {cpu::CreateResourceManager,
+                                                          memory::CreateResourceManager};
 
 Runtime::Runtime(const Options &options) : options_(options) {}
 
 void Runtime::Init() {
-  // CPU
-  managers_.push_back(
-      std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerSimple(options_)));
+  // Create
+  for (auto &&fn : resmgr_creators) {
+    managers_.push_back(std::move(fn(options_)));
+  }
   // Initialize
-  for (auto &mgr : managers_) {
-    mgr->InitWithOptions(options_);
+  for (auto it = managers_.begin(); it != managers_.end();) {
+    if (!(*it)->Init()) {
+      managers_.erase(it);
+    } else {
+      ++it;
+    }
   }
 }
 
@@ -25,6 +39,10 @@ void Runtime::CreateWorkers() {
 }
 
 void Runtime::MainLoop() {
+  if (managers_.empty()) {
+    LOG_E("no module enabled, quit");
+    global::StopLoop();
+  }
   while (global::keep_loop) {
     auto start = std::chrono::high_resolution_clock::now();
     for (auto &mgr : managers_) {

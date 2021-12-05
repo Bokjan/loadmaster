@@ -12,13 +12,16 @@ using FnCmdArgHandler = std::function<bool(Options &options, int, const char **,
 
 static void PrintUsage(const char *path);
 
+static bool ReadInt(int &target, int argc, const char **argv, int &idx, const char *prompt = "");
+
 static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerLoad(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerConcurrency(Options &options, int argc, const char **argv, int &idx);
+static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &idx);
+static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx);
+static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx);
 
 void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
   static std::map<std::string, FnCmdArgHandler> handlers = {
-      {"-h", HandlerHelp}, {"-l", HandlerLoad}, {"-c", HandlerConcurrency}};
+      {"-h", HandlerHelp}, {"-l", HandlerCpuLoad}, {"-c", HandlerCpuCount}, {"-m", HandlerMemory}};
 
   bool terminate = false;
 
@@ -46,6 +49,7 @@ static void PrintUsage(const char *path) {
   printf("    -l <load>           target CPU usage (100 each core), default: %d\n",
          kDefaultCpuLoad);
   puts("    -c <thread_count>   worker thread(CPU) count, default: based on required load");
+  puts("    -m <max_memory>     maximum memory (MiB) for wasting, default: 0");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
 }
 
@@ -54,33 +58,39 @@ static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx)
   return false;
 }
 
-static bool HandlerLoad(Options &options, int argc, const char **argv, int &idx) {
-  if (idx + 1 >= argc) {
-    LOG_E("failed to read -l option, arguments insufficient");
+static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &idx) {
+  return ReadInt(options.cpu_load_, argc, argv, idx, "-l");
+}
+
+static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx) {
+  if (!ReadInt(options.cpu_count_, argc, argv, idx, "-c")) {
     return false;
   }
-  const char *value = argv[++idx];
-  int affected = sscanf(value, "%d", &options.cpu_load_);
-  if (affected != 1) {
-    LOG_E("failed to read -l option, expect an integer, have: `%s`", value);
+  if (options.cpu_count_ > cpu::Count()) {
+    LOG_E("hardware CPU count: %d, you require %d, abort", cpu::Count(), options.cpu_count_);
     return false;
   }
   return true;
 }
 
-static bool HandlerConcurrency(Options &options, int argc, const char **argv, int &idx) {
+static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx) {
+  int memory_mib = 0;
+  if (!ReadInt(memory_mib, argc, argv, idx, "-m")) {
+    return false;
+  }
+  options.memory_ = memory_mib * 1024 * 1024;
+  return true;
+}
+
+static bool ReadInt(int &target, int argc, const char **argv, int &idx, const char *prompt) {
   if (idx + 1 >= argc) {
-    LOG_E("failed to read -c option, arguments insufficient");
+    LOG_E("[%s] failed to read option, arguments insufficient", prompt);
     return false;
   }
   const char *value = argv[++idx];
-  int affected = sscanf(value, "%d", &options.cpu_count_);
+  int affected = sscanf(value, "%d", &target);
   if (affected != 1) {
-    LOG_E("failed to read -c option, expect an integer, have: `%s`", value);
-    return false;
-  }
-  if (options.cpu_count_ > cpu::Count()) {
-    LOG_E("hardware CPU count: %d, you require %d, abort", cpu::Count(), options.cpu_count_);
+    LOG_E("[%s] failed to read option, expect an integer, have: `%s`", prompt, value);
     return false;
   }
   return true;

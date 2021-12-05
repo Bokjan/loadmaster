@@ -10,11 +10,14 @@ namespace cpu {
 
 class CpuResourceManager : public ResourceManager {
  public:
-  virtual void InitWithOptions(const Options &options);
+  virtual bool Init();
   virtual void CreateWorkerThreads();
+  virtual void Schedule(TimePoint time_point);
 
  protected:
   int jiffy_ms_;
+  StatInfo stat_info_;
+  TimePoint time_point_;
   std::vector<CpuWorkerContext> workers_;
 
   explicit CpuResourceManager(const Options &options);
@@ -24,14 +27,9 @@ class CpuResourceManager : public ResourceManager {
 class CpuResourceManagerSimple final : public CpuResourceManager {
  public:
   explicit CpuResourceManagerSimple(const Options &options);
-  void Schedule(TimePoint time_point);
 
  protected:
   void AdjustWorkerLoad(int cpu_load);
-
- private:
-  StatInfo stat_info_;
-  TimePoint time_point_;
 };
 
 }  // namespace cpu

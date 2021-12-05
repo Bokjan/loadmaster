@@ -1,7 +1,9 @@
 #include "resmgr.h"
 
-WorkerLoopGuard::WorkerLoopGuard(WorkerContext &ctx) : ctx_(ctx) {}
+WaitGroupDoneGuard::WaitGroupDoneGuard(util::WaitGroup &wg) : wg_(wg) {}
 
-WorkerLoopGuard::~WorkerLoopGuard() { ctx_.OnFinish(); }
+WaitGroupDoneGuard::~WaitGroupDoneGuard() { wg_.Done(); }
+
+WorkerLoopGuard::WorkerLoopGuard(WorkerContext &ctx) : wgd_guard_(ctx.parent_wg_) {}
 
 void ResourceManager::WaitThreads() const { wg_.Wait(); }

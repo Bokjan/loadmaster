@@ -18,28 +18,36 @@ class WorkerContext {
   int id_;
   std::thread thread_;
 
-  explicit WorkerContext(int id, util::GenericWaitGroup<int> &wg) : id_(id), parent_wg_(wg) {}
+  explicit WorkerContext(int id, util::WaitGroup &wg) : id_(id), parent_wg_(wg) {}
   virtual void Loop() = 0;
 
  private:
-  util::GenericWaitGroup<int> &parent_wg_;
-  void OnFinish() { parent_wg_.Done(); }
+  util::WaitGroup &parent_wg_;
   friend class WorkerLoopGuard;
+};
+
+class WaitGroupDoneGuard final {
+ public:
+  explicit WaitGroupDoneGuard(util::WaitGroup &wg);
+  ~WaitGroupDoneGuard();
+
+ private:
+  util::WaitGroup &wg_;
 };
 
 class WorkerLoopGuard final {
  public:
-  WorkerLoopGuard(WorkerContext &ctx);
-  ~WorkerLoopGuard();
+  explicit WorkerLoopGuard(WorkerContext &ctx);
+  ~WorkerLoopGuard() = default;
 
  private:
-  WorkerContext &ctx_;
+  WaitGroupDoneGuard wgd_guard_;
 };
 
 class ResourceManager {
  public:
   explicit ResourceManager(const Options &options) : options_(options) {}
-  virtual void InitWithOptions(const Options &options) = 0;
+  virtual bool Init() = 0;
   virtual void CreateWorkerThreads() = 0;
   virtual void Schedule(TimePoint time_point) = 0;
   void WaitThreads() const;

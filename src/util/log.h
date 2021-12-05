@@ -10,7 +10,12 @@ const char *GetTimeCString();
 #define SOURCE_PATH_SIZE 0
 #endif
 
-#define __FILENAME__ (__FILE__ + SOURCE_PATH_SIZE)
+#ifdef SRC_PREFIX_SIZE
+#undef SRC_PREFIX_SIZE
+#endif
+#define SRC_PREFIX_SIZE (sizeof("src/") - 1)
+
+#define __FILENAME__ (__FILE__ + SOURCE_PATH_SIZE + SRC_PREFIX_SIZE)
 
 #define LOG_FILE(fp, fmt, args...) \
   fprintf(fp, "[%s] (%s:%d) " fmt "\n", util::GetTimeCString(), __FILENAME__, __LINE__, ##args)

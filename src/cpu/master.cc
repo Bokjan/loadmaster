@@ -9,22 +9,25 @@ namespace cpu {
 CpuResourceManager::CpuResourceManager(const Options &options)
     : ResourceManager(options), jiffy_ms_(cpu::GetJiffyMillisecond()) {}
 
-void CpuResourceManager::InitWithOptions(const Options &options) {
+bool CpuResourceManager::Init() {
   int count;
-  if (options.cpu_count_ > 0) {
-    count = options.cpu_count_;
+  if (options_.cpu_count_ > 0) {
+    count = options_.cpu_count_;
   } else {
-    count = (options.cpu_load_ + (kMaxLoadPerCore - 1)) / kMaxLoadPerCore;
+    count = (options_.cpu_load_ + (kMaxLoadPerCore - 1)) / kMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_E("CPU load `%d` needs %d CPU, have %d; use %d", options.cpu_load_, count, Count(),
-          Count());
-    count = Count();
+    LOG_E("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
+    return false;
+  }
+  if (count <= 0) {
+    return false;
   }
   for (int i = 0; i < count; ++i) {
     CpuWorkerContext ctx(i, wg_);
     workers_.emplace_back(std::move(ctx));
   }
+  return true;
 }
 
 void CpuResourceManager::CreateWorkerThreads() {
@@ -35,19 +38,19 @@ void CpuResourceManager::CreateWorkerThreads() {
   }
 }
 
-CpuResourceManagerSimple::CpuResourceManagerSimple(const Options &options)
-    : CpuResourceManager(options) {}
-
 inline uint64_t GetUserNiceSystemJiffies(const StatInfo &info) {
   return info.user + info.nice + info.system;
 }
 
-void CpuResourceManagerSimple::Schedule(TimePoint time_point) {
+void CpuResourceManager::Schedule(TimePoint time_point) {
   bool will_schedule = false;
   auto last_jiffies = GetUserNiceSystemJiffies(stat_info_);
 
   do {
-    if (GetProcStat(stat_info_) != ErrCode::kOK) {
+    // refresh `stat_info_`
+    auto refresh_ret = GetProcStat(stat_info_);
+    if (refresh_ret != ErrCode::kOK) {
+      LOG_E("failed to GetProcStat, ret=%d", ErrCodeToInt(refresh_ret));
       break;
     }
     if (last_jiffies == 0) {
@@ -69,6 +72,9 @@ void CpuResourceManagerSimple::Schedule(TimePoint time_point) {
 
   time_point_ = time_point;
 }
+
+CpuResourceManagerSimple::CpuResourceManagerSimple(const Options &options)
+    : CpuResourceManager(options) {}
 
 void CpuResourceManagerSimple::AdjustWorkerLoad(int cpu_load) {
   int core_target = 0;

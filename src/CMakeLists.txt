@@ -15,11 +15,12 @@ INCLUDE_DIRECTORIES(.)
 SET(COMP_FILES)
 SET(COMP_FILES ${COMP_FILES}
                main.cc global.cc runtime.cc
-               resmgr.cc)
+               resmgr.cc options.cc)
 SET(COMP_FILES ${COMP_FILES}
                cli/cli.cc)
 SET(COMP_FILES ${COMP_FILES}
-               cpu/cpu.cc cpu/worker.cc cpu/master.cc)
+               cpu/cpu.cc cpu/worker.cc cpu/master.cc
+               memory/memory.cc memory/master.cc)
 SET(COMP_FILES ${COMP_FILES}
                util/log.cc)
 

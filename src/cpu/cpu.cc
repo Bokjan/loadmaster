@@ -2,6 +2,7 @@
 
 #include "constants.h"
 #include "global.h"
+#include "master.h"
 #include "util/log.h"
 
 #include <cstring>
@@ -11,6 +12,10 @@
 #include <unistd.h>
 
 namespace cpu {
+
+std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
+  return std::move(std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerSimple(options)));
+}
 
 int Count() {
   static int count = static_cast<int>(std::thread::hardware_concurrency());

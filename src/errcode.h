@@ -7,3 +7,5 @@ enum class ErrCode : int {
   kProcStatReadValues = 10002,
   kProcStatFindCpuTotal = 10003,
 };
+
+inline int ErrCodeToInt(ErrCode code) { return static_cast<int>(code); }

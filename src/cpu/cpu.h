@@ -2,7 +2,12 @@
 
 #include "errcode.h"
 
+#include <memory>
+
 #include <cstdint>
+
+class Options;
+class ResourceManager;
 
 namespace cpu {
 
@@ -33,5 +38,6 @@ struct StatInfo {
 int Count();
 int GetJiffyMillisecond();
 ErrCode GetProcStat(StatInfo &info);
+std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options);
 
 }  // namespace cpu
