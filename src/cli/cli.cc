@@ -60,7 +60,7 @@ static bool HandlerLoad(Options &options, int argc, const char **argv, int &idx)
     return false;
   }
   const char *value = argv[++idx];
-  int affected = sscanf(value, "%d", &options.load_);
+  int affected = sscanf(value, "%d", &options.cpu_load_);
   if (affected != 1) {
     LOG_E("failed to read -l option, expect an integer, have: `%s`", value);
     return false;
@@ -74,13 +74,13 @@ static bool HandlerConcurrency(Options &options, int argc, const char **argv, in
     return false;
   }
   const char *value = argv[++idx];
-  int affected = sscanf(value, "%d", &options.count_);
+  int affected = sscanf(value, "%d", &options.cpu_count_);
   if (affected != 1) {
     LOG_E("failed to read -c option, expect an integer, have: `%s`", value);
     return false;
   }
-  if (options.count_ > cpu::Count()) {
-    LOG_E("hardware CPU count: %d, you require %d, abort", cpu::Count(), options.count_);
+  if (options.cpu_count_ > cpu::Count()) {
+    LOG_E("hardware CPU count: %d, you require %d, abort", cpu::Count(), options.cpu_count_);
     return false;
   }
   return true;

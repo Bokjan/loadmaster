@@ -5,9 +5,9 @@
 namespace util {
 
 template <typename T>
-class WaitGroup {
+class GenericWaitGroup {
  public:
-  WaitGroup() { atomic_.store(0); }
+  GenericWaitGroup() { atomic_.store(0); }
   void Add(T value) { atomic_.fetch_add(value); }
   void Incr() { Add(static_cast<T>(1)); }
   void Done() { atomic_.fetch_sub(static_cast<T>(1)); }
@@ -21,5 +21,7 @@ class WaitGroup {
  private:
   std::atomic<T> atomic_;
 };
+
+using WaitGroup = GenericWaitGroup<int>;
 
 }  // namespace util

@@ -14,7 +14,8 @@ INCLUDE_DIRECTORIES(.)
 
 SET(COMP_FILES)
 SET(COMP_FILES ${COMP_FILES}
-               main.cc global.cc runtime.cc)
+               main.cc global.cc runtime.cc
+               resmgr.cc)
 SET(COMP_FILES ${COMP_FILES}
                cli/cli.cc)
 SET(COMP_FILES ${COMP_FILES}

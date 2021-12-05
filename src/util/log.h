@@ -6,7 +6,7 @@ namespace util {
 const char *GetTimeCString();
 }
 
-#ifndef SOURCE_PATH_SIZE // this should be defined by CMake scripts
+#ifndef SOURCE_PATH_SIZE  // this should be defined by CMake scripts
 #define SOURCE_PATH_SIZE 0
 #endif
 

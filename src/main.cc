@@ -17,9 +17,10 @@ int main(int argc, const char *argv[]) {
 
 void Work(const Options &options) {
   Runtime runtime(options);
-  runtime.InitThreads();
-  runtime.CreateWorkerThreads();
-  runtime.JoinThreads();
+  runtime.Init();
+  runtime.CreateWorkers();
+  runtime.MainLoop();
+  runtime.JoinWorkers();
 }
 
 void RegisterSignalHandler() {

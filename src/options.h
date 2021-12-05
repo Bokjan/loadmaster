@@ -4,7 +4,7 @@
 
 class Options {
  public:
-  int load_; // todo: rename to cpu_load_
-  int count_; // todo: rename to cpu_concurrency_
-  Options() : load_(kDefaultCpuLoad), count_(0) {}
+  int cpu_load_;
+  int cpu_count_;
+  Options() : cpu_load_(kDefaultCpuLoad), cpu_count_(0) {}
 };

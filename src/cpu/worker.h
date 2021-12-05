@@ -1,20 +1,16 @@
 #pragma once
 
-#include <thread>
-
-class Runtime;
+#include "resmgr.h"
 
 namespace cpu {
 
-class ThreadContext {  // todo: rename to CpuWorkerContext
+class CpuWorkerContext final : public WorkerContext {
  public:
-  int id_;
-  int load_max_;
   int load_set_;
-  std::thread thread_;
-  ThreadContext() : id_(0), load_max_(0), load_set_(0) {}
+  CpuWorkerContext(int id, util::WaitGroup &wg) : WorkerContext(id, wg), load_set_(0) {}
+  void Loop();
 };
 
-void WorkerThreadProcedure(Runtime &runtime, ThreadContext &ctx);
+void WorkerThreadProcedure(CpuWorkerContext &ctx);
 
 }  // namespace cpu
