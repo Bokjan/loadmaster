@@ -16,7 +16,7 @@ class MemoryResourceManager : public ResourceManager {
 
  protected:
   TimePoint time_point_;
-  uint64_t *block_ptr_;  // TODO: solve concurrently write
+  uint64_t *block_ptr_;
   explicit MemoryResourceManager(const Options &options);
 };
 
@@ -29,6 +29,7 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   virtual void Schedule(TimePoint time_point);
 
  private:
+  bool filling_;
   std::random_device rd_;
   bool WillSchedule(TimePoint time_point);
 };

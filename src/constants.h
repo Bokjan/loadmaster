@@ -19,3 +19,4 @@ constexpr int kPauseLoopCpuThreshold = 60;  // Don't run empty loop when total C
 // Memory
 constexpr int kMemoryScheduleIntervalSecond = 45;
 constexpr double kMemoryMinimumRatio = 0.5;
+constexpr int kMemoryNoThreadSpawnThresholdMiB = 32;

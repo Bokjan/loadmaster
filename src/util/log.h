@@ -17,16 +17,16 @@ namespace util {
 
 class Logger {
  public:
-  enum LogLevel : int { kUnknown = 0, kTrace, kDebug, kInfo, kWarn, kError, kFatal, kAll, kOff };
+  enum LogLevel : int { kUnknown = 0, kTrace, kDebug, kInfo, kWarn, kError, kFatal, kOff };
 
   Logger() : current_level_(kWarn) {}
   virtual ~Logger();
   virtual void Log(const char *format, va_list args) = 0;
-  const char *GetTimeCString(LogLevel level = kAll);
+  const char *GetTimeCString(LogLevel level);
   void Log(LogLevel level, const char *format, ...);
   bool SetLevel(const char *target);
   bool SetLevel(LogLevel target) {
-    if (target < kUnknown || target > kOff) {
+    if (target <= kUnknown || target > kOff) {
       return false;
     }
     current_level_ = target;

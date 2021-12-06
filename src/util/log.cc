@@ -50,7 +50,7 @@ const char *Logger::GetTimeCString(LogLevel level) {
 bool Logger::SetLevel(const char *target) {
   static std::map<std::string, LogLevel> level_map = {
       {"trace", kTrace}, {"debug", kDebug}, {"info", kInfo}, {"warn", kWarn},
-      {"error", kError}, {"fatal", kFatal}, {"all", kAll},   {"off", kOff}};
+      {"error", kError}, {"fatal", kFatal}, {"off", kOff}};
   auto find = level_map.find(target);
   if (find == level_map.end()) {
     return false;

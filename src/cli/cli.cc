@@ -55,7 +55,7 @@ static void PrintUsage(const char *path) {
   printf("    -l <load>           target CPU usage (100 each core), default: %d\n",
          kDefaultCpuLoad);
   puts(
-      "    -L <log_level>      log level (all/trace/debug/info/warn/error/fatal/off), default: "
+      "    -L <log_level>      log level (trace/debug/info/warn/error/fatal/off), default: "
       "warn");
   puts("    -c <thread_count>   worker thread(CPU) count, default: based on required load");
   puts("    -m <max_memory>     maximum memory (MiB) for wasting, default: 0");
