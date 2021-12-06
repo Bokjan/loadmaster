@@ -2,6 +2,13 @@
 
 #include "errcode.h"
 
+// Version
+constexpr auto kVersionProject = "loadmaster";
+constexpr int kVersionMajor = 0;
+constexpr int kVersionMinor = 1;
+constexpr int kVersionPatch = 0;
+constexpr auto kVersionSuffix = "beta.0";
+
 // Default options
 constexpr int kDefaultCpuLoad = 200;
 constexpr int kDefaultMemoryLoadMiB = 0;

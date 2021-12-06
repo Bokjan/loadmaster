@@ -17,17 +17,16 @@ static bool ReadString(std::string &target, int argc, const char **argv, int &id
                        const char *prompt = "");
 
 static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx);
+static bool HandlerVersion(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerLogLevel(Options &options, int argc, const char **argv, int &idx);
 
 void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
-  static std::map<std::string, FnCmdArgHandler> handlers = {{"-h", HandlerHelp},
-                                                            {"-l", HandlerCpuLoad},
-                                                            {"-c", HandlerCpuCount},
-                                                            {"-m", HandlerMemory},
-                                                            {"-L", HandlerLogLevel}};
+  static std::map<std::string, FnCmdArgHandler> handlers = {
+      {"-v", HandlerVersion},  {"-h", HandlerHelp},   {"-l", HandlerCpuLoad},
+      {"-c", HandlerCpuCount}, {"-m", HandlerMemory}, {"-L", HandlerLogLevel}};
 
   bool terminate = false;
 
@@ -51,19 +50,29 @@ void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
 static void PrintUsage(const char *path) {
   printf("USAGE: %s [options] \n", path);
   puts("OPTIONS:");
+  puts("    -v                  print version info and quit");
   puts("    -h                  print this message and quit");
   printf("    -l <load>           target CPU usage (100 each core), default: %d\n",
          kDefaultCpuLoad);
   puts(
       "    -L <log_level>      log level (trace/debug/info/warn/error/fatal/off), default: "
       "warn");
-  puts("    -c <thread_count>   worker thread(CPU) count, default: based on required load");
+  puts("    -c <thread_count>   worker thread (CPU) count, default: based on required load");
   puts("    -m <max_memory>     maximum memory (MiB) for wasting, default: 0");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
 }
 
 static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx) {
   PrintUsage(argv[0]);
+  return false;
+}
+
+static bool HandlerVersion(Options &options, int argc, const char **argv, int &idx) {
+  printf("%s %d.%d.%d", kVersionProject, kVersionMajor, kVersionMinor, kVersionPatch);
+  if (kVersionSuffix[0] != '\0') {
+    printf("-%s", kVersionSuffix);
+  }
+  puts("");
   return false;
 }
 

@@ -41,16 +41,17 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     auto procedure = [byte_count, this]() {
       WaitGroupDoneGuard guard(wg_);
       filling_ = true;
-      auto target = byte_count / sizeof(*(this->block_ptr_));
+      auto target = byte_count / sizeof(*(block_ptr_));
       if (target <= 0) {
+        LOG_ERROR("invalid target(uint64_t) count %lu", target);
         return;
       }
       if (block_ptr_ != nullptr) {
-        delete[] this->block_ptr_;
+        delete[] block_ptr_;
       }
       block_ptr_ = new uint64_t[target];
       for (decltype(target) i = 0; i < target; ++i) {
-        this->block_ptr_[i] = i;
+        block_ptr_[i] = i;
       }
       filling_ = false;
     };
