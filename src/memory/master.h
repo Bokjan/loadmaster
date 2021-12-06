@@ -4,8 +4,8 @@
 
 #include <cstdint>
 
-#include <vector>
 #include <random>
+#include <vector>
 
 namespace memory {
 
@@ -16,14 +16,14 @@ class MemoryResourceManager : public ResourceManager {
 
  protected:
   TimePoint time_point_;
-  uint64_t *block_ptr_;
+  uint64_t *block_ptr_;  // TODO: solve concurrently write
   explicit MemoryResourceManager(const Options &options);
 };
 
-class MemoryResourceManagerSimple final : public MemoryResourceManager {
+class MemoryResourceManagerDefault final : public MemoryResourceManager {
  public:
-  explicit MemoryResourceManagerSimple(const Options &options);
-  ~MemoryResourceManagerSimple();
+  explicit MemoryResourceManagerDefault(const Options &options);
+  ~MemoryResourceManagerDefault();
 
  protected:
   virtual void Schedule(TimePoint time_point);

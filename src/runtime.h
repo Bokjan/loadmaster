@@ -9,7 +9,7 @@ class Options;
 
 class Runtime {
  public:
-  Runtime(const Options &options);
+  explicit Runtime(const Options &options);
   void Init();
   void CreateWorkers();
   void MainLoop();

@@ -12,10 +12,10 @@ bool MemoryResourceManager::Init() { return options_.memory_ > 0; }
 
 void MemoryResourceManager::CreateWorkerThreads() {}
 
-MemoryResourceManagerSimple::MemoryResourceManagerSimple(const Options &options)
+MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
     : MemoryResourceManager(options) {}
 
-MemoryResourceManagerSimple::~MemoryResourceManagerSimple() {
+MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // Delete allocated memory
   // dtor is invoked after wg.Done(), no race conditions
   if (block_ptr_ != nullptr) {
@@ -23,7 +23,7 @@ MemoryResourceManagerSimple::~MemoryResourceManagerSimple() {
   }
 }
 
-void MemoryResourceManagerSimple::Schedule(TimePoint time_point) {
+void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
   do {
     if (!this->WillSchedule(time_point)) {
       break;
@@ -37,7 +37,7 @@ void MemoryResourceManagerSimple::Schedule(TimePoint time_point) {
     std::thread th([byte_count, this]() {
       WaitGroupDoneGuard guard(wg_);
       auto target = byte_count / sizeof(*(this->block_ptr_));
-      // LOG("target=%ld", target * sizeof(*(this->block_ptr_)));
+      LOG_TRACE("target=%ld", target * sizeof(*(this->block_ptr_)));
       if (target <= 0) {
         return;
       }
@@ -55,7 +55,7 @@ void MemoryResourceManagerSimple::Schedule(TimePoint time_point) {
   } while (false);
 }
 
-bool MemoryResourceManagerSimple::WillSchedule(TimePoint time_point) {
+bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
   if (block_ptr_ == nullptr) {
     return true;
   }

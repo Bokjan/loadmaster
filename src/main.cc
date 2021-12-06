@@ -25,7 +25,7 @@ void Work(const Options &options) {
 
 void RegisterSignalHandler() {
   auto exit_handler = [](int signal) {
-    LOG("signal %d captured, exit", signal);
+    LOG_INFO("signal %d captured, exit", signal);
     global::StopLoop();
   };
   signal(SIGINT, exit_handler);

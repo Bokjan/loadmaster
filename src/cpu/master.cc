@@ -17,7 +17,7 @@ bool CpuResourceManager::Init() {
     count = (options_.cpu_load_ + (kMaxLoadPerCore - 1)) / kMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_E("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
     return false;
   }
   if (count <= 0) {
@@ -50,7 +50,7 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
     // refresh `stat_info_`
     auto refresh_ret = GetProcStat(stat_info_);
     if (refresh_ret != ErrCode::kOK) {
-      LOG_E("failed to GetProcStat, ret=%d", ErrCodeToInt(refresh_ret));
+      LOG_ERROR("failed to GetProcStat, ret=%d", ErrCodeToInt(refresh_ret));
       break;
     }
     if (last_jiffies == 0) {
@@ -66,17 +66,17 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
     auto elapsed_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(time_point - time_point_).count();
     auto cpu_load = static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * 100.0);
-    // LOG("cpu_load=%d", cpu_load);
+    LOG_TRACE("cpu_load=%d", cpu_load);
     this->AdjustWorkerLoad(cpu_load);
   }
 
   time_point_ = time_point;
 }
 
-CpuResourceManagerSimple::CpuResourceManagerSimple(const Options &options)
+CpuResourceManagerDefault::CpuResourceManagerDefault(const Options &options)
     : CpuResourceManager(options) {}
 
-void CpuResourceManagerSimple::AdjustWorkerLoad(int cpu_load) {
+void CpuResourceManagerDefault::AdjustWorkerLoad(int cpu_load) {
   int core_target = 0;
   int last_wasted_load = 0;
   for (const auto &ctx : workers_) {

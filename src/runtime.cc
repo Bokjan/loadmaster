@@ -40,7 +40,7 @@ void Runtime::CreateWorkers() {
 
 void Runtime::MainLoop() {
   if (managers_.empty()) {
-    LOG_E("no module enabled, quit");
+    LOG_ERROR("no module enabled, quit");
     global::StopLoop();
   }
   while (global::keep_loop) {
