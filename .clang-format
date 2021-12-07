@@ -1,7 +1,13 @@
 Language: Cpp
 BasedOnStyle: Google
 ColumnLimit: 100
+
 # Only sort headers in each include block
 SortIncludes: true
 IncludeBlocks: Preserve
+
 BreakConstructorInitializersBeforeComma: false
+IndentPPDirectives: AfterHash
+
+PointerAlignment: Right
+DerivePointerAlignment: false

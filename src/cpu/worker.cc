@@ -31,7 +31,6 @@ void CpuWorkerContext::Loop() {
 
 void EmptyLoop(int count) {
   for (int i = 0; i < count; ++i) {
-    continue;
   }
 }
 

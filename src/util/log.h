@@ -3,13 +3,16 @@
 #include <cstdarg>
 
 #ifndef SOURCE_PATH_SIZE  // this should be defined by CMake scripts
-#define SOURCE_PATH_SIZE 0
+#  define SOURCE_PATH_SIZE 0
 #endif
 
 #ifdef SRC_PREFIX_SIZE
-#undef SRC_PREFIX_SIZE
+#  undef SRC_PREFIX_SIZE
 #endif
-#define SRC_PREFIX_SIZE (sizeof("src/") - 1)
+#ifndef SRC_PREFIX_SIZE
+#  define STR_LITERAL_LEN(x) (sizeof(x) - 1)
+#  define SRC_PREFIX_SIZE STR_LITERAL_LEN("src/")
+#endif
 
 #define __FILENAME__ (__FILE__ + SOURCE_PATH_SIZE + SRC_PREFIX_SIZE)
 
@@ -38,13 +41,22 @@ class Logger {
   LogLevel current_level_;
 };
 
+class StderrLogger final : public Logger {
+ public:
+  void Log(const char *format, va_list args);
+};
+
 namespace logger_internal {
 
-void SetLogger(Logger *ptr);
 extern Logger *g_logger;
 extern const char *g_log_level_cstr[];
 
+void SetLogger(Logger *ptr);
+void FatalTrigger();
+
 }  // namespace logger_internal
+
+}  // namespace util
 
 #define LOG_LOG_FORWARD(lvl, fmt, args...)                                                      \
   ::util::logger_internal::g_logger->Log(                                                       \
@@ -55,12 +67,8 @@ extern const char *g_log_level_cstr[];
 #define LOG_INFO(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kInfo, fmt, ##args)
 #define LOG_WARN(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kWarn, fmt, ##args)
 #define LOG_ERROR(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kError, fmt, ##args)
-#define LOG_FATAL(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kFatal, fmt, ##args)
-#define LOG_ALL(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kAll, fmt, ##args)
-
-class StderrLogger final : public Logger {
- public:
-  void Log(const char *format, va_list args);
-};
-
-}  // namespace util
+#define LOG_FATAL(fmt, args...)                           \
+  do {                                                    \
+    LOG_LOG_FORWARD(::util::Logger::kFatal, fmt, ##args); \
+    ::util::logger_internal::FatalTrigger();              \
+  } while (false)

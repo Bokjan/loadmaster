@@ -96,7 +96,7 @@ static bool HandlerMemory(Options &options, int argc, const char **argv, int &id
   if (!ReadInt(memory_mib, argc, argv, idx, "-m")) {
     return false;
   }
-  options.memory_ = memory_mib * 1024 * 1024;
+  options.memory_ = memory_mib * kMebiByte;
   return true;
 }
 

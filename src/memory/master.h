@@ -30,7 +30,7 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
 
  private:
   bool filling_;
-  std::random_device rd_;
+  std::mt19937 generator_;
   bool WillSchedule(TimePoint time_point);
 };
 

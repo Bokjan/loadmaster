@@ -1,9 +1,10 @@
 #include "log.h"
 
-#include <map>
-
+#include <csignal>
 #include <cstdarg>
 #include <ctime>
+
+#include <map>
 
 #include <sys/time.h>
 
@@ -16,6 +17,10 @@ Logger *g_logger = &g_default_stderr_logger;
 const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", "<WARN> ",
                                   "<ERROR>",   "<FATAL>", "<ALL>  ", "<OFF>  "};
 void SetLogger(Logger *ptr) { g_logger = ptr; }
+
+void FatalTrigger() {
+  raise(SIGTERM);
+}
 
 }  // namespace logger_internal
 

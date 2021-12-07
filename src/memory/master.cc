@@ -13,7 +13,7 @@ bool MemoryResourceManager::Init() { return options_.memory_ > 0; }
 void MemoryResourceManager::CreateWorkerThreads() {}
 
 MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
-    : MemoryResourceManager(options), filling_(false) {}
+    : MemoryResourceManager(options), filling_(false), generator_(std::random_device()()) {}
 
 MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // Delete allocated memory
@@ -29,12 +29,11 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
       break;
     }
     // New size (byte)
-    std::mt19937 generator(rd_());
     std::uniform_real_distribution<> dis(kMemoryMinimumRatio, 1.0);
-    auto ratio = dis(generator);
+    auto ratio = dis(generator_);
     auto byte_count = static_cast<size_t>(ratio * options_.memory_);
     // Align to 4 KiB
-    constexpr size_t kFourKiB = 4 * 1024;
+    constexpr size_t kFourKiB = 4 * kKibiByte;
     byte_count = byte_count / kFourKiB * kFourKiB;
     LOG_TRACE("byte_count=%lu", byte_count);
     // Filling procedure in lambda form
@@ -56,7 +55,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
       filling_ = false;
     };
     // Need a new thread?
-    if (byte_count > kMemoryNoThreadSpawnThresholdMiB * 1024 * 1024) {
+    if (byte_count > kMemoryNoThreadSpawnThresholdMiB * kMebiByte) {
       std::thread th(procedure);
       th.detach();
     } else {

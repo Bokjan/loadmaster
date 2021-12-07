@@ -2,6 +2,8 @@
 
 #include "errcode.h"
 
+#include <cstdint>
+
 // Version
 constexpr auto kVersionProject = "loadmaster";
 constexpr int kVersionMajor = 0;
@@ -17,6 +19,9 @@ constexpr int kDefaultMemoryLoadMiB = 0;
 constexpr int kSmallBufferLength = 128;
 constexpr int kMillisecondsPerSecond = 1000;
 constexpr int kScheduleIntervalMS = 100;
+constexpr int64_t kKibiByte = 1024;
+constexpr int64_t kMebiByte = 1024 * kKibiByte;
+constexpr int64_t kGibiByte = 1024 * kMebiByte;
 
 // CPU
 constexpr int kMaxLoadPerCore = 100;

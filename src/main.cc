@@ -3,7 +3,7 @@
 #include "runtime.h"
 #include "util/log.h"
 
-#include <signal.h>
+#include <csignal>
 
 void Work(const Options &options);
 void RegisterSignalHandler();
