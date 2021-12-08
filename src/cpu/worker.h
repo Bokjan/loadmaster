@@ -11,6 +11,4 @@ class CpuWorkerContext final : public WorkerContext {
   void Loop();
 };
 
-void WorkerThreadProcedure(CpuWorkerContext &ctx);
-
 }  // namespace cpu

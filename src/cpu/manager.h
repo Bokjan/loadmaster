@@ -24,12 +24,4 @@ class CpuResourceManager : public ResourceManager {
   virtual void AdjustWorkerLoad(int cpu_load) = 0;
 };
 
-class CpuResourceManagerDefault final : public CpuResourceManager {
- public:
-  explicit CpuResourceManagerDefault(const Options &options);
-
- protected:
-  void AdjustWorkerLoad(int cpu_load);
-};
-
 }  // namespace cpu

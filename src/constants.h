@@ -24,9 +24,9 @@ constexpr int64_t kMebiByte = 1024 * kKibiByte;
 constexpr int64_t kGibiByte = 1024 * kMebiByte;
 
 // CPU
-constexpr int kMaxLoadPerCore = 100;
-constexpr int kBaseLoopCount = 1000000;
-constexpr int kPauseLoopCpuThreshold = 60;  // Don't run empty loop when total CPU reaches this
+constexpr int kCpuMaxLoadPerCore = 100;
+constexpr int kCpuBaseLoopCount = 1000000;
+constexpr int kCpuPauseLoopLoadPercentage = 60;  // Don't run empty loop when total CPU reaches this
 
 // Memory
 constexpr int kMemoryScheduleIntervalSecond = 45;

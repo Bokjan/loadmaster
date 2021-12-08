@@ -2,7 +2,7 @@
 
 #include "constants.h"
 #include "global.h"
-#include "master.h"
+#include "manager_default.h"
 #include "util/log.h"
 
 #include <cstring>

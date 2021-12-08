@@ -1,4 +1,4 @@
-#include "master.h"
+#include "manager.h"
 
 #include "cpu/cpu.h"
 #include "options.h"
@@ -14,7 +14,7 @@ bool CpuResourceManager::Init() {
   if (options_.cpu_count_ > 0) {
     count = options_.cpu_count_;
   } else {
-    count = (options_.cpu_load_ + (kMaxLoadPerCore - 1)) / kMaxLoadPerCore;
+    count = (options_.cpu_load_ + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > Count()) {
     LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
@@ -71,35 +71,6 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   }
 
   time_point_ = time_point;
-}
-
-CpuResourceManagerDefault::CpuResourceManagerDefault(const Options &options)
-    : CpuResourceManager(options) {}
-
-void CpuResourceManagerDefault::AdjustWorkerLoad(int cpu_load) {
-  int core_target = 0;
-  int last_wasted_load = 0;
-  for (const auto &ctx : workers_) {
-    last_wasted_load += ctx.load_set_;
-  }
-
-  do {
-    // set to 0 if heavy loaded now
-    if (cpu_load > kPauseLoopCpuThreshold * Count()) {
-      core_target = 0;
-      break;
-    }
-    // maximum idle logic
-    auto idle_load = (cpu::Count() * kMaxLoadPerCore) - cpu_load - last_wasted_load;
-    if (idle_load > options_.cpu_load_) {
-      idle_load = options_.cpu_load_;
-    }
-    core_target = idle_load / static_cast<int>(workers_.size());
-  } while (false);
-
-  for (auto &ctx : workers_) {
-    ctx.load_set_ = core_target;
-  }
 }
 
 }  // namespace cpu

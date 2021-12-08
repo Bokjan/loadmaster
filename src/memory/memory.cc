@@ -1,6 +1,6 @@
 #include "memory.h"
 
-#include "master.h"
+#include "manager_default.h"
 
 namespace memory {
 

@@ -1,16 +1,9 @@
-#include "master.h"
+#include "manager_default.h"
 
 #include "options.h"
 #include "util/log.h"
 
 namespace memory {
-
-MemoryResourceManager::MemoryResourceManager(const Options &options)
-    : ResourceManager(options), block_ptr_(nullptr) {}
-
-bool MemoryResourceManager::Init() { return options_.memory_ > 0; }
-
-void MemoryResourceManager::CreateWorkerThreads() {}
 
 MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
     : MemoryResourceManager(options), filling_(false), generator_(std::random_device()()) {}
