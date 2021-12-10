@@ -33,7 +33,7 @@ ErrCode GetProcStat(StatInfo &info) {
     char buffer[kSmallBufferLength];
     FILE *fp = fopen("/proc/stat", "r");
     if (fp == nullptr) {
-      LOG_ERROR("Failed to open /proc/stat");
+      LOG_ERROR("failed to open /proc/stat");
       ret = ErrCode::kProcStatOpen;
       break;
     }
@@ -41,12 +41,12 @@ ErrCode GetProcStat(StatInfo &info) {
                        &info.system, &info.idle, &info.iowait, &info.irq, &info.softirq,
                        &info.steal, &info.guest, &info.guest_nice);
     if (count != 11) {
-      LOG_ERROR("Failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
+      LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
       ret = ErrCode::kProcStatReadValues;
       break;
     }
     if (strncmp("cpu", buffer, sizeof("cpu") - 1) != 0) {
-      LOG_ERROR("Failed to read /proc/stat, have: %s, expect: cpu", buffer);
+      LOG_ERROR("failed to read /proc/stat, have: %s, expect: cpu", buffer);
       ret = ErrCode::kProcStatFindCpuTotal;
       break;
     }

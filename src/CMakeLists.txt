@@ -19,13 +19,14 @@ SET(COMP_FILES ${COMP_FILES}
 SET(COMP_FILES ${COMP_FILES}
                cli/cli.cc)
 SET(COMP_FILES ${COMP_FILES}
-               cpu/cpu.cc cpu/worker.cc cpu/manager.cc
-               cpu/manager_default.cc)
+               cpu/cpu.cc cpu/worker.cc 
+               cpu/manager.cc cpu/manager_default.cc)
 SET(COMP_FILES ${COMP_FILES}
                memory/memory.cc memory/manager.cc 
                memory/manager_default.cc)
 SET(COMP_FILES ${COMP_FILES}
-               util/log.cc)
+               util/log.cc util/normal_dist.cc
+               util/proc_stat.cc)
 
 ADD_EXECUTABLE(loadmaster ${COMP_FILES})
 TARGET_LINK_LIBRARIES(loadmaster -static)
