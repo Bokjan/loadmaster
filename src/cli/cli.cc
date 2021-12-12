@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <map>
+namespace cli {
 
 using FnCmdArgHandler = std::function<bool(Options &options, int, const char **, int &)>;
 
@@ -60,7 +61,8 @@ static void PrintUsage(const char *path) {
       "    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: "
       "warn");
   puts("    -c  <thread_count>      worker thread (CPU) count, default: based on required load");
-  puts("    -ca <algorithm>         CPU schedule algorithm (uniform/rand_normal), default: uniform");
+  puts(
+      "    -ca <algorithm>         CPU schedule algorithm (uniform/rand_normal), default: uniform");
   puts("    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
 }
@@ -156,3 +158,5 @@ static bool ReadString(std::string &target, int argc, const char **argv, int &id
   target.assign(value);
   return true;
 }
+
+}  // namespace cli

@@ -48,9 +48,8 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
 
   do {
     // refresh `stat_info_`
-    auto refresh_ret = GetProcStat(stat_info_);
-    if (refresh_ret != ErrCode::kOK) {
-      LOG_ERROR("failed to GetProcStat, ret=%d", ErrCodeToInt(refresh_ret));
+    if (!GetProcStat(stat_info_)) {
+      LOG_FATAL("failed to GetProcStat");
       break;
     }
     if (last_jiffies == 0) {

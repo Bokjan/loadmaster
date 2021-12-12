@@ -10,7 +10,7 @@ void RegisterSignalHandler();
 
 int main(int argc, const char *argv[]) {
   Options options;
-  ParseCommandLineArguments(options, argc, argv);
+  cli::ParseCommandLineArguments(options, argc, argv);
   RegisterSignalHandler();
   Work(options);
 }

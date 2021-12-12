@@ -44,14 +44,13 @@ int GetJiffyMillisecond() {
   return static_cast<int>(kMillisecondsPerSecond / freq);
 }
 
-ErrCode GetProcStat(StatInfo &info) {
-  ErrCode ret = ErrCode::kProcStatUnknown;
+bool GetProcStat(StatInfo &info) {
+  bool ret = false;
   do {
     char buffer[kSmallBufferLength];
     FILE *fp = fopen("/proc/stat", "r");
     if (fp == nullptr) {
       LOG_ERROR("failed to open /proc/stat");
-      ret = ErrCode::kProcStatOpen;
       break;
     }
     int count = fscanf(fp, "%s%lu%lu%lu%lu%lu%lu%lu%lu%lu%lu", buffer, &info.user, &info.nice,
@@ -59,18 +58,16 @@ ErrCode GetProcStat(StatInfo &info) {
                        &info.steal, &info.guest, &info.guest_nice);
     if (count != 11) {
       LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
-      ret = ErrCode::kProcStatReadValues;
       break;
     }
     if (strncmp("cpu", buffer, sizeof("cpu") - 1) != 0) {
       LOG_ERROR("failed to read /proc/stat, have: %s, expect: cpu", buffer);
-      ret = ErrCode::kProcStatFindCpuTotal;
       break;
     }
     fclose(fp);
-    ret = ErrCode::kOK;
+    ret = true;
   } while (false);
-  if (ret != ErrCode::kOK) {
+  if (!ret) {
     global::StopLoop();
   }
   return ret;
