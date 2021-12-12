@@ -65,9 +65,9 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
     auto cpu_ms = diff * jiffy_ms_;
     auto elapsed_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(time_point - time_point_).count();
-    auto cpu_load = static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * 100.0);
+    auto cpu_load = static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * kCpuMaxLoadPerCore);
     LOG_TRACE("cpu_load=%d", cpu_load);
-    this->AdjustWorkerLoad(cpu_load);
+    this->AdjustWorkerLoad(time_point, cpu_load);
   }
 
   time_point_ = time_point;

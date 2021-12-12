@@ -8,7 +8,7 @@ namespace cpu {
 CpuResourceManagerDefault::CpuResourceManagerDefault(const Options &options)
     : CpuResourceManager(options) {}
 
-void CpuResourceManagerDefault::AdjustWorkerLoad(int cpu_load) {
+void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int cpu_load) {
   int core_target = 0;
   int last_wasted_load = 0;
   for (const auto &ctx : workers_) {

@@ -20,7 +20,8 @@ SET(COMP_FILES ${COMP_FILES}
                cli/cli.cc)
 SET(COMP_FILES ${COMP_FILES}
                cpu/cpu.cc cpu/worker.cc 
-               cpu/manager.cc cpu/manager_default.cc)
+               cpu/manager.cc cpu/manager_default.cc
+               cpu/manager_random_normal.cc)
 SET(COMP_FILES ${COMP_FILES}
                memory/memory.cc memory/manager.cc 
                memory/manager_default.cc)

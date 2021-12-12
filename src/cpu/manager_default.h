@@ -8,8 +8,8 @@ class CpuResourceManagerDefault final : public CpuResourceManager {
  public:
   explicit CpuResourceManagerDefault(const Options &options);
 
- protected:
-  void AdjustWorkerLoad(int cpu_load);
+ private:
+  void AdjustWorkerLoad(TimePoint time_point, int cpu_load) override;
 };
 
 }

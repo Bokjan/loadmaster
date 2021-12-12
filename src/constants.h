@@ -28,6 +28,13 @@ constexpr int64_t kGibiByte = 1024 * kMebiByte;
 constexpr int kCpuMaxLoadPerCore = 100;
 constexpr int kCpuBaseLoopCount = 1000000;
 constexpr int kCpuPauseLoopLoadPercentage = 60;  // Don't run empty loop when total CPU reaches this
+constexpr double kCpuRandNormalMu = 0.0; 
+constexpr double kCpuRandNormalSigma = 2.0;
+constexpr double kCpuRandNormalCdfTarget = 0.95;
+constexpr int kCpuRandNormalSchedulePeriodMS = 300000;   // 5min
+constexpr int kCpuRandNormalScheduleIntervalMS = 10000;  // 10s
+constexpr int kCpuRandNormalSchedulePointCount =
+    kCpuRandNormalSchedulePeriodMS / kCpuRandNormalScheduleIntervalMS;
 
 // Memory
 constexpr int kMemoryScheduleIntervalSecond = 45;

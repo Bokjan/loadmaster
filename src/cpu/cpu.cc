@@ -3,6 +3,8 @@
 #include "constants.h"
 #include "global.h"
 #include "manager_default.h"
+#include "manager_random_normal.h"
+#include "options.h"
 #include "util/log.h"
 
 #include <cstring>
@@ -14,7 +16,22 @@
 namespace cpu {
 
 std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
-  return std::move(std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerDefault(options)));
+  std::unique_ptr<ResourceManager> ret;
+  switch (options.cpu_algorithm_) {
+    case Options::ScheduleAlgorithm::kUniform:
+      ret =
+          std::move(std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerDefault(options)));
+      break;
+    case Options::ScheduleAlgorithm::kRandomNormal:
+      ret = std::move(
+          std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerRandomNormal(options)));
+      break;
+
+    default:
+      LOG_FATAL("invalid CPU algorithm type [%d]", static_cast<int>(options.cpu_algorithm_));
+      break;
+  }
+  return std::move(ret);
 }
 
 int Count() {

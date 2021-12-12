@@ -12,10 +12,14 @@ class Options;
 class Runtime final {
  public:
   explicit Runtime(const Options &options);
+
   void Init();
   void CreateWorkers();
   void MainLoop();
   void JoinWorkers();
+  
+  int GetCpuLoad() const { return proc_stat_.GetCpuLoad(); }
+  uint64_t GetMemory() const { return proc_stat_.GetMemory(); }
 
  private:
   const Options &options_;

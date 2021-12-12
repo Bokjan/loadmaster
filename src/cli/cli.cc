@@ -22,11 +22,13 @@ static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &i
 static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx);
 static bool HandlerLogLevel(Options &options, int argc, const char **argv, int &idx);
+static bool HandlerCpuAlgorithm(Options &options, int argc, const char **argv, int &idx);
 
 void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
   static std::map<std::string, FnCmdArgHandler> handlers = {
-      {"-v", HandlerVersion},  {"-h", HandlerHelp},   {"-l", HandlerCpuLoad},
-      {"-c", HandlerCpuCount}, {"-m", HandlerMemory}, {"-L", HandlerLogLevel}};
+      {"-v", HandlerVersion},      {"-h", HandlerHelp},   {"-l", HandlerCpuLoad},
+      {"-c", HandlerCpuCount},     {"-m", HandlerMemory}, {"-L", HandlerLogLevel},
+      {"-ca", HandlerCpuAlgorithm}};
 
   bool terminate = false;
 
@@ -50,15 +52,16 @@ void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
 static void PrintUsage(const char *path) {
   printf("USAGE: %s [options] \n", path);
   puts("OPTIONS:");
-  puts("    -v                  print version info and quit");
-  puts("    -h                  print this message and quit");
-  printf("    -l <load>           target CPU usage (100 each core), default: %d\n",
+  puts("    -v                      print version info and quit");
+  puts("    -h                      print this message and quit");
+  printf("    -l  <load>              target CPU usage (100 each core), default: %d\n",
          kDefaultCpuLoad);
   puts(
-      "    -L <log_level>      log level (trace/debug/info/warn/error/fatal/off), default: "
+      "    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: "
       "warn");
-  puts("    -c <thread_count>   worker thread (CPU) count, default: based on required load");
-  puts("    -m <max_memory>     maximum memory (MiB) for wasting, default: 0");
+  puts("    -c  <thread_count>      worker thread (CPU) count, default: based on required load");
+  puts("    -ca <algorithm>         CPU schedule algorithm (uniform/rand_normal), default: uniform");
+  puts("    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
 }
 
@@ -109,6 +112,23 @@ static bool HandlerLogLevel(Options &options, int argc, const char **argv, int &
     LOG_FATAL("invalid log level [%s]", level_str.c_str());
     return false;
   }
+  return true;
+}
+
+static bool HandlerCpuAlgorithm(Options &options, int argc, const char **argv, int &idx) {
+  std::string algo_str;
+  if (!ReadString(algo_str, argc, argv, idx, "-ca")) {
+    return false;
+  }
+  static std::map<std::string, Options::ScheduleAlgorithm> map = {
+      {"uniform", Options::ScheduleAlgorithm::kUniform},
+      {"rand_normal", Options::ScheduleAlgorithm::kRandomNormal}};
+  auto find = map.find(algo_str);
+  if (find == map.end()) {
+    LOG_FATAL("invalid CPU algorithm [%s]", algo_str.c_str());
+    return false;
+  }
+  options.cpu_algorithm_ = find->second;
   return true;
 }
 

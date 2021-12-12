@@ -11,11 +11,12 @@
 
 namespace util {
 
+constexpr int kProcStatIntervalMS = 500;
 constexpr int kTaskCommLen = 16;
 constexpr int kStatFieldsCount = 22;
 constexpr int kStatmFieldsCount = 7;
 
-struct StatFields {
+struct StatFields final {
   int pid;
   char comm[kTaskCommLen];
   char state;
@@ -41,7 +42,7 @@ struct StatFields {
   // ...
 };
 
-struct StatmFields {
+struct StatmFields final {
   uint64_t size;
   uint64_t resident;
   uint64_t shared;
@@ -63,7 +64,13 @@ static int GetPageSize() {
 
 ProcStat::ProcStat(int pid) : pid_(pid), jiffies_self_(0), jiffies_child_(0), cpu_load_cached_(0) {}
 
-void ProcStat::UpdateCpuStat(ProcStat::TimePoint now) {
+void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, bool force) {
+  // Time diff
+  auto elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
+  if (!force && elapsed_ms < kProcStatIntervalMS) {
+    return;
+  }
   // Declare a struct on stack
   StatFields stat;
   // Read from procfs
@@ -96,8 +103,6 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now) {
       LOG_DEBUG("first time");
       break;
     }
-    auto elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
     auto jiffies_self_diff = jiffies_self - jiffies_self_;
     auto jiffies_child_diff = jiffies_child - jiffies_child_;
     auto jiffies_diff = jiffies_self_diff + jiffies_child_diff;
