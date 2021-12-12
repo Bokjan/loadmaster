@@ -62,7 +62,7 @@ static void PrintUsage(const char *path) {
       "warn");
   puts("    -c  <thread_count>      worker thread (CPU) count, default: based on required load");
   puts(
-      "    -ca <algorithm>         CPU schedule algorithm (uniform/rand_normal), default: uniform");
+      "    -ca <algorithm>         CPU schedule algorithm (uniform/rand_normal), default: default");
   puts("    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
 }
@@ -123,7 +123,7 @@ static bool HandlerCpuAlgorithm(Options &options, int argc, const char **argv, i
     return false;
   }
   static std::map<std::string, Options::ScheduleAlgorithm> map = {
-      {"uniform", Options::ScheduleAlgorithm::kUniform},
+      {"default", Options::ScheduleAlgorithm::kDefault},
       {"rand_normal", Options::ScheduleAlgorithm::kRandomNormal}};
   auto find = map.find(algo_str);
   if (find == map.end()) {

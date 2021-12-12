@@ -5,5 +5,5 @@
 Options::Options()
     : cpu_load_(kDefaultCpuLoad),
       cpu_count_(0),
-      cpu_algorithm_(ScheduleAlgorithm::kUniform),
+      cpu_algorithm_(ScheduleAlgorithm::kDefault),
       memory_(kDefaultMemoryLoadMiB) {}

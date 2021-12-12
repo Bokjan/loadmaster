@@ -4,7 +4,7 @@
 
 class Options {
  public:
-  enum class ScheduleAlgorithm : int { kUniform, kRandomNormal };
+  enum class ScheduleAlgorithm : int { kDefault, kRandomNormal };
 
   int cpu_load_;
   int cpu_count_;
