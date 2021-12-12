@@ -74,6 +74,7 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int 
 }
 
 void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
+  point_idx_ = 0;
   schedule_points_.clear();
   double x_pos_upper = dist_.FindXAxisPositionCDF(kCpuRandNormalCdfTarget);
   double x_pos_lower = kCpuRandNormalMu - (x_pos_upper - kCpuRandNormalMu);
