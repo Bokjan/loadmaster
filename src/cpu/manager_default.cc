@@ -17,7 +17,7 @@ void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int cpu_l
 
   do {
     // set to 0 if heavy loaded now
-    if (cpu_load > kCpuPauseLoopLoadPercentage * Count()) {
+    if (cpu_load >= kCpuPauseLoopLoadPercentage * Count()) {
       core_target = 0;
       break;
     }

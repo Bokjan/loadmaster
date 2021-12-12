@@ -8,7 +8,7 @@
 constexpr auto kVersionProject = "loadmaster";
 constexpr int kVersionMajor = 0;
 constexpr int kVersionMinor = 2;
-constexpr int kVersionPatch = 0;
+constexpr int kVersionPatch = 1;
 constexpr auto kVersionSuffix = "beta.0";
 
 // Default options

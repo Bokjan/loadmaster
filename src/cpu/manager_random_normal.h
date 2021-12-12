@@ -22,6 +22,7 @@ class CpuResourceManagerRandomNormal final : public CpuResourceManager {
   void GenerateSchedulePoints();
   void ShuffleSchedulePoints();
   void IncreasePointIndex();
+  bool CpuLoadThresholdGuard(int cpu_load);
 };
 
 }  // namespace cpu

@@ -43,6 +43,10 @@ bool CpuResourceManagerRandomNormal::Init() {
 }
 
 void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int cpu_load) {
+  if (CpuLoadThresholdGuard(cpu_load)) {
+    return;
+  }
+
   auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_schedule_).count();
   if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
@@ -75,7 +79,8 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
   double x_pos_lower = kCpuRandNormalMu - (x_pos_upper - kCpuRandNormalMu);
   double step = (x_pos_upper - x_pos_lower) / kCpuRandNormalSchedulePointCount;
   double factor = options_.cpu_load_ * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
-  // LOG_DEBUG("lower=%lf, upper=%lf, step=%lf, factor=%lf", x_pos_lower, x_pos_upper, step, factor);
+  // LOG_DEBUG("lower=%lf, upper=%lf, step=%lf, factor=%lf", x_pos_lower, x_pos_upper, step,
+  // factor);
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   for (int i = 0; i < kCpuRandNormalSchedulePointCount; ++i) {
     double integral = dist_.CDF(get_x(i + 1)) - dist_.CDF(get_x(i));
@@ -101,6 +106,16 @@ void CpuResourceManagerRandomNormal::IncreasePointIndex() {
   if (static_cast<size_t>(point_idx_) == schedule_points_.size()) {
     point_idx_ = 0;
   }
+}
+
+bool CpuResourceManagerRandomNormal::CpuLoadThresholdGuard(int cpu_load) {
+  if (cpu_load < kCpuPauseLoopLoadPercentage * ::cpu::Count()) {
+    return false;
+  }
+  for (auto &ctx : workers_) {
+    ctx.load_set_ = 0;
+  }
+  return true;
 }
 
 }  // namespace cpu
