@@ -10,7 +10,7 @@ loadmaster(负载大师) is designed to waste your machine performance. Powerful
 - Typical CMake building routine
 - Statically linked by default
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`
-- It's recommend to rename the executable as you want
+- It's recommended to rename the executable as you want
 
 # Workload
 ## CPU

@@ -2,13 +2,6 @@
 
 #include <cstdint>
 
-// Version
-constexpr auto kVersionProject = "loadmaster";
-constexpr int kVersionMajor = 0;
-constexpr int kVersionMinor = 2;
-constexpr int kVersionPatch = 2;
-constexpr auto kVersionSuffix = "beta.0";
-
 // Default options
 constexpr int kDefaultCpuLoad = 200;
 constexpr int kDefaultMemoryLoadMiB = 0;

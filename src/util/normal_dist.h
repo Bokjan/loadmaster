@@ -8,6 +8,8 @@ class NormalDistribution final {
  public:
   NormalDistribution();
   NormalDistribution(const double mean, const double stddev);
+  double GetMean() const { return mean_; };
+  double GetStandardDeviation() const { return stddev_; }
   double PDF(const double x) const;
   double CDF(const double x) const;
   double FindXAxisPositionPDF(const double target, const int max_iteration = 64) const;

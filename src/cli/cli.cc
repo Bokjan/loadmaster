@@ -2,11 +2,13 @@
 
 #include "cpu/cpu.h"
 #include "util/log.h"
+#include "version.h"
 
 #include <cstdlib>
 
 #include <functional>
 #include <map>
+
 namespace cli {
 
 using FnCmdArgHandler = std::function<bool(Options &options, int, const char **, int &)>;
