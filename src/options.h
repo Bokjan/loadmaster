@@ -2,14 +2,19 @@
 
 #include "constants.h"
 
+namespace cli {
+struct CliArgs;
+}
+
 class Options {
  public:
-  enum class ScheduleAlgorithm : int { kDefault, kRandomNormal };
+  enum class CpuAlgo : int { kDefault, kRandomNormal };
 
   int cpu_load_;
   int cpu_count_;
-  ScheduleAlgorithm cpu_algorithm_;
+  CpuAlgo cpu_algorithm_;
   int memory_;
 
   Options();
+  void ProcessCliArguments(const cli::CliArgs &args);
 };

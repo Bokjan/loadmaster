@@ -2,6 +2,7 @@
 
 #include "cpu/cpu.h"
 #include "util/log.h"
+#include "util/make_unique.h"
 #include "version.h"
 
 #include <cstdlib>
@@ -11,154 +12,134 @@
 
 namespace cli {
 
-using FnCmdArgHandler = std::function<bool(Options &options, int, const char **, int &)>;
-
 static void PrintUsage(const char *path);
 
-static bool ReadInt(int &target, int argc, const char **argv, int &idx, const char *prompt = "");
-static bool ReadString(std::string &target, int argc, const char **argv, int &idx,
-                       const char *prompt = "");
+bool ParseInt(int argc, const char *argv[], int &idx, util::Optional<int> &value) {
+  const char *prompt = argv[idx];
+  if (idx + 1 >= argc) {
+    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
+    return false;
+  }
+  const char *int_str = argv[++idx];
+  int target = 0;
+  int affected = sscanf(int_str, "%d", &target);
+  if (affected != 1) {
+    LOG_FATAL("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
+    return false;
+  }
+  value = target;
+  return true;
+};
 
-static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerVersion(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerLogLevel(Options &options, int argc, const char **argv, int &idx);
-static bool HandlerCpuAlgorithm(Options &options, int argc, const char **argv, int &idx);
+bool ParseStringView(int argc, const char *argv[], int &idx,
+                     util::Optional<util::StringView> &value) {
+  const char *prompt = argv[idx];
+  if (idx + 1 >= argc) {
+    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
+    return false;
+  }
+  const char *int_str = argv[++idx];
+  value = int_str;
+  return true;
+};
+
+struct CmdArgOption {
+  virtual bool Process(int argc, const char *argv[], int &idx) = 0;
+};
+
+struct CmdArgOptionHelp : public CmdArgOption {
+  bool Process(int argc, const char *argv[], int &idx) {
+    PrintUsage(argv[0]);
+    return false;
+  }
+};
+
+struct CmdArgOptionVersion : public CmdArgOption {
+  bool Process(int argc, const char *argv[], int &idx) {
+    printf("%s %d.%d.%d", kVersionProject, kVersionMajor, kVersionMinor, kVersionPatch);
+    if (kVersionSuffix[0] != '\0') {
+      printf("-%s", kVersionSuffix);
+    }
+    puts("");
+    return false;
+  }
+};
+
+struct CmdArgOptionInt : public CmdArgOption {
+  util::Optional<int> &value_ref;
+  explicit CmdArgOptionInt(util::Optional<int> &ref) : value_ref(ref) {}
+  bool Process(int argc, const char *argv[], int &idx) {
+    return ParseInt(argc, argv, idx, value_ref);
+  }
+};
+
+struct CmdArgOptionStringView : public CmdArgOption {
+  util::Optional<util::StringView> &value_ref;
+  explicit CmdArgOptionStringView(util::Optional<util::StringView> &ref) : value_ref(ref) {}
+  bool Process(int argc, const char *argv[], int &idx) {
+    return ParseStringView(argc, argv, idx, value_ref);
+  }
+};
+
+class CliArgumentProcessor final {
+ public:
+  CliArgumentProcessor(CliArgs &cli_args) {
+    arg_regist_.insert(std::make_pair("-h", util::make_unique<CmdArgOptionHelp>()));
+    arg_regist_.insert(std::make_pair("-v", util::make_unique<CmdArgOptionVersion>()));
+    arg_regist_.insert(std::make_pair("-l", util::make_unique<CmdArgOptionInt>(cli_args.cpu_load)));
+    arg_regist_.insert(
+        std::make_pair("-c", util::make_unique<CmdArgOptionInt>(cli_args.cpu_count)));
+    arg_regist_.insert(
+        std::make_pair("-m", util::make_unique<CmdArgOptionInt>(cli_args.memory_mb)));
+    arg_regist_.insert(
+        std::make_pair("-L", util::make_unique<CmdArgOptionStringView>(cli_args.log_level)));
+    arg_regist_.insert(
+        std::make_pair("-ca", util::make_unique<CmdArgOptionStringView>(cli_args.cpu_algorithm)));
+  }
+  void ExtractArguments(int argc, const char *argv[]) {
+    bool terminate = false;
+    for (int i = 1; i < argc; ++i) {
+      auto f = arg_regist_.find(argv[i]);
+      if (f == arg_regist_.end()) {
+        LOG_FATAL("unrecognizable option `%s`", argv[i]);
+        continue;
+      }
+      if (!f->second->Process(argc, argv, i)) {
+        terminate = true;
+        break;
+      }
+    }
+    if (terminate) {
+      exit(EXIT_SUCCESS);
+    }
+  }
+
+ private:
+  std::map<std::string, std::unique_ptr<CmdArgOption>> arg_regist_;
+};
+
+static void ExtractRawCliData(CliArgs &cli_args, int argc, const char *argv[]) {
+  CliArgumentProcessor processor(cli_args);
+  processor.ExtractArguments(argc, argv);
+}
 
 void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
-  static std::map<std::string, FnCmdArgHandler> handlers = {
-      {"-v", HandlerVersion},      {"-h", HandlerHelp},   {"-l", HandlerCpuLoad},
-      {"-c", HandlerCpuCount},     {"-m", HandlerMemory}, {"-L", HandlerLogLevel},
-      {"-ca", HandlerCpuAlgorithm}};
-
-  bool terminate = false;
-
-  for (int i = 1; i < argc; ++i) {
-    auto f = handlers.find(argv[i]);
-    if (f == handlers.end()) {
-      LOG_FATAL("unrecognizable option `%s`", argv[i]);
-      continue;
-    }
-    if (!f->second(options, argc, argv, i)) {
-      terminate = true;
-      break;
-    }
-  }
-
-  if (terminate) {
-    exit(EXIT_SUCCESS);
-  }
+  CliArgs cli_args;
+  ExtractRawCliData(cli_args, argc, argv);
+  options.ProcessCliArguments(cli_args);
 }
 
 static void PrintUsage(const char *path) {
   printf("USAGE: %s [options] \n", path);
-  puts("OPTIONS:");
-  puts("    -v                      print version info and quit");
-  puts("    -h                      print this message and quit");
-  printf("    -l  <load>              target CPU usage (100 each core), default: %d\n",
-         kDefaultCpuLoad);
-  puts(
-      "    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: "
-      "warn");
-  puts("    -c  <thread_count>      worker thread (CPU) count, default: based on required load");
-  puts(
-      "    -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default");
-  puts("    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0");
+  puts(R"deli(OPTIONS:
+    -v                      print version info and quit
+    -h                      print this message and quit
+    -l  <load>              target CPU usage (100 each core), default: 200
+    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
+    -c  <thread_count>      worker thread (CPU) count, default: based on required load
+    -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
+    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
   puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
-}
-
-static bool HandlerHelp(Options &options, int argc, const char **argv, int &idx) {
-  PrintUsage(argv[0]);
-  return false;
-}
-
-static bool HandlerVersion(Options &options, int argc, const char **argv, int &idx) {
-  printf("%s %d.%d.%d", kVersionProject, kVersionMajor, kVersionMinor, kVersionPatch);
-  if (kVersionSuffix[0] != '\0') {
-    printf("-%s", kVersionSuffix);
-  }
-  puts("");
-  return false;
-}
-
-static bool HandlerCpuLoad(Options &options, int argc, const char **argv, int &idx) {
-  return ReadInt(options.cpu_load_, argc, argv, idx, "-l");
-}
-
-static bool HandlerCpuCount(Options &options, int argc, const char **argv, int &idx) {
-  if (!ReadInt(options.cpu_count_, argc, argv, idx, "-c")) {
-    return false;
-  }
-  if (options.cpu_count_ > cpu::Count()) {
-    LOG_FATAL("hardware CPU count: %d, you require %d, abort", cpu::Count(), options.cpu_count_);
-    return false;
-  }
-  return true;
-}
-
-static bool HandlerMemory(Options &options, int argc, const char **argv, int &idx) {
-  int memory_mib = 0;
-  if (!ReadInt(memory_mib, argc, argv, idx, "-m")) {
-    return false;
-  }
-  options.memory_ = memory_mib * kMebiByte;
-  return true;
-}
-
-static bool HandlerLogLevel(Options &options, int argc, const char **argv, int &idx) {
-  std::string level_str;
-  if (!ReadString(level_str, argc, argv, idx, "-L")) {
-    return false;
-  }
-  if (!util::logger_internal::g_logger->SetLevel(level_str.c_str())) {
-    LOG_FATAL("invalid log level [%s]", level_str.c_str());
-    return false;
-  }
-  return true;
-}
-
-static bool HandlerCpuAlgorithm(Options &options, int argc, const char **argv, int &idx) {
-  std::string algo_str;
-  if (!ReadString(algo_str, argc, argv, idx, "-ca")) {
-    return false;
-  }
-  static std::map<std::string, Options::ScheduleAlgorithm> map = {
-      {"default", Options::ScheduleAlgorithm::kDefault},
-      {"rand_normal", Options::ScheduleAlgorithm::kRandomNormal}};
-  auto find = map.find(algo_str);
-  if (find == map.end()) {
-    LOG_FATAL("invalid CPU algorithm [%s]", algo_str.c_str());
-    return false;
-  }
-  options.cpu_algorithm_ = find->second;
-  return true;
-}
-
-static bool ReadInt(int &target, int argc, const char **argv, int &idx, const char *prompt) {
-  if (idx + 1 >= argc) {
-    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
-    return false;
-  }
-  const char *value = argv[++idx];
-  int affected = sscanf(value, "%d", &target);
-  if (affected != 1) {
-    LOG_FATAL("[%s] failed to read option, expect an integer, have: `%s`", prompt, value);
-    return false;
-  }
-  return true;
-}
-
-static bool ReadString(std::string &target, int argc, const char **argv, int &idx,
-                       const char *prompt) {
-  if (idx + 1 >= argc) {
-    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
-    return false;
-  }
-  const char *value = argv[++idx];
-  target.assign(value);
-  return true;
 }
 
 }  // namespace cli

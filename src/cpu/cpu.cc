@@ -19,11 +19,11 @@ namespace cpu {
 std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
   std::unique_ptr<ResourceManager> ret;
   switch (options.cpu_algorithm_) {
-    case Options::ScheduleAlgorithm::kDefault:
+    case Options::CpuAlgo::kDefault:
       ret =
           std::move(std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerDefault(options)));
       break;
-    case Options::ScheduleAlgorithm::kRandomNormal:
+    case Options::CpuAlgo::kRandomNormal:
       ret = std::move(
           std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerRandomNormal(options)));
       break;
