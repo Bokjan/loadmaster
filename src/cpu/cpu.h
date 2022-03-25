@@ -36,6 +36,7 @@ struct StatInfo {
 int Count();
 int GetJiffyMillisecond();
 bool GetProcStat(StatInfo &info);
+void CriticalLoop(int count);
 
 std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options);
 

@@ -18,10 +18,12 @@ class CpuResourceManager : public ResourceManager {
   int jiffy_ms_;
   StatInfo stat_info_;
   TimePoint time_point_;
+  int base_loop_count_;
   std::vector<CpuWorkerContext> workers_;
 
   explicit CpuResourceManager(const Options &options);
   virtual void AdjustWorkerLoad(TimePoint time_point, int cpu_load) = 0;
+  int FindAccurateBaseLoopCount(int max_iteration);
 };
 
 }  // namespace cpu

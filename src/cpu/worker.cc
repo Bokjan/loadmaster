@@ -1,12 +1,11 @@
 #include "worker.h"
 
 #include "constants.h"
+#include "cpu/cpu.h"
 #include "global.h"
 #include "util/log.h"
 
 namespace cpu {
-
-void EmptyLoop(int count);
 
 void CpuWorkerContext::Loop() {
   WorkerLoopGuard guard(*this);
@@ -14,7 +13,7 @@ void CpuWorkerContext::Loop() {
   while (global::keep_loop) {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
-      EmptyLoop(kCpuBaseLoopCount);
+      cpu::CriticalLoop(base_loop_count_);
       auto now = std::chrono::high_resolution_clock::now();
       auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
       if (ms.count() >= load_set_) {
@@ -26,11 +25,6 @@ void CpuWorkerContext::Loop() {
         break;
       }
     }
-  }
-}
-
-void EmptyLoop(int count) {
-  for (int i = 0; i < count; ++i) {
   }
 }
 

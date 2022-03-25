@@ -36,7 +36,7 @@ bool CpuResourceManagerRandomNormal::Init() {
     return false;
   }
   for (int i = 0; i < count; ++i) {
-    CpuWorkerContext ctx(i, wg_);
+    CpuWorkerContext ctx(i, wg_, base_loop_count_);
     workers_.emplace_back(std::move(ctx));
   }
   return true;
@@ -63,7 +63,7 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int 
             avg_load);
 
   for (auto &ctx : workers_) {
-    ctx.load_set_ = avg_load;
+    ctx.SetLoadSet(avg_load);
   }
   last_schedule_ = time_point;
   IncreasePointIndex();
@@ -107,7 +107,7 @@ bool CpuResourceManagerRandomNormal::CpuLoadThresholdGuard(int cpu_load) {
     return false;
   }
   for (auto &ctx : workers_) {
-    ctx.load_set_ = 0;
+    ctx.SetLoadSet(0);
   }
   return true;
 }

@@ -12,7 +12,7 @@ void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int cpu_l
   int core_target = 0;
   int last_wasted_load = 0;
   for (const auto &ctx : workers_) {
-    last_wasted_load += ctx.load_set_;
+    last_wasted_load += ctx.GetLoadSet();
   }
 
   do {
@@ -30,7 +30,7 @@ void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int cpu_l
   } while (false);
 
   for (auto &ctx : workers_) {
-    ctx.load_set_ = core_target;
+    ctx.SetLoadSet(core_target);
   }
 }
 

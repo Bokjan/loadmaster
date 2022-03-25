@@ -7,7 +7,10 @@
 namespace cpu {
 
 CpuResourceManager::CpuResourceManager(const Options &options)
-    : ResourceManager(options), jiffy_ms_(cpu::GetJiffyMillisecond()) {}
+    : ResourceManager(options), jiffy_ms_(cpu::GetJiffyMillisecond()), base_loop_count_(0) {
+  // Find a finest base loop count
+  base_loop_count_ = FindAccurateBaseLoopCount(kCpuBaseLoopCountTestIteration);
+}
 
 bool CpuResourceManager::Init() {
   int count;
@@ -23,8 +26,9 @@ bool CpuResourceManager::Init() {
   if (count <= 0) {
     return false;
   }
+
   for (int i = 0; i < count; ++i) {
-    CpuWorkerContext ctx(i, wg_);
+    CpuWorkerContext ctx(i, wg_, base_loop_count_);
     workers_.emplace_back(std::move(ctx));
   }
   return true;
@@ -70,6 +74,45 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   }
 
   time_point_ = time_point;
+}
+
+int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
+  int min = kCpuBaseLoopCountMin;
+  int max = kCpuBaseLoopCountMax;
+  int iteration = 0;
+  int base_loop_count = 0;
+  int accurate_loop_count = 0;
+  int64_t accurate_elapsed = 0;
+
+  do {
+    int new_base_loop_count = (min + max) / 2;
+    if (new_base_loop_count == base_loop_count) {
+      break;
+    }
+    base_loop_count = new_base_loop_count;
+    auto start = std::chrono::high_resolution_clock::now();
+    cpu::CriticalLoop(base_loop_count);
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count();
+    if (elapsed > kCpuSchedulingGranularityNS) {
+      max = base_loop_count;
+    } else {
+      min = base_loop_count;
+    }
+    LOG_TRACE("iteration=%d, diff=%ld, min=%d, max=%d, mid=%d, start=%ld, stop=%ld", iteration,
+              elapsed, min, max, base_loop_count, start.time_since_epoch().count(),
+              stop.time_since_epoch().count());
+    if (std::abs(elapsed - kCpuSchedulingGranularityNS) <
+        std::abs(accurate_elapsed - kCpuSchedulingGranularityNS)) {
+      accurate_elapsed = elapsed;
+      accurate_loop_count = base_loop_count;
+      LOG_TRACE("iteration=%d, acc_elapsed=%ld, acc_loop_count=%d", iteration, accurate_elapsed,
+                accurate_loop_count);
+    }
+    ++iteration;
+  } while (iteration < max_iteration);
+
+  return accurate_loop_count;
 }
 
 }  // namespace cpu
