@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $1 == "-h" ] || [ $1 == "--help" ] ; then
+if [ $# -ge 1 ] &&  ([ $1 == "-h" ] || [ $1 == "--help" ]) ; then
 echo "USAGE: $0 [binary_name] [build_dir]"
 exit 0;
 fi
