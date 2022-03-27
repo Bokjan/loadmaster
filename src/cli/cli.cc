@@ -14,7 +14,7 @@ namespace cli {
 
 static void PrintUsage(const char *path);
 
-bool ParseInt(int argc, const char *argv[], int &idx, util::Optional<int> &value) {
+bool ParseInt(int argc, const char *argv[], int &idx, util::optinal<int> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -32,7 +32,7 @@ bool ParseInt(int argc, const char *argv[], int &idx, util::Optional<int> &value
 };
 
 bool ParseStringView(int argc, const char *argv[], int &idx,
-                     util::Optional<util::StringView> &value) {
+                     util::optinal<util::string_view> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -44,6 +44,7 @@ bool ParseStringView(int argc, const char *argv[], int &idx,
 };
 
 struct CmdArgOption {
+  virtual ~CmdArgOption() = default;
   virtual bool Process(int argc, const char *argv[], int &idx) = 0;
 };
 
@@ -66,16 +67,16 @@ struct CmdArgOptionVersion : public CmdArgOption {
 };
 
 struct CmdArgOptionInt : public CmdArgOption {
-  util::Optional<int> &value_ref;
-  explicit CmdArgOptionInt(util::Optional<int> &ref) : value_ref(ref) {}
+  util::optinal<int> &value_ref;
+  explicit CmdArgOptionInt(util::optinal<int> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseInt(argc, argv, idx, value_ref);
   }
 };
 
 struct CmdArgOptionStringView : public CmdArgOption {
-  util::Optional<util::StringView> &value_ref;
-  explicit CmdArgOptionStringView(util::Optional<util::StringView> &ref) : value_ref(ref) {}
+  util::optinal<util::string_view> &value_ref;
+  explicit CmdArgOptionStringView(util::optinal<util::string_view> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseStringView(argc, argv, idx, value_ref);
   }

@@ -6,6 +6,7 @@
 #include "manager_random_normal.h"
 #include "options.h"
 #include "util/log.h"
+#include "util/make_unique.h"
 
 #include <cstring>
 
@@ -20,14 +21,11 @@ std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
   std::unique_ptr<ResourceManager> ret;
   switch (options.cpu_algorithm_) {
     case Options::CpuAlgo::kDefault:
-      ret =
-          std::move(std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerDefault(options)));
+      ret = util::make_unique<CpuResourceManagerDefault>(options);
       break;
     case Options::CpuAlgo::kRandomNormal:
-      ret = std::move(
-          std::unique_ptr<ResourceManager>(new cpu::CpuResourceManagerRandomNormal(options)));
+      ret = util::make_unique<CpuResourceManagerRandomNormal>(options);
       break;
-
     default:
       LOG_FATAL("invalid CPU algorithm type [%d]", static_cast<int>(options.cpu_algorithm_));
       break;

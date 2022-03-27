@@ -7,13 +7,13 @@
 namespace cli {
 
 struct CliArgs {
-  util::Optional<int> cpu_load;
-  util::Optional<int> cpu_count;
-  util::Optional<int> memory_mb;
-  util::Optional<util::StringView> log_level;
-  util::Optional<util::StringView> cpu_algorithm;
+  util::optinal<int> cpu_load;
+  util::optinal<int> cpu_count;
+  util::optinal<int> memory_mb;
+  util::optinal<util::string_view> log_level;
+  util::optinal<util::string_view> cpu_algorithm;
 };
 
 void ParseCommandLineArguments(Options &options, int argc, const char *argv[]);
 
-}
+}  // namespace cli

@@ -5,25 +5,25 @@
 namespace util {
 
 template <typename T>
-class Optional final {
+class optinal final {
  public:
-  Optional() = default;
-  Optional(const Optional &) = default;
-  Optional &operator=(const Optional &) = default;
-  Optional(Optional &&) = default;
-  Optional &operator=(Optional &&) = default;
-  ~Optional() = default;
+  optinal() = default;
+  optinal(const optinal &) = default;
+  optinal &operator=(const optinal &) = default;
+  optinal(optinal &&) = default;
+  optinal &operator=(optinal &&) = default;
+  ~optinal() = default;
 
   template <typename... Args>
-  explicit Optional(Args &&...args) : value_(true, T(std::forward<Args>(args)...)) {}
+  explicit optinal(Args &&...args) : value_(true, T(std::forward<Args>(args)...)) {}
 
-  Optional<T> &operator=(T &&val) {
+  optinal<T> &operator=(T &&val) {
     value_.first = true;
     value_.second = val;
     return *this;
   }
 
-  Optional<T> &operator=(T &val) {
+  optinal<T> &operator=(T &val) {
     value_.first = true;
     value_.second = std::move(val);
     return *this;
