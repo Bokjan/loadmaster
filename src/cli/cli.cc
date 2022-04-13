@@ -57,11 +57,7 @@ struct CmdArgOptionHelp : public CmdArgOption {
 
 struct CmdArgOptionVersion : public CmdArgOption {
   bool Process(int argc, const char *argv[], int &idx) {
-    printf("%s %d.%d.%d", kVersionProject, kVersionMajor, kVersionMinor, kVersionPatch);
-    if (kVersionSuffix[0] != '\0') {
-      printf("-%s", kVersionSuffix);
-    }
-    puts("");
+    puts(VersionString());
     return false;
   }
 };
@@ -131,6 +127,7 @@ void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
 }
 
 static void PrintUsage(const char *path) {
+  puts(VersionString());
   printf("USAGE: %s [options] \n", path);
   puts(R"deli(OPTIONS:
     -v                      print version info and quit
@@ -140,7 +137,7 @@ static void PrintUsage(const char *path) {
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
-  puts("Built: " __TIMESTAMP__ ", with Compiler " __VERSION__);
+  puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
 }
 
 }  // namespace cli
