@@ -14,13 +14,13 @@ CpuResourceManager::CpuResourceManager(const Options &options)
 
 bool CpuResourceManager::Init() {
   int count;
-  if (options_.cpu_count_ > 0) {
-    count = options_.cpu_count_;
+  if (options_.CpuCount() > 0) {
+    count = options_.CpuCount();
   } else {
-    count = (options_.cpu_load_ + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
+    count = (options_.CpuLoad() + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.CpuLoad(), count, Count());
     return false;
   }
   if (count <= 0) {

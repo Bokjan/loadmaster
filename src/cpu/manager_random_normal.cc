@@ -23,13 +23,13 @@ bool CpuResourceManagerRandomNormal::Init() {
   }
   // Determine how many threads should be used
   int count;
-  if (options_.cpu_count_ > 0) {
-    count = options_.cpu_count_;
+  if (options_.CpuCount() > 0) {
+    count = options_.CpuCount();
   } else {
     count = (max_load + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.cpu_load_, count, Count());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.CpuLoad(), count, Count());
     return false;
   }
   if (count <= 0) {
@@ -75,7 +75,7 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
   double x_pos_upper = dist_.FindXAxisPositionCDF(kCpuRandNormalCdfTarget);
   double x_pos_lower = dist_.GetMean() - (x_pos_upper - dist_.GetMean());
   double step = (x_pos_upper - x_pos_lower) / kCpuRandNormalSchedulePointCount;
-  double factor = options_.cpu_load_ * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
+  double factor = options_.CpuLoad() * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   for (int i = 0; i < kCpuRandNormalSchedulePointCount; ++i) {
     double integral = dist_.CDF(get_x(i + 1)) - dist_.CDF(get_x(i));
