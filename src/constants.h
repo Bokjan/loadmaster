@@ -21,7 +21,6 @@ constexpr int kCpuMaxLoadPerCore = 100;
 constexpr int kCpuBaseLoopCountMin = 0;
 constexpr int kCpuBaseLoopCountMax = 25000000;
 constexpr int kCpuBaseLoopCountTestIteration = 15;
-constexpr int kCpuPauseLoopLoadPercentage = 60;  // Don't run when total CPU reaches this
 constexpr double kCpuRandNormalMu = 0.0;
 constexpr double kCpuRandNormalSigma = 2.0;
 constexpr double kCpuRandNormalCdfTarget = 0.95;

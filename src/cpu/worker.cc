@@ -2,7 +2,7 @@
 
 #include "constants.h"
 #include "cpu/cpu.h"
-#include "global.h"
+#include "runtime.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -10,7 +10,7 @@ namespace cpu {
 void CpuWorkerContext::Loop() {
   WorkerLoopGuard guard(*this);
   // 100ms is a scheduling period
-  while (global::keep_loop) {
+  while (RunningFlag::Get().IsRunning()) {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
       cpu::CriticalLoop(base_loop_count_);

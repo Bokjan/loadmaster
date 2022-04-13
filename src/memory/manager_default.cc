@@ -6,7 +6,7 @@
 namespace memory {
 
 MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
-    : MemoryResourceManager(options), filling_(false), generator_(std::random_device()()) {}
+    : MemoryResourceManager(options), filling_(false), generator_(std::random_device{}()) {}
 
 MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // Delete allocated memory

@@ -2,7 +2,6 @@
 
 #include "constants.h"
 #include "cpu/cpu.h"
-#include "global.h"
 #include "memory/memory.h"
 #include "options.h"
 #include "util/log.h"
@@ -44,7 +43,7 @@ void Runtime::MainLoop() {
   if (managers_.empty()) {
     LOG_FATAL("no module enabled, quit");
   }
-  while (global::keep_loop) {
+  while (RunningFlag::Get().IsRunning()) {
     auto start = std::chrono::high_resolution_clock::now();
     proc_stat_.UpdateCpuStat(start);
     for (auto &mgr : managers_) {

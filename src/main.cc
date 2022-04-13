@@ -1,5 +1,4 @@
 #include "cli/cli.h"
-#include "global.h"
 #include "runtime.h"
 #include "util/log.h"
 
@@ -26,7 +25,7 @@ void Work(const Options &options) {
 void RegisterSignalHandler() {
   auto exit_handler = [](int signal) {
     LOG_INFO("signal %d captured, exit", signal);
-    global::StopLoop();
+    RunningFlag::Get().Stop();
   };
   signal(SIGINT, exit_handler);
   signal(SIGTERM, exit_handler);

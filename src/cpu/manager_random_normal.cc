@@ -4,12 +4,13 @@
 #include "options.h"
 #include "util/log.h"
 
-#include <random>
-
 namespace cpu {
 
 CpuResourceManagerRandomNormal::CpuResourceManagerRandomNormal(const Options &options)
-    : CpuResourceManager(options), point_idx_(0), dist_(kCpuRandNormalMu, kCpuRandNormalSigma) {
+    : CpuResourceManager(options),
+      point_idx_(0),
+      dist_(kCpuRandNormalMu, kCpuRandNormalSigma),
+      generator_(std::random_device{}()) {
   GenerateSchedulePoints();
 }
 
@@ -43,9 +44,6 @@ bool CpuResourceManagerRandomNormal::Init() {
 }
 
 void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int cpu_load) {
-  if (CpuLoadThresholdGuard(cpu_load)) {
-    return;
-  }
   auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_schedule_).count();
   if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
@@ -55,16 +53,22 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int 
     ShuffleSchedulePoints();
   }
 
-  int avg_load = schedule_points_[point_idx_] / workers_.size();
-  if (cpu_load > kCpuPauseLoopLoadPercentage * Count()) {
-    avg_load = 0;
-  }
-  LOG_TRACE("idx=%d, total_target=%d, avg_target=%d", point_idx_, schedule_points_[point_idx_],
-            avg_load);
+  int core_target = 0;
+
+  do {
+    auto load_demand = schedule_points_[point_idx_] - cpu_load;
+    if (load_demand <= 0) {
+      break;
+    }
+    core_target = load_demand / static_cast<int>(workers_.size());
+    LOG_TRACE("idx=%d, total_target=%d, load_demand=%d, core_target=%d", point_idx_,
+              schedule_points_[point_idx_], core_target);
+  } while (false);
 
   for (auto &ctx : workers_) {
-    ctx.SetLoadSet(avg_load);
+    ctx.SetLoadSet(core_target);
   }
+
   last_schedule_ = time_point;
   IncreasePointIndex();
 }
@@ -86,30 +90,19 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
 
 void CpuResourceManagerRandomNormal::ShuffleSchedulePoints() {
   int count = static_cast<int>(schedule_points_.size());
-  std::mt19937 gen(std::random_device{}());
   std::uniform_int_distribution<> udist(0, count - 1);
   for (int i = 0; i < count; ++i) {
-    int x = udist(gen);
-    int y = udist(gen);
+    int x = udist(generator_);
+    int y = udist(generator_);
     std::swap(schedule_points_[x], schedule_points_[y]);
   }
 }
 
 void CpuResourceManagerRandomNormal::IncreasePointIndex() {
   ++point_idx_;
-  if (static_cast<size_t>(point_idx_) == schedule_points_.size()) {
+  if (point_idx_ == schedule_points_.size()) {
     point_idx_ = 0;
   }
-}
-
-bool CpuResourceManagerRandomNormal::CpuLoadThresholdGuard(int cpu_load) {
-  if (cpu_load < kCpuPauseLoopLoadPercentage * ::cpu::Count()) {
-    return false;
-  }
-  for (auto &ctx : workers_) {
-    ctx.SetLoadSet(0);
-  }
-  return true;
 }
 
 }  // namespace cpu

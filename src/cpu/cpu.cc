@@ -1,7 +1,6 @@
 #include "cpu.h"
 
 #include "constants.h"
-#include "global.h"
 #include "manager_default.h"
 #include "manager_random_normal.h"
 #include "options.h"
@@ -12,6 +11,7 @@
 
 #include <random>
 #include <thread>
+#include <exception>
 
 #include <unistd.h>
 
@@ -67,7 +67,7 @@ bool GetProcStat(StatInfo &info) {
     ret = true;
   } while (false);
   if (!ret) {
-    global::StopLoop();
+    throw new std::runtime_error("failed to read /proc/stat");
   }
   return ret;
 }
