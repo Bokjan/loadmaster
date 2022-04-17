@@ -3,6 +3,7 @@
 #include "cpu.h"
 #include "resmgr.h"
 #include "util/proc_stat.h"
+#include "util/rolling_sampler.h"
 #include "worker.h"
 
 #include <vector>
@@ -23,9 +24,9 @@ class CpuResourceManager : public ResourceManager {
   void SetWorkerLoadWithTotalLoad(int total_load);
   int CalculateLoadDemand(int target);
 
-  int GetSystemAverageLoad() const { return system_average_load_; }
-  int GetProcessAverageLoad() const { return process_average_load_; }
   TimePoint GetLastScheduling() const { return last_scheduling_; }
+  int GetSystemAverageLoad() const { return system_sampler_.GetMean(); }
+  int GetProcessAverageLoad() const { return process_sampler_.GetMean(); }
 
  private:
   int jiffy_ms_;
@@ -33,20 +34,12 @@ class CpuResourceManager : public ResourceManager {
   std::vector<CpuWorkerContext> workers_;
   int base_loop_count_;
   CpuStatInfo cpu_stat_;
-  int system_average_load_;
-  int system_load_sampling_index_;
-  std::vector<int> system_load_samplings_;
+  util::RollingSampler<int> system_sampler_;
   util::ProcStat proc_stat_;
-  int process_average_load_;
-  int process_load_sampling_index_;
-  std::vector<int> process_load_samplings_;
+  util::RollingSampler<int> process_sampler_;
 
   int FindAccurateBaseLoopCount(int max_iteration);
   void UpdateProcStat(TimePoint time_point);
-  void UpdateSystemSamplingVector(int current);
-  void CalculateSystemAverageLoad();
-  void UpdateProcessSamplingVector(int current);
-  void CalculateProcessAverageLoad();
 };
 
 }  // namespace cpu

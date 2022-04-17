@@ -22,6 +22,8 @@ class Runtime final {
  private:
   const Options &options_;
   std::vector<std::unique_ptr<ResourceManager>> managers_;
+
+  TimePoint NextSchedulingTime(TimePoint current_start);
 };
 
 class RunningFlag final {

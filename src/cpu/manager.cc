@@ -12,16 +12,11 @@ CpuResourceManager::CpuResourceManager(const Options &options)
     : ResourceManager(options),
       jiffy_ms_(cpu::GetJiffyMillisecond()),
       base_loop_count_(0),
-      system_average_load_(0),
-      system_load_sampling_index_(0),
+      system_sampler_(kCpuAvgLoadSamplingCount),
       proc_stat_(getpid()),
-      process_average_load_(0),
-      process_load_sampling_index_(0) {
+      process_sampler_(kCpuAvgLoadSamplingCount) {
   // Find a finest base loop count
   base_loop_count_ = FindAccurateBaseLoopCount(kCpuBaseLoopCountTestIteration);
-  // Allocate memory for load sampling vector
-  system_load_samplings_.reserve(kCpuAvgLoadSamplingCount);
-  process_load_samplings_.reserve(kCpuAvgLoadSamplingCount);
 }
 
 void CpuResourceManager::CreateWorkerThreads() {
@@ -64,9 +59,8 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
             .count();
     auto system_load =
         static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * kCpuMaxLoadPerCore);
-    this->UpdateSystemSamplingVector(system_load);
-    this->CalculateSystemAverageLoad();
-    LOG_TRACE("cur_sys_load=%d, avg_sys_load=%d", system_load, system_average_load_);
+    system_sampler_.InsertValue(system_load);
+    LOG_TRACE("cur_sys_load=%d, avg_sys_load=%d", system_load, system_sampler_.GetMean());
     // Invoke specified scheduler
     this->AdjustWorkerLoad(time_point, system_load);
   }
@@ -115,8 +109,7 @@ int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
 
 void CpuResourceManager::UpdateProcStat(TimePoint time_point) {
   proc_stat_.UpdateCpuStat(time_point);
-  this->UpdateProcessSamplingVector(proc_stat_.GetCpuLoad());
-  this->CalculateProcessAverageLoad();
+  process_sampler_.InsertValue(proc_stat_.GetCpuLoad());
 }
 
 bool CpuResourceManager::ConstructWorkerThreads(int count) {
@@ -127,30 +120,6 @@ bool CpuResourceManager::ConstructWorkerThreads(int count) {
   return true;
 }
 
-void CpuResourceManager::UpdateProcessSamplingVector(int current) {
-  if (process_load_samplings_.size() < kCpuAvgLoadSamplingCount) {
-    process_load_samplings_.emplace_back(current);
-  } else {
-    process_load_samplings_[process_load_sampling_index_] = current;
-    ++process_load_sampling_index_;
-    if (process_load_sampling_index_ >= kCpuAvgLoadSamplingCount) {
-      process_load_sampling_index_ = 0;
-    }
-  }
-}
-
-void CpuResourceManager::CalculateProcessAverageLoad() {
-  if (process_load_samplings_.empty()) {
-    process_average_load_ = 0;
-    return;
-  }
-  int total = 0;
-  for (auto item : process_load_samplings_) {
-    total += item;
-  }
-  process_average_load_ = total / process_load_samplings_.size();
-}
-
 void CpuResourceManager::SetWorkerLoadWithTotalLoad(int total_load) {
   int thread_count = workers_.size();
   int avg_load = total_load / thread_count;
@@ -159,40 +128,16 @@ void CpuResourceManager::SetWorkerLoadWithTotalLoad(int total_load) {
   }
 }
 
-void CpuResourceManager::UpdateSystemSamplingVector(int current) {
-  if (system_load_samplings_.size() < kCpuAvgLoadSamplingCount) {
-    system_load_samplings_.emplace_back(current);
-  } else {
-    system_load_samplings_[system_load_sampling_index_] = current;
-    ++system_load_sampling_index_;
-    if (system_load_sampling_index_ >= kCpuAvgLoadSamplingCount) {
-      system_load_sampling_index_ = 0;
-    }
-  }
-}
-
-void CpuResourceManager::CalculateSystemAverageLoad() {
-  if (system_load_samplings_.empty()) {
-    system_average_load_ = 0;
-    return;
-  }
-  int total = 0;
-  for (auto item : system_load_samplings_) {
-    total += item;
-  }
-  system_average_load_ = total / system_load_samplings_.size();
-}
-
 int CpuResourceManager::CalculateLoadDemand(int target) {
   // Equation: target = other + proc, other = sysavg - procavg
   // Then, we assume C = sampling count,  K = C + 1
   // We have: target * K = other * K + [procavg * C + demand]
   //          K * (sysavg - procavg) + [procavg * C + demand] = K * target
   // That is: demand = K * (target - other) - C * procavg
-  const int sysavg = GetSystemAverageLoad();
-  const int procavg = GetProcessAverageLoad();
+  const int sysavg = system_sampler_.GetMean();
+  const int procavg = process_sampler_.GetMean();
   const int other = sysavg - procavg;
-  const int C = system_load_samplings_.size();
+  const int C = system_sampler_.GetSampleCount();
   const int K = C + 1;
   int demand = K * (target - other) - C * procavg;
   return demand;

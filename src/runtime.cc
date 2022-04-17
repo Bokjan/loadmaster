@@ -39,14 +39,14 @@ void Runtime::CreateWorkers() {
 
 void Runtime::MainLoop() {
   if (managers_.empty()) {
-    LOG_FATAL("no module enabled, quit");
+    LOG_FATAL("no module is enabled, quit");
   }
   while (RunningFlag::Get().IsRunning()) {
     auto start = std::chrono::high_resolution_clock::now();
     for (auto &mgr : managers_) {
       mgr->Schedule(start);
     }
-    std::this_thread::sleep_until(start + std::chrono::milliseconds(kScheduleIntervalMS));
+    std::this_thread::sleep_until(this->NextSchedulingTime(start));
   }
 }
 
@@ -54,4 +54,19 @@ void Runtime::JoinWorkers() {
   for (auto &mgr : managers_) {
     mgr->WaitThreads();
   }
+}
+
+TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
+  // Calc start + 100ms
+  auto start_us = std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp.time_since_epoch());
+  auto next_us = start_us + std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::milliseconds(kScheduleIntervalMS));
+  // Floor to 100 millisecond
+  // ns -> 1e-9 s
+  // ms -> 1e-3 s
+  // 100ms -> 1e-1 s
+  constexpr int64_t kScaleFactor = 100000000;
+  auto next_ns_count = next_us.count() / kScaleFactor * kScaleFactor;
+  auto ns_diff = next_ns_count - start_us.count();
+  return start_tp + std::chrono::nanoseconds(ns_diff);
 }
