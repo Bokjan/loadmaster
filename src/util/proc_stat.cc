@@ -64,11 +64,11 @@ static int GetPageSize() {
 
 ProcStat::ProcStat(int pid) : pid_(pid), jiffies_self_(0), jiffies_child_(0), cpu_load_cached_(0) {}
 
-void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, bool force) {
+void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   // Time diff
   auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
-  if (!force && elapsed_ms < kProcStatIntervalMS) {
+  if (force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
     return;
   }
   // Declare a struct on stack

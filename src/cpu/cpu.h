@@ -9,7 +9,7 @@ class ResourceManager;
 
 namespace cpu {
 
-struct StatInfo {
+struct CpuStatInfo {
   uint64_t user;
   uint64_t nice;
   uint64_t system;
@@ -20,7 +20,7 @@ struct StatInfo {
   uint64_t steal;
   uint64_t guest;
   uint64_t guest_nice;
-  StatInfo()
+  CpuStatInfo()
       : user(0),
         nice(0),
         system(0),
@@ -35,7 +35,7 @@ struct StatInfo {
 
 int Count();
 int GetJiffyMillisecond();
-bool GetProcStat(StatInfo &info);
+bool GetCpuProcStat(CpuStatInfo &info);
 void CriticalLoop(int count);
 
 std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options);

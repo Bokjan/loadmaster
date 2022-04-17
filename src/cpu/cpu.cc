@@ -9,9 +9,9 @@
 
 #include <cstring>
 
+#include <exception>
 #include <random>
 #include <thread>
-#include <exception>
 
 #include <unistd.h>
 
@@ -43,7 +43,7 @@ int GetJiffyMillisecond() {
   return static_cast<int>(kMillisecondsPerSecond / freq);
 }
 
-bool GetProcStat(StatInfo &info) {
+bool GetCpuProcStat(CpuStatInfo &info) {
   bool ret = false;
   do {
     char buffer[kSmallBufferLength];

@@ -9,12 +9,16 @@ namespace memory {
 class MemoryResourceManager : public ResourceManager {
  public:
   virtual bool Init();
-  virtual void CreateWorkerThreads();
+  virtual void CreateWorkerThreads() override final;
 
  protected:
-  TimePoint time_point_;
-  uint64_t *block_ptr_;
   explicit MemoryResourceManager(const Options &options);
+
+  TimePoint GetLastScheduling() const { return last_scheduling_; }
+  void SetLastScheduling(TimePoint time_point) { last_scheduling_ = time_point; }
+
+ private:
+  TimePoint last_scheduling_;
 };
 
 }  // namespace memory

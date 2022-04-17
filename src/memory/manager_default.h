@@ -12,10 +12,11 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   ~MemoryResourceManagerDefault();
 
  protected:
-  virtual void Schedule(TimePoint time_point);
+  virtual void Schedule(TimePoint time_point) override;
 
  private:
-  bool filling_;
+  uint64_t *block_ptr_;
+  bool need_filling_;
   std::mt19937 generator_;
   bool WillSchedule(TimePoint time_point);
 };

@@ -8,15 +8,13 @@
 
 #include <functional>
 
-#include "unistd.h"
-
 using FnCreateResourceManager =
     std::function<std::unique_ptr<ResourceManager>(const Options &options)>;
 
 static const FnCreateResourceManager resmgr_creators[] = {cpu::CreateResourceManager,
                                                           memory::CreateResourceManager};
 
-Runtime::Runtime(const Options &options) : options_(options), proc_stat_(getpid()) {}
+Runtime::Runtime(const Options &options) : options_(options) {}
 
 void Runtime::Init() {
   // Create
@@ -45,7 +43,6 @@ void Runtime::MainLoop() {
   }
   while (RunningFlag::Get().IsRunning()) {
     auto start = std::chrono::high_resolution_clock::now();
-    proc_stat_.UpdateCpuStat(start);
     for (auto &mgr : managers_) {
       mgr->Schedule(start);
     }

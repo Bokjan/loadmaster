@@ -5,8 +5,7 @@
 
 namespace memory {
 
-MemoryResourceManager::MemoryResourceManager(const Options &options)
-    : ResourceManager(options), block_ptr_(nullptr) {}
+MemoryResourceManager::MemoryResourceManager(const Options &options) : ResourceManager(options) {}
 
 bool MemoryResourceManager::Init() { return options_.Memory() > 0; }
 

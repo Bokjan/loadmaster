@@ -2,6 +2,7 @@
 
 #include "constants.h"
 #include "options.h"
+#include "util/algorithm.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -10,7 +11,8 @@ CpuResourceManagerRandomNormal::CpuResourceManagerRandomNormal(const Options &op
     : CpuResourceManager(options),
       point_idx_(0),
       dist_(kCpuRandNormalMu, kCpuRandNormalSigma),
-      generator_(std::random_device{}()) {
+      generator_(std::random_device{}()),
+      load_target_(0) {
   GenerateSchedulePoints();
 }
 
@@ -36,41 +38,16 @@ bool CpuResourceManagerRandomNormal::Init() {
   if (count <= 0) {
     return false;
   }
-  for (int i = 0; i < count; ++i) {
-    CpuWorkerContext ctx(i, wg_, base_loop_count_);
-    workers_.emplace_back(std::move(ctx));
-  }
-  return true;
+  return this->ConstructWorkerThreads(count);
 }
 
-void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int cpu_load) {
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_schedule_).count();
-  if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
-    return;
-  }
-  if (point_idx_ == 0) {
-    ShuffleSchedulePoints();
-  }
-
-  int core_target = 0;
-
-  do {
-    auto load_demand = schedule_points_[point_idx_] - cpu_load;
-    if (load_demand <= 0) {
-      break;
-    }
-    core_target = load_demand / static_cast<int>(workers_.size());
-    LOG_TRACE("idx=%d, total_target=%d, load_demand=%d, core_target=%d", point_idx_,
-              schedule_points_[point_idx_], core_target);
-  } while (false);
-
-  for (auto &ctx : workers_) {
-    ctx.SetLoadSet(core_target);
-  }
-
-  last_schedule_ = time_point;
-  IncreasePointIndex();
+void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int system_load) {
+  this->UpdateLoadTarget(time_point);
+  auto load_demand = this->CalculateLoadDemand(load_target_);
+  load_demand = util::Clamp(load_demand, 0, load_target_);
+  LOG_TRACE("load_target_=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d",
+            load_target_, this->GetProcessAverageLoad(), this->GetSystemAverageLoad(), load_demand);
+  this->SetWorkerLoadWithTotalLoad(load_demand);
 }
 
 void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
@@ -103,6 +80,24 @@ void CpuResourceManagerRandomNormal::IncreasePointIndex() {
   if (point_idx_ == schedule_points_.size()) {
     point_idx_ = 0;
   }
+}
+
+void CpuResourceManagerRandomNormal::UpdateLoadTarget(TimePoint time_point) {
+  auto elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_load_target_change_)
+          .count();
+  if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
+    return;
+  }
+  if (point_idx_ == 0) {
+    ShuffleSchedulePoints();
+  }
+
+  load_target_ = schedule_points_[point_idx_];
+  LOG_DEBUG("point_idx_=%d, load_target_=%d", point_idx_, load_target_);
+
+  IncreasePointIndex();
+  last_load_target_change_ = time_point;
 }
 
 }  // namespace cpu

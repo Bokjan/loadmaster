@@ -6,7 +6,10 @@
 namespace memory {
 
 MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
-    : MemoryResourceManager(options), filling_(false), generator_(std::random_device{}()) {}
+    : MemoryResourceManager(options),
+      block_ptr_(nullptr),
+      need_filling_(false),
+      generator_(std::random_device{}()) {}
 
 MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // Delete allocated memory
@@ -32,7 +35,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     // Filling procedure in lambda form
     auto procedure = [byte_count, this]() {
       WaitGroupDoneGuard guard(wg_);
-      filling_ = true;
+      need_filling_ = true;
       auto target = byte_count / sizeof(*(block_ptr_));
       if (target <= 0) {
         LOG_ERROR("invalid target(uint64_t) count %lu", target);
@@ -45,7 +48,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
       for (decltype(target) i = 0; i < target; ++i) {
         block_ptr_[i] = i;
       }
-      filling_ = false;
+      need_filling_ = false;
     };
     // Need a new thread?
     if (byte_count > kMemoryNoThreadSpawnThresholdMiB * kMebiByte) {
@@ -55,7 +58,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
       procedure();
     }
     wg_.Incr();
-    time_point_ = time_point;
+    this->SetLastScheduling(time_point);
   } while (false);
 }
 
@@ -64,11 +67,12 @@ bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
     LOG_INFO("block_ptr_ is nullptr");
     return true;
   }
-  if (filling_) {
+  if (need_filling_) {
     LOG_INFO("previous filling task is still running, skip");
     return false;
   }
-  auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(time_point - time_point_);
+  auto time_diff =
+      std::chrono::duration_cast<std::chrono::seconds>(time_point - this->GetLastScheduling());
   if (time_diff.count() > kMemoryScheduleIntervalSecond) {
     return true;
   }
