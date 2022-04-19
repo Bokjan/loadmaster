@@ -14,7 +14,7 @@ namespace cli {
 
 static void PrintUsage(const char *path);
 
-bool ParseInt(int argc, const char *argv[], int &idx, util::optinal<int> &value) {
+bool ParseInt(int argc, const char *argv[], int &idx, util::optional<int> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -32,7 +32,7 @@ bool ParseInt(int argc, const char *argv[], int &idx, util::optinal<int> &value)
 };
 
 bool ParseStringView(int argc, const char *argv[], int &idx,
-                     util::optinal<util::string_view> &value) {
+                     util::optional<util::string_view> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -63,16 +63,16 @@ struct CmdArgOptionVersion : public CmdArgOption {
 };
 
 struct CmdArgOptionInt : public CmdArgOption {
-  util::optinal<int> &value_ref;
-  explicit CmdArgOptionInt(util::optinal<int> &ref) : value_ref(ref) {}
+  util::optional<int> &value_ref;
+  explicit CmdArgOptionInt(util::optional<int> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseInt(argc, argv, idx, value_ref);
   }
 };
 
 struct CmdArgOptionStringView : public CmdArgOption {
-  util::optinal<util::string_view> &value_ref;
-  explicit CmdArgOptionStringView(util::optinal<util::string_view> &ref) : value_ref(ref) {}
+  util::optional<util::string_view> &value_ref;
+  explicit CmdArgOptionStringView(util::optional<util::string_view> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseStringView(argc, argv, idx, value_ref);
   }
@@ -136,6 +136,7 @@ static void PrintUsage(const char *path) {
     -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
+    -ls <load_sensor>       
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
   puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
 }

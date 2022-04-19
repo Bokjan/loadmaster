@@ -26,13 +26,13 @@ bool CpuResourceManagerRandomNormal::Init() {
   }
   // Determine how many threads should be used
   int count;
-  if (options_.CpuCount() > 0) {
-    count = options_.CpuCount();
+  if (options_.GetCpuCount() > 0) {
+    count = options_.GetCpuCount();
   } else {
     count = (max_load + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.CpuLoad(), count, Count());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.GetCpuLoad(), count, Count());
     return false;
   }
   if (count <= 0) {
@@ -45,8 +45,8 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int 
   this->UpdateLoadTarget(time_point);
   auto load_demand = this->CalculateLoadDemand(load_target_);
   load_demand = util::Clamp(load_demand, 0, load_target_);
-  LOG_TRACE("load_target_=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d",
-            load_target_, this->GetProcessAverageLoad(), this->GetSystemAverageLoad(), load_demand);
+  LOG_TRACE("load_target_=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d", load_target_,
+            this->GetProcessAverageLoad(), this->GetSystemAverageLoad(), load_demand);
   this->SetWorkerLoadWithTotalLoad(load_demand);
 }
 
@@ -56,7 +56,8 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
   double x_pos_upper = dist_.FindXAxisPositionCDF(kCpuRandNormalCdfTarget);
   double x_pos_lower = dist_.GetMean() - (x_pos_upper - dist_.GetMean());
   double step = (x_pos_upper - x_pos_lower) / kCpuRandNormalSchedulePointCount;
-  double factor = options_.CpuLoad() * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
+  double factor =
+      options_.GetCpuLoad() * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   for (int i = 0; i < kCpuRandNormalSchedulePointCount; ++i) {
     double integral = dist_.CDF(get_x(i + 1)) - dist_.CDF(get_x(i));

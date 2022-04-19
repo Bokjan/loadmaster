@@ -12,13 +12,13 @@ CpuResourceManagerDefault::CpuResourceManagerDefault(const Options &options)
 
 bool CpuResourceManagerDefault::Init() {
   int count;
-  if (options_.CpuCount() > 0) {
-    count = options_.CpuCount();
+  if (options_.GetCpuCount() > 0) {
+    count = options_.GetCpuCount();
   } else {
-    count = (options_.CpuLoad() + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
+    count = (options_.GetCpuLoad() + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > Count()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.CpuLoad(), count, Count());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.GetCpuLoad(), count, Count());
     return false;
   }
   if (count <= 0) {
@@ -29,7 +29,7 @@ bool CpuResourceManagerDefault::Init() {
 }
 
 void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int system_load) {
-  auto load_target = options_.CpuLoad();
+  auto load_target = options_.GetCpuLoad();
   auto load_demand = this->CalculateLoadDemand(load_target);
   load_demand = util::Clamp(load_demand, 0, load_target);
   LOG_TRACE("load_target=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d", load_target,

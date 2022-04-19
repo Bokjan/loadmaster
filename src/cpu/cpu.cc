@@ -19,15 +19,15 @@ namespace cpu {
 
 std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
   std::unique_ptr<ResourceManager> ret;
-  switch (options.CpuAlgorithm()) {
-    case Options::CpuAlgo::kDefault:
+  switch (options.GetCpuAlgorithm()) {
+    case Options::CpuAlgorithm::kDefault:
       ret = util::make_unique<CpuResourceManagerDefault>(options);
       break;
-    case Options::CpuAlgo::kRandomNormal:
+    case Options::CpuAlgorithm::kRandomNormal:
       ret = util::make_unique<CpuResourceManagerRandomNormal>(options);
       break;
     default:
-      LOG_FATAL("invalid CPU algorithm type [%d]", static_cast<int>(options.CpuAlgorithm()));
+      LOG_FATAL("invalid CPU algorithm type [%d]", EnumToInt(options.GetCpuAlgorithm()));
       break;
   }
   return ret;

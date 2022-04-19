@@ -27,7 +27,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     // New size (byte)
     std::uniform_real_distribution<> dis(kMemoryMinimumRatio, 1.0);
     auto ratio = dis(generator_);
-    auto byte_count = static_cast<size_t>(ratio * options_.Memory());
+    auto byte_count = static_cast<size_t>(ratio * options_.GetMemoryMiB());
     // Align to 4 KiB
     constexpr size_t kFourKiB = 4 * kKibiByte;
     byte_count = byte_count / kFourKiB * kFourKiB;

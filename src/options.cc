@@ -11,7 +11,7 @@
 Options::Options()
     : cpu_load_(kDefaultCpuLoad),
       cpu_count_(0),
-      cpu_algorithm_(CpuAlgo::kDefault),
+      cpu_algorithm_(CpuAlgorithm::kDefault),
       memory_(kDefaultMemoryLoadMiB) {}
 
 void Options::ProcessCliArguments(const cli::CliArgs &args) {
@@ -32,9 +32,9 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
     }
     // CPU scheduling algorithm
     if (args.cpu_algorithm) {
-      static std::map<std::string, Options::CpuAlgo> map = {
-          {"default", Options::CpuAlgo::kDefault},
-          {"rand_normal", Options::CpuAlgo::kRandomNormal}};
+      static std::map<std::string, Options::CpuAlgorithm> map = {
+          {"default", Options::CpuAlgorithm::kDefault},
+          {"rand_normal", Options::CpuAlgorithm::kRandomNormal}};
       auto find = map.find(args.cpu_algorithm.value().c_str());
       if (find == map.end()) {
         LOG_FATAL("invalid CPU algorithm [%s]", args.cpu_algorithm.value().c_str());
