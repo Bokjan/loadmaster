@@ -4,6 +4,8 @@
 #include "options.h"
 #include "util/log.h"
 
+#include <algorithm>
+
 #include <unistd.h>
 
 namespace cpu {

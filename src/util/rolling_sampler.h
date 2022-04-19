@@ -16,7 +16,7 @@ class RollingSampler final {
 
   void InsertValue(const T &value) {
     // Insert to vector
-    if (values_.size() < size_) {
+    if (values_.size() < static_cast<size_t>(size_)) {
       values_.emplace_back(value);
     } else {
       values_[index_] = value;

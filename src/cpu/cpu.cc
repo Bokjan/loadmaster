@@ -9,7 +9,7 @@
 
 #include <cstring>
 
-#include <exception>
+#include <stdexcept>
 #include <random>
 #include <thread>
 
@@ -30,7 +30,7 @@ std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
       LOG_FATAL("invalid CPU algorithm type [%d]", static_cast<int>(options.CpuAlgorithm()));
       break;
   }
-  return std::move(ret);
+  return ret;
 }
 
 int Count() {
@@ -67,7 +67,7 @@ bool GetCpuProcStat(CpuStatInfo &info) {
     ret = true;
   } while (false);
   if (!ret) {
-    throw new std::runtime_error("failed to read /proc/stat");
+    throw std::runtime_error("failed to read /proc/stat");
   }
   return ret;
 }

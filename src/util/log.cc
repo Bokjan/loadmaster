@@ -2,9 +2,11 @@
 
 #include <csignal>
 #include <cstdarg>
+#include <cstdio>
 #include <ctime>
 
 #include <map>
+#include <string>
 
 #include <sys/time.h>
 
@@ -37,7 +39,7 @@ void Logger::Log(LogLevel level, const char *Format, ...) {
 }
 
 const char *Logger::GetTimeCString(LogLevel level) {
-  constexpr ssize_t kBufferLen = 128;
+  constexpr size_t kBufferLen = 128;
   thread_local char buffer[kBufferLen];
   if (!this->WillPrint(level)) {
     return buffer;
