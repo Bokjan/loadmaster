@@ -135,7 +135,6 @@ static void PrintUsage(const char *path) {
     -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
-    -ls <load_sensor>       
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
   puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
 }
