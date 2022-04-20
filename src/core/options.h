@@ -6,10 +6,7 @@ namespace cli {
 struct CliArgs;
 }
 
-template <typename T>
-inline int EnumToInt(T value) {
-  return static_cast<int>(value);
-}
+namespace core {
 
 class Options final {
  public:
@@ -18,6 +15,10 @@ class Options final {
   Options();
 
   void ProcessCliArguments(const cli::CliArgs &args);
+  template <typename T>
+  static inline int EnumToInt(T value) {
+    return static_cast<int>(value);
+  }
 
   int GetCpuLoad() const { return cpu_load_; }
   int GetCpuCount() const { return cpu_count_; }
@@ -30,3 +31,5 @@ class Options final {
   CpuAlgorithm cpu_algorithm_;  // as shown
   int memory_;                  // in MiB
 };
+
+}  // namespace core

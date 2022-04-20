@@ -4,7 +4,7 @@
 
 namespace cpu {
 
-class CpuWorkerContext final : public WorkerContext {
+class CpuWorkerContext final : public core::WorkerContext {
  public:
   CpuWorkerContext(int id, util::WaitGroup &wg, int base_loop_count)
       : WorkerContext(id, wg), load_set_(0), base_loop_count_(base_loop_count) {}

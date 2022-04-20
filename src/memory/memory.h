@@ -2,11 +2,10 @@
 
 #include <memory>
 
-class Options;
-class ResourceManager;
+#include "core/resource_manager.h"
 
 namespace memory {
 
-std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options);
+std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options &options);
 
 }

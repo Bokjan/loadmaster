@@ -8,7 +8,7 @@
 
 namespace cpu {
 
-CpuResourceManagerRandomNormal::CpuResourceManagerRandomNormal(const Options &options)
+CpuResourceManagerRandomNormal::CpuResourceManagerRandomNormal(const core::Options &options)
     : CpuResourceManager(options),
       point_idx_(0),
       dist_(kCpuRandNormalMu, kCpuRandNormalSigma),

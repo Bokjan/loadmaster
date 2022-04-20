@@ -5,7 +5,7 @@
 
 namespace memory {
 
-MemoryResourceManagerDefault::MemoryResourceManagerDefault(const Options &options)
+MemoryResourceManagerDefault::MemoryResourceManagerDefault(const core::Options &options)
     : MemoryResourceManager(options),
       block_ptr_(nullptr),
       need_filling_(false),
@@ -34,7 +34,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     LOG_TRACE("byte_count=%lu", byte_count);
     // Filling procedure in lambda form
     auto procedure = [byte_count, this]() {
-      WaitGroupDoneGuard guard(wg_);
+      core::WaitGroupDoneGuard wgd_guard(wg_);
       need_filling_ = true;
       auto target = byte_count / sizeof(*(block_ptr_));
       if (target <= 0) {

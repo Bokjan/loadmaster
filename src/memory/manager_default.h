@@ -8,7 +8,7 @@ namespace memory {
 
 class MemoryResourceManagerDefault final : public MemoryResourceManager {
  public:
-  explicit MemoryResourceManagerDefault(const Options &options);
+  explicit MemoryResourceManagerDefault(const core::Options &options);
   ~MemoryResourceManagerDefault();
 
  protected:

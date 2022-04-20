@@ -10,7 +10,7 @@ namespace cpu {
 
 class CpuResourceManagerRandomNormal final : public CpuResourceManager {
  public:
-  explicit CpuResourceManagerRandomNormal(const Options &options);
+  explicit CpuResourceManagerRandomNormal(const core::Options &options);
   virtual bool Init() override;
 
  private:

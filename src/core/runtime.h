@@ -7,6 +7,8 @@
 #include "core/resource_manager.h"
 #include "util/proc_stat.h"
 
+namespace core {
+
 class Options;
 
 class Runtime final {
@@ -38,3 +40,5 @@ class RunningFlag final {
   std::atomic_bool stop_flag_;
   RunningFlag() { stop_flag_.store(false); }
 };
+
+}  // namespace core

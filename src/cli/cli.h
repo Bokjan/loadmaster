@@ -15,6 +15,6 @@ struct CliArgs {
   std::optional<std::string_view> cpu_algorithm;
 };
 
-void ParseCommandLineArguments(Options &options, int argc, const char *argv[]);
+void ParseCommandLineArguments(core::Options &options, int argc, const char *argv[]);
 
 }  // namespace cli

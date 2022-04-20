@@ -3,15 +3,17 @@
 #include <functional>
 
 #include "constants.h"
+#include "core/options.h"
 #include "cpu/cpu.h"
 #include "memory/memory.h"
-#include "core/options.h"
 #include "util/log.h"
+
+namespace core {
 
 using FnCreateResourceManager =
     std::function<std::unique_ptr<ResourceManager>(const Options &options)>;
 
-static const FnCreateResourceManager resmgr_creators[] = {cpu::CreateResourceManager,
+const static FnCreateResourceManager resmgr_creators[] = {cpu::CreateResourceManager,
                                                           memory::CreateResourceManager};
 
 Runtime::Runtime(const Options &options) : options_(options) {}
@@ -70,3 +72,5 @@ TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   auto ns_diff = next_ns_count - start_us.count();
   return start_tp + std::chrono::nanoseconds(ns_diff);
 }
+
+}  // namespace core

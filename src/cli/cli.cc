@@ -119,7 +119,7 @@ static void ExtractRawCliData(CliArgs &cli_args, int argc, const char *argv[]) {
   processor.ExtractArguments(argc, argv);
 }
 
-void ParseCommandLineArguments(Options &options, int argc, const char *argv[]) {
+void ParseCommandLineArguments(core::Options &options, int argc, const char *argv[]) {
   CliArgs cli_args;
   ExtractRawCliData(cli_args, argc, argv);
   options.ProcessCliArguments(cli_args);

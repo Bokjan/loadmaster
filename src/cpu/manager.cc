@@ -10,7 +10,7 @@
 
 namespace cpu {
 
-CpuResourceManager::CpuResourceManager(const Options &options)
+CpuResourceManager::CpuResourceManager(const core::Options &options)
     : ResourceManager(options),
       jiffy_ms_(cpu::GetJiffyMillisecond()),
       base_loop_count_(0),

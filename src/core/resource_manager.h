@@ -6,12 +6,14 @@
 
 #include "util/waitgroup.h"
 
+using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
+namespace core {
+
 class Options;
 class WorkerContext;
 class ResourceManager;
 class WorkerLoopGuard;
-
-using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 class WorkerContext {
  public:
@@ -56,3 +58,5 @@ class ResourceManager {
   const Options &options_;
   util::WaitGroup wg_;
 };
+
+}  // namespace core

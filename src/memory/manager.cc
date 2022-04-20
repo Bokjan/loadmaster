@@ -5,7 +5,8 @@
 
 namespace memory {
 
-MemoryResourceManager::MemoryResourceManager(const Options &options) : ResourceManager(options) {}
+MemoryResourceManager::MemoryResourceManager(const core::Options &options)
+    : ResourceManager(options) {}
 
 bool MemoryResourceManager::Init() { return options_.GetMemoryMiB() > 0; }
 

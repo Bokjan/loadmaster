@@ -8,7 +8,7 @@
 
 namespace cpu {
 
-CpuResourceManagerDefault::CpuResourceManagerDefault(const Options &options)
+CpuResourceManagerDefault::CpuResourceManagerDefault(const core::Options &options)
     : CpuResourceManager(options) {}
 
 bool CpuResourceManagerDefault::Init() {

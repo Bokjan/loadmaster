@@ -16,17 +16,18 @@
 
 namespace cpu {
 
-std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
-  std::unique_ptr<ResourceManager> ret;
+std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options &options) {
+  std::unique_ptr<core::ResourceManager> ret;
   switch (options.GetCpuAlgorithm()) {
-    case Options::CpuAlgorithm::kDefault:
+    case core::Options::CpuAlgorithm::kDefault:
       ret = std::make_unique<CpuResourceManagerDefault>(options);
       break;
-    case Options::CpuAlgorithm::kRandomNormal:
+    case core::Options::CpuAlgorithm::kRandomNormal:
       ret = std::make_unique<CpuResourceManagerRandomNormal>(options);
       break;
     default:
-      LOG_FATAL("invalid CPU algorithm type [%d]", EnumToInt(options.GetCpuAlgorithm()));
+      LOG_FATAL("invalid CPU algorithm type [%d]",
+                core::Options::EnumToInt(options.GetCpuAlgorithm()));
       break;
   }
   return ret;

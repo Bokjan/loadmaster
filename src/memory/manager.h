@@ -6,13 +6,13 @@
 
 namespace memory {
 
-class MemoryResourceManager : public ResourceManager {
+class MemoryResourceManager : public core::ResourceManager {
  public:
   virtual bool Init();
   virtual void CreateWorkerThreads() override final;
 
  protected:
-  explicit MemoryResourceManager(const Options &options);
+  explicit MemoryResourceManager(const core::Options &options);
 
   TimePoint GetLastScheduling() const { return last_scheduling_; }
   void SetLastScheduling(TimePoint time_point) { last_scheduling_ = time_point; }

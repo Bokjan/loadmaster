@@ -8,9 +8,9 @@
 namespace cpu {
 
 void CpuWorkerContext::Loop() {
-  WorkerLoopGuard guard(*this);
+  core::WorkerLoopGuard guard(*this);
   // 100ms is a scheduling period
-  while (RunningFlag::Get().IsRunning()) {
+  while (core::RunningFlag::Get().IsRunning()) {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
       cpu::CriticalLoop(base_loop_count_);

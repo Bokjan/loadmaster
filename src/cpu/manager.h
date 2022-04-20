@@ -10,14 +10,14 @@
 
 namespace cpu {
 
-class CpuResourceManager : public ResourceManager {
+class CpuResourceManager : public core::ResourceManager {
  public:
   virtual bool Init() = 0;
   virtual void CreateWorkerThreads() override final;
   virtual void Schedule(TimePoint time_point) override final;
 
  protected:
-  explicit CpuResourceManager(const Options &options);
+  explicit CpuResourceManager(const core::Options &options);
   virtual void AdjustWorkerLoad(TimePoint time_point, int system_load) = 0;
 
   bool ConstructWorkerThreads(int count);

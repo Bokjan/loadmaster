@@ -9,6 +9,8 @@
 #include "cpu/cpu.h"
 #include "util/log.h"
 
+namespace core {
+
 Options::Options()
     : cpu_load_(kDefaultCpuLoad),
       cpu_count_(0),
@@ -60,4 +62,6 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
   if (!success) {
     exit(EXIT_SUCCESS);
   }
+}
+
 }
