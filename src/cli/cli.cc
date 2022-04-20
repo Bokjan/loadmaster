@@ -1,20 +1,21 @@
-#include "cli.h"
+#include "cli/cli.h"
 
-#include "cpu/cpu.h"
-#include "util/log.h"
-#include "util/make_unique.h"
-#include "version.h"
-
+#include <cstdio>
 #include <cstdlib>
 
 #include <functional>
 #include <map>
+#include <string>
+
+#include "cli/version_string.h"
+#include "cpu/cpu.h"
+#include "util/log.h"
 
 namespace cli {
 
 static void PrintUsage(const char *path);
 
-bool ParseInt(int argc, const char *argv[], int &idx, util::optional<int> &value) {
+bool ParseInt(int argc, const char *argv[], int &idx, std::optional<int> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -32,7 +33,7 @@ bool ParseInt(int argc, const char *argv[], int &idx, util::optional<int> &value
 };
 
 bool ParseStringView(int argc, const char *argv[], int &idx,
-                     util::optional<util::string_view> &value) {
+                     std::optional<std::string_view> &value) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -63,16 +64,16 @@ struct CmdArgOptionVersion : public CmdArgOption {
 };
 
 struct CmdArgOptionInt : public CmdArgOption {
-  util::optional<int> &value_ref;
-  explicit CmdArgOptionInt(util::optional<int> &ref) : value_ref(ref) {}
+  std::optional<int> &value_ref;
+  explicit CmdArgOptionInt(std::optional<int> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseInt(argc, argv, idx, value_ref);
   }
 };
 
 struct CmdArgOptionStringView : public CmdArgOption {
-  util::optional<util::string_view> &value_ref;
-  explicit CmdArgOptionStringView(util::optional<util::string_view> &ref) : value_ref(ref) {}
+  std::optional<std::string_view> &value_ref;
+  explicit CmdArgOptionStringView(std::optional<std::string_view> &ref) : value_ref(ref) {}
   bool Process(int argc, const char *argv[], int &idx) {
     return ParseStringView(argc, argv, idx, value_ref);
   }
@@ -81,17 +82,15 @@ struct CmdArgOptionStringView : public CmdArgOption {
 class CliArgumentProcessor final {
  public:
   CliArgumentProcessor(CliArgs &cli_args) {
-    arg_regist_.insert(std::make_pair("-h", util::make_unique<CmdArgOptionHelp>()));
-    arg_regist_.insert(std::make_pair("-v", util::make_unique<CmdArgOptionVersion>()));
-    arg_regist_.insert(std::make_pair("-l", util::make_unique<CmdArgOptionInt>(cli_args.cpu_load)));
+    arg_regist_.insert(std::make_pair("-h", std::make_unique<CmdArgOptionHelp>()));
+    arg_regist_.insert(std::make_pair("-v", std::make_unique<CmdArgOptionVersion>()));
+    arg_regist_.insert(std::make_pair("-l", std::make_unique<CmdArgOptionInt>(cli_args.cpu_load)));
+    arg_regist_.insert(std::make_pair("-c", std::make_unique<CmdArgOptionInt>(cli_args.cpu_count)));
+    arg_regist_.insert(std::make_pair("-m", std::make_unique<CmdArgOptionInt>(cli_args.memory_mb)));
     arg_regist_.insert(
-        std::make_pair("-c", util::make_unique<CmdArgOptionInt>(cli_args.cpu_count)));
+        std::make_pair("-L", std::make_unique<CmdArgOptionStringView>(cli_args.log_level)));
     arg_regist_.insert(
-        std::make_pair("-m", util::make_unique<CmdArgOptionInt>(cli_args.memory_mb)));
-    arg_regist_.insert(
-        std::make_pair("-L", util::make_unique<CmdArgOptionStringView>(cli_args.log_level)));
-    arg_regist_.insert(
-        std::make_pair("-ca", util::make_unique<CmdArgOptionStringView>(cli_args.cpu_algorithm)));
+        std::make_pair("-ca", std::make_unique<CmdArgOptionStringView>(cli_args.cpu_algorithm)));
   }
   void ExtractArguments(int argc, const char *argv[]) {
     bool terminate = false;

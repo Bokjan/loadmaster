@@ -1,6 +1,6 @@
 #pragma once
 
-#include "resmgr.h"
+#include "core/resource_manager.h"
 
 namespace cpu {
 

@@ -1,4 +1,4 @@
-#include "resmgr.h"
+#include "core/resource_manager.h"
 
 WaitGroupDoneGuard::WaitGroupDoneGuard(util::WaitGroup &wg) : wg_(wg) {}
 

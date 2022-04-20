@@ -1,8 +1,8 @@
-#include "worker.h"
+#include "cpu/worker.h"
 
 #include "constants.h"
+#include "core/runtime.h"
 #include "cpu/cpu.h"
-#include "runtime.h"
 #include "util/log.h"
 
 namespace cpu {

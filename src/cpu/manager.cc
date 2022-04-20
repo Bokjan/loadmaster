@@ -1,12 +1,12 @@
-#include "manager.h"
-
-#include "cpu/cpu.h"
-#include "options.h"
-#include "util/log.h"
+#include "cpu/manager.h"
 
 #include <algorithm>
 
 #include <unistd.h>
+
+#include "core/options.h"
+#include "cpu/cpu.h"
+#include "util/log.h"
 
 namespace cpu {
 

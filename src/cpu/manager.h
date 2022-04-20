@@ -1,12 +1,12 @@
 #pragma once
 
-#include "cpu.h"
-#include "resmgr.h"
+#include <vector>
+
+#include "core/resource_manager.h"
+#include "cpu/cpu.h"
+#include "cpu/worker.h"
 #include "util/proc_stat.h"
 #include "util/rolling_sampler.h"
-#include "worker.h"
-
-#include <vector>
 
 namespace cpu {
 

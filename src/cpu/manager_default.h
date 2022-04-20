@@ -1,6 +1,6 @@
 #pragma once
 
-#include "manager.h"
+#include "cpu/manager.h"
 
 namespace cpu {
 

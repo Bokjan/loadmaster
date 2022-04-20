@@ -1,6 +1,8 @@
-#include "version.h"
+#include "cli/version_string.h"
 
 #include <sstream>
+
+#include "version.h"
 
 namespace version_impl {
 
@@ -27,6 +29,10 @@ class VersionStringGenerator final {
 
 }  // namespace version_impl
 
+namespace cli {
+
 const char *VersionString() {
   return version_impl::VersionStringGenerator::GetInstance().GetVersionString().c_str();
 }
+
+}  // namespace cli

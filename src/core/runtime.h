@@ -1,12 +1,11 @@
 #pragma once
 
-#include "resmgr.h"
-
-#include "util/proc_stat.h"
-
 #include <atomic>
 #include <memory>
 #include <vector>
+
+#include "core/resource_manager.h"
+#include "util/proc_stat.h"
 
 class Options;
 

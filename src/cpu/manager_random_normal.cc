@@ -1,8 +1,9 @@
-#include "manager_random_normal.h"
+#include "cpu/manager_random_normal.h"
+
+#include <algorithm>
 
 #include "constants.h"
-#include "options.h"
-#include "util/algorithm.h"
+#include "core/options.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -44,7 +45,7 @@ bool CpuResourceManagerRandomNormal::Init() {
 void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int system_load) {
   this->UpdateLoadTarget(time_point);
   auto load_demand = this->CalculateLoadDemand(load_target_);
-  load_demand = util::Clamp(load_demand, 0, load_target_);
+  load_demand = std::clamp(load_demand, 0, load_target_);
   LOG_TRACE("load_target_=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d", load_target_,
             this->GetProcessAverageLoad(), this->GetSystemAverageLoad(), load_demand);
   this->SetWorkerLoadWithTotalLoad(load_demand);

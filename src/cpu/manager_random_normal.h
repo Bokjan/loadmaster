@@ -1,11 +1,10 @@
 #pragma once
 
-#include "manager.h"
-
-#include "util/normal_dist.h"
-
-#include <vector>
 #include <random>
+#include <vector>
+
+#include "cpu/manager.h"
+#include "util/normal_dist.h"
 
 namespace cpu {
 
@@ -21,7 +20,7 @@ class CpuResourceManagerRandomNormal final : public CpuResourceManager {
   std::mt19937 generator_;
   int load_target_;
   TimePoint last_load_target_change_;
-  
+
   void AdjustWorkerLoad(TimePoint time_point, int system_load) override;
 
   void UpdateLoadTarget(TimePoint time_point);

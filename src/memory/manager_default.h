@@ -1,8 +1,8 @@
 #pragma once
 
-#include "manager.h"
-
 #include <random>
+
+#include "memory/manager.h"
 
 namespace memory {
 

@@ -1,8 +1,9 @@
-#include "options.h"
+#include "core/options.h"
 
 #include <cstdlib>
 
 #include <map>
+#include <string>
 
 #include "cli/cli.h"
 #include "cpu/cpu.h"
@@ -35,9 +36,9 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
       static std::map<std::string, Options::CpuAlgorithm> map = {
           {"default", Options::CpuAlgorithm::kDefault},
           {"rand_normal", Options::CpuAlgorithm::kRandomNormal}};
-      auto find = map.find(args.cpu_algorithm.value().c_str());
+      auto find = map.find(args.cpu_algorithm.value().data());
       if (find == map.end()) {
-        LOG_FATAL("invalid CPU algorithm [%s]", args.cpu_algorithm.value().c_str());
+        LOG_FATAL("invalid CPU algorithm [%s]", args.cpu_algorithm.value().data());
         break;
       }
       cpu_algorithm_ = find->second;
@@ -48,8 +49,8 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
     }
     // Log level
     if (args.log_level) {
-      if (!util::logger_internal::g_logger->SetLevel(args.log_level.value().c_str())) {
-        LOG_FATAL("invalid log level [%s]", args.log_level.value().c_str());
+      if (!util::logger_internal::g_logger->SetLevel(args.log_level.value().data())) {
+        LOG_FATAL("invalid log level [%s]", args.log_level.value().data());
         break;
       }
     }

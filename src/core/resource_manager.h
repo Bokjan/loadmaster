@@ -1,10 +1,10 @@
 #pragma once
 
-#include "util/waitgroup.h"
-
 #include <chrono>
 #include <functional>
 #include <thread>
+
+#include "util/waitgroup.h"
 
 class Options;
 class WorkerContext;

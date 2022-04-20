@@ -1,4 +1,4 @@
-SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 17)
 SET(CMAKE_CXX_FLAGS "-Wall -fPIC -O2 -pthread")
 
 STRING(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
@@ -12,13 +12,12 @@ ENDIF(CMAKE_BUILD_TYPE MATCHES DEBUG)
 
 INCLUDE_DIRECTORIES(.)
 
-SET(COMP_FILES)
+SET(COMP_FILES main.cc)
 SET(COMP_FILES ${COMP_FILES}
-               main.cc runtime.cc
-               resmgr.cc options.cc 
-               version.cc)
+               core/runtime.cc core/options.cc
+               core/resource_manager.cc)
 SET(COMP_FILES ${COMP_FILES}
-               cli/cli.cc)
+               cli/cli.cc cli/version_string.cc)
 SET(COMP_FILES ${COMP_FILES}
                cpu/cpu.cc cpu/worker.cc 
                cpu/manager.cc cpu/manager_default.cc

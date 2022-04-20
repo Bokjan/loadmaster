@@ -1,11 +1,11 @@
-#include "proc_stat.h"
-
-#include "constants.h"
-#include "util/log.h"
+#include "util/proc_stat.h"
 
 #include <cstdio>
 
 #include <unistd.h>
+
+#include "constants.h"
+#include "util/log.h"
 
 // Ref: https://man7.org/linux/man-pages/man5/proc.5.html
 

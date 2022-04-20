@@ -1,8 +1,8 @@
 #pragma once
 
-#include "resmgr.h"
-
 #include <cstdint>
+
+#include "core/resource_manager.h"
 
 namespace memory {
 

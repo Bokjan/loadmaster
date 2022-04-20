@@ -1,19 +1,18 @@
-#include "cpu.h"
-
-#include "constants.h"
-#include "manager_default.h"
-#include "manager_random_normal.h"
-#include "options.h"
-#include "util/log.h"
-#include "util/make_unique.h"
+#include "cpu/cpu.h"
 
 #include <cstring>
 
-#include <stdexcept>
 #include <random>
+#include <stdexcept>
 #include <thread>
 
 #include <unistd.h>
+
+#include "constants.h"
+#include "core/options.h"
+#include "cpu/manager_default.h"
+#include "cpu/manager_random_normal.h"
+#include "util/log.h"
 
 namespace cpu {
 
@@ -21,10 +20,10 @@ std::unique_ptr<ResourceManager> CreateResourceManager(const Options &options) {
   std::unique_ptr<ResourceManager> ret;
   switch (options.GetCpuAlgorithm()) {
     case Options::CpuAlgorithm::kDefault:
-      ret = util::make_unique<CpuResourceManagerDefault>(options);
+      ret = std::make_unique<CpuResourceManagerDefault>(options);
       break;
     case Options::CpuAlgorithm::kRandomNormal:
-      ret = util::make_unique<CpuResourceManagerRandomNormal>(options);
+      ret = std::make_unique<CpuResourceManagerRandomNormal>(options);
       break;
     default:
       LOG_FATAL("invalid CPU algorithm type [%d]", EnumToInt(options.GetCpuAlgorithm()));
