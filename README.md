@@ -4,7 +4,7 @@ loadmaster(负载大师) is designed to waste your machine performance. Powerful
 # Prerequisites
 - Linux
 - CMake 3.1 +
-- C++ compiler with C++17 support
+- C++ compiler with C++20 support
 
 # Build & Run
 - Typical CMake building routine

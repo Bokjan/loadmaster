@@ -1,4 +1,4 @@
-#include "memory/manager.h"
+#include "manager.h"
 
 #include "core/options.h"
 #include "util/log.h"

@@ -1,4 +1,4 @@
-#include "core/options.h"
+#include "options.h"
 
 #include <cstdlib>
 
@@ -43,7 +43,8 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
         LOG_FATAL("invalid CPU algorithm [%s]", args.cpu_algorithm.value().data());
         break;
       }
-      cpu_algorithm_ = find->second;
+      auto [_, cpu_algorithm] = *find;
+      cpu_algorithm_ = cpu_algorithm;
     }
     // Memory
     if (args.memory_mb) {
@@ -64,4 +65,4 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
   }
 }
 
-}
+}  // namespace core

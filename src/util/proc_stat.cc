@@ -1,4 +1,4 @@
-#include "util/proc_stat.h"
+#include "proc_stat.h"
 
 #include <cstdio>
 

@@ -1,4 +1,4 @@
-#include "core/resource_manager.h"
+#include "resource_manager.h"
 
 namespace core {
 

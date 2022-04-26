@@ -1,4 +1,4 @@
-#include "cpu/manager_random_normal.h"
+#include "manager_random_normal.h"
 
 #include <algorithm>
 

@@ -1,4 +1,4 @@
-#include "util/log.h"
+#include "log.h"
 
 #include <csignal>
 #include <cstdarg>
@@ -6,7 +6,7 @@
 #include <ctime>
 
 #include <map>
-#include <string>
+#include <string_view>
 
 #include <sys/time.h>
 
@@ -20,9 +20,7 @@ const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", 
                                   "<ERROR>",   "<FATAL>", "<ALL>  ", "<OFF>  "};
 void SetLogger(Logger *ptr) { g_logger = ptr; }
 
-void FatalTrigger() {
-  raise(SIGTERM);
-}
+void FatalTrigger() { raise(SIGTERM); }
 
 }  // namespace logger_internal
 
@@ -55,14 +53,15 @@ const char *Logger::GetTimeCString(LogLevel level) {
 }
 
 bool Logger::SetLevel(const char *target) {
-  static std::map<std::string, LogLevel> level_map = {
+  static std::map<std::string_view, LogLevel> level_map = {
       {"trace", kTrace}, {"debug", kDebug}, {"info", kInfo}, {"warn", kWarn},
       {"error", kError}, {"fatal", kFatal}, {"off", kOff}};
   auto find = level_map.find(target);
   if (find == level_map.end()) {
     return false;
   }
-  this->SetLevel(find->second);
+  const auto [_, level] = *find;
+  this->SetLevel(level);
   return true;
 }
 

@@ -1,4 +1,4 @@
-#include "core/runtime.h"
+#include "runtime.h"
 
 #include <functional>
 
@@ -43,7 +43,7 @@ void Runtime::MainLoop() {
   if (managers_.empty()) {
     LOG_FATAL("no module is enabled, quit");
   }
-  while (RunningFlag::Get().IsRunning()) {
+  while (RunningFlag::Get().IsRunning()) [[likely]] {
     auto start = std::chrono::high_resolution_clock::now();
     for (auto &mgr : managers_) {
       mgr->Schedule(start);

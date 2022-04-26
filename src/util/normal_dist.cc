@@ -1,4 +1,4 @@
-#include "util/normal_dist.h"
+#include "normal_dist.h"
 
 #include <cmath>
 

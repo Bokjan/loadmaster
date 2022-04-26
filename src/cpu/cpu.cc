@@ -1,4 +1,4 @@
-#include "cpu/cpu.h"
+#include "cpu.h"
 
 #include <cstring>
 

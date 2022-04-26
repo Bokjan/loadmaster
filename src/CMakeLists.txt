@@ -1,4 +1,4 @@
-SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD 20)
 SET(CMAKE_CXX_FLAGS "-Wall -fPIC -O2 -pthread")
 
 STRING(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
@@ -24,7 +24,7 @@ SET(COMP_FILES ${COMP_FILES}
                cpu/manager_random_normal.cc)
 SET(COMP_FILES ${COMP_FILES}
                memory/memory.cc memory/manager.cc 
-               memory/manager_default.cc)
+               memory/manager_default.cc memory/allocator.cc)
 SET(COMP_FILES ${COMP_FILES}
                util/log.cc util/normal_dist.cc
                util/proc_stat.cc)

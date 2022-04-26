@@ -1,4 +1,4 @@
-#include "cli/cli.h"
+#include "cli.h"
 
 #include <cstdio>
 #include <cstdlib>

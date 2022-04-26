@@ -2,6 +2,8 @@
 
 #include <cstdarg>
 
+#include <source_location>
+
 #ifndef SOURCE_PATH_SIZE  // this should be defined by CMake scripts
 #  define SOURCE_PATH_SIZE 0
 #endif
@@ -14,7 +16,7 @@
 #  define SRC_PREFIX_SIZE STR_LITERAL_LEN("src/")
 #endif
 
-#define __FILENAME__ (__FILE__ + SOURCE_PATH_SIZE + SRC_PREFIX_SIZE)
+#define FILE_NAME(full_path) ((full_path) + SOURCE_PATH_SIZE + SRC_PREFIX_SIZE)
 
 namespace util {
 
@@ -61,7 +63,8 @@ void FatalTrigger();
 #define LOG_LOG_FORWARD(lvl, fmt, args...)                                                      \
   ::util::logger_internal::g_logger->Log(                                                       \
       lvl, "[%s] %s (%s:%d) " fmt "\n", ::util::logger_internal::g_logger->GetTimeCString(lvl), \
-      ::util::logger_internal::g_log_level_cstr[lvl], __FILENAME__, __LINE__, ##args)
+      ::util::logger_internal::g_log_level_cstr[lvl],                                           \
+      FILE_NAME(std::source_location::current().file_name()), __LINE__, ##args)
 #define LOG_TRACE(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kTrace, fmt, ##args)
 #define LOG_DEBUG(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kDebug, fmt, ##args)
 #define LOG_INFO(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kInfo, fmt, ##args)

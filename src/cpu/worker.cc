@@ -1,4 +1,4 @@
-#include "cpu/worker.h"
+#include "worker.h"
 
 #include "constants.h"
 #include "core/runtime.h"
@@ -10,7 +10,7 @@ namespace cpu {
 void CpuWorkerContext::Loop() {
   core::WorkerLoopGuard guard(*this);
   // 100ms is a scheduling period
-  while (core::RunningFlag::Get().IsRunning()) {
+  while (core::RunningFlag::Get().IsRunning()) [[likely]] {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
       cpu::CriticalLoop(base_loop_count_);

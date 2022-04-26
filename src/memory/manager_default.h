@@ -3,6 +3,7 @@
 #include <random>
 
 #include "memory/manager.h"
+#include "memory/allocator.h"
 
 namespace memory {
 
@@ -15,9 +16,8 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   virtual void Schedule(TimePoint time_point) override;
 
  private:
-  uint64_t *block_ptr_;
-  bool need_filling_;
   std::mt19937 generator_;
+  unsafe::Allocator allocator_;
   bool WillSchedule(TimePoint time_point);
 };
 

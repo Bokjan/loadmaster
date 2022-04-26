@@ -1,4 +1,4 @@
-#include "cli/version_string.h"
+#include "version_string.h"
 
 #include <sstream>
 
