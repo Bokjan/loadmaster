@@ -12,7 +12,7 @@ class Allocator final {
   Allocator(const Allocator &) = delete;
   void AllocateBlock(size_t target_size);
   void ReleaseBlock();
-  void FillRandomly(std::byte seed);
+  void FillXor(std::byte seed);
   bool IsEmpty() const { return size_ == 0 && block_ptr_ == nullptr; }
 
  private:

@@ -19,7 +19,7 @@ static void Work(const core::Options &options) {
   runtime.Init();
   runtime.CreateWorkers();
   runtime.MainLoop();
-  runtime.JoinWorkers();
+  runtime.StopWorkers();
 }
 
 static void RegisterSignalHandler() {

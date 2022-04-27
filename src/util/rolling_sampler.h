@@ -1,5 +1,6 @@
 #pragma once
 
+#include <numeric>
 #include <vector>
 
 namespace util {
@@ -26,10 +27,7 @@ class RollingSampler final {
       }
     }
     // Pre-calc average value
-    T total = 0;
-    for (const auto &item : values_) {
-      total += item;
-    }
+    T total = std::accumulate(values_.begin(), values_.end(), 0);
     mean_cached_ = total / static_cast<T>(values_.size());
   }
 

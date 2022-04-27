@@ -19,13 +19,13 @@ constexpr int64_t kGibiByte = 1024 * kMebiByte;
 constexpr int kCpuSchedulingGranularityNS = 1 * 1000 * 1000; // 1 ms
 constexpr int kCpuMaxLoadPerCore = 100;
 constexpr int kCpuBaseLoopCountMin = 0;
-constexpr int kCpuBaseLoopCountMax = 25000000;
+constexpr int kCpuBaseLoopCountMax = 25'000'000;
 constexpr int kCpuBaseLoopCountTestIteration = 15;
 constexpr double kCpuRandNormalMu = 0.0;
 constexpr double kCpuRandNormalSigma = 2.0;
 constexpr double kCpuRandNormalCdfTarget = 0.95;
-constexpr int kCpuRandNormalSchedulePeriodMS = 600000;   // 5min
-constexpr int kCpuRandNormalScheduleIntervalMS = 10000;  // 10s
+constexpr int kCpuRandNormalSchedulePeriodMS = 600'000;   // 5min
+constexpr int kCpuRandNormalScheduleIntervalMS = 10'000;  // 10s
 constexpr int kCpuRandNormalSchedulePointCount =
     kCpuRandNormalSchedulePeriodMS / kCpuRandNormalScheduleIntervalMS;
 constexpr int kCpuAvgLoadSamplingCount = 100;

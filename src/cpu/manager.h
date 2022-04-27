@@ -14,6 +14,7 @@ class CpuResourceManager : public core::ResourceManager {
  public:
   virtual bool Init() = 0;
   virtual void CreateWorkerThreads() override final;
+  virtual void RequestWorkerThreadsStop() override final;
   virtual void Schedule(TimePoint time_point) override final;
 
  protected:

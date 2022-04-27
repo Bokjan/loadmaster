@@ -23,7 +23,7 @@ void Allocator::AllocateBlock(size_t target_size) {
   block_ptr_ = new std::byte[size_];
 }
 
-void Allocator::FillRandomly(std::byte seed) {
+void Allocator::FillXor(std::byte seed) {
   if (block_ptr_ == nullptr) {
     return;
   }

@@ -18,10 +18,10 @@ class WorkerLoopGuard;
 class WorkerContext {
  public:
   int id_;
-  std::thread thread_;
+  std::jthread jthread_;
 
   explicit WorkerContext(int id, util::WaitGroup &wg) : id_(id), parent_wg_(wg) {}
-  virtual void Loop() = 0;
+  virtual void Loop(std::stop_token stoken) = 0;
 
  private:
   util::WaitGroup &parent_wg_;
@@ -51,6 +51,7 @@ class ResourceManager {
   explicit ResourceManager(const Options &options) : options_(options) {}
   virtual bool Init() = 0;
   virtual void CreateWorkerThreads() = 0;
+  virtual void RequestWorkerThreadsStop() = 0;
   virtual void Schedule(TimePoint time_point) = 0;
   void WaitThreads() const;
 

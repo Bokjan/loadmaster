@@ -19,6 +19,7 @@ class Runtime final {
   void CreateWorkers();
   void MainLoop();
   void JoinWorkers();
+  void StopWorkers();
 
  private:
   const Options &options_;

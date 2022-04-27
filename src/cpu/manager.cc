@@ -23,9 +23,14 @@ CpuResourceManager::CpuResourceManager(const core::Options &options)
 
 void CpuResourceManager::CreateWorkerThreads() {
   for (auto &ctx : workers_) {
-    ctx.thread_ = std::thread([&]() { ctx.Loop(); });
+    ctx.jthread_ = std::jthread([&](std::stop_token stoken) { ctx.Loop(stoken); });
     wg_.Incr();
-    ctx.thread_.detach();
+  }
+}
+
+void CpuResourceManager::RequestWorkerThreadsStop() {
+  for (auto &ctx : workers_) {
+    ctx.jthread_.request_stop();
   }
 }
 

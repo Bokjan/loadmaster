@@ -2,6 +2,9 @@
 
 #include <cmath>
 
+#include <numbers>
+#include <numeric>
+
 namespace util {
 
 template <typename T>
@@ -15,28 +18,27 @@ NormalDistribution::NormalDistribution(const double mean, const double stddev)
     : mean_(mean), stddev_(stddev), variance_(Square(stddev)) {}
 
 double NormalDistribution::PDF(const double x) const {
-  const static double sqrt_2_pi = sqrt(2.0 * M_PI);
+  const static double sqrt_2_pi = sqrt(2.0 * std::numbers::pi);
   double t1 = 1.0 / (stddev_ * sqrt_2_pi);
   double t2 = Square(x - mean_) / (2.0 * variance_);
   return t1 * exp(-t2);
 }
 
 double NormalDistribution::CDF(const double x) const {
-  const static double sqrt_2 = sqrt(2.0);
-  double t = (x - mean_) / (stddev_ * sqrt_2);
+  double t = (x - mean_) / (stddev_ * std::numbers::sqrt2);
   return 0.5 * (1 + erf(t));
 }
 
 double NormalDistribution::FindXAxisPosition(const double target, FnBinSearchCompare compare,
                                              const int max_iteration) const {
-  constexpr double kMaxRange = 100000;
+  constexpr double kMaxRange = 100'000;
   constexpr double kLeftRightEpsilon = 1e-7;
   double l = mean_;
   double r = mean_ + kMaxRange;
   int iteration = 0;
   double x = 0;
   while (l < r && iteration < max_iteration) {
-    x = (l + r) / 2;
+    x = std::midpoint(l, r);
     if (r - l < kLeftRightEpsilon) {
       break;
     }

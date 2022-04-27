@@ -29,7 +29,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     // Allocate and fill
     allocator_.AllocateBlock(byte_count);
     std::uniform_int_distribution<> dis_byte(0, 255);
-    allocator_.FillRandomly(static_cast<std::byte>(dis_byte(generator_)));
+    allocator_.FillXor(static_cast<std::byte>(dis_byte(generator_)));
     // Update last schduling time
     this->SetLastScheduling(time_point);
   } while (false);

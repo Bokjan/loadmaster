@@ -12,4 +12,6 @@ bool MemoryResourceManager::Init() { return options_.GetMemoryMiB() > 0; }
 
 void MemoryResourceManager::CreateWorkerThreads() {}
 
+void MemoryResourceManager::RequestWorkerThreadsStop() {}
+
 }  // namespace memory

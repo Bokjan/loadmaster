@@ -10,6 +10,7 @@ class MemoryResourceManager : public core::ResourceManager {
  public:
   virtual bool Init();
   virtual void CreateWorkerThreads() override final;
+  virtual void RequestWorkerThreadsStop() override final;
 
  protected:
   explicit MemoryResourceManager(const core::Options &options);

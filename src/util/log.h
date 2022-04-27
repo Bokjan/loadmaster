@@ -64,7 +64,7 @@ void FatalTrigger();
   ::util::logger_internal::g_logger->Log(                                                       \
       lvl, "[%s] %s (%s:%d) " fmt "\n", ::util::logger_internal::g_logger->GetTimeCString(lvl), \
       ::util::logger_internal::g_log_level_cstr[lvl],                                           \
-      FILE_NAME(std::source_location::current().file_name()), __LINE__, ##args)
+      FILE_NAME(__FILE__), __LINE__, ##args)
 #define LOG_TRACE(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kTrace, fmt, ##args)
 #define LOG_DEBUG(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kDebug, fmt, ##args)
 #define LOG_INFO(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kInfo, fmt, ##args)

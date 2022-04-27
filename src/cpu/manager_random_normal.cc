@@ -68,13 +68,7 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
 }
 
 void CpuResourceManagerRandomNormal::ShuffleSchedulePoints() {
-  int count = static_cast<int>(schedule_points_.size());
-  std::uniform_int_distribution<> udist(0, count - 1);
-  for (int i = 0; i < count; ++i) {
-    int x = udist(generator_);
-    int y = udist(generator_);
-    std::swap(schedule_points_[x], schedule_points_[y]);
-  }
+  std::shuffle(schedule_points_.begin(), schedule_points_.end(), generator_);
 }
 
 void CpuResourceManagerRandomNormal::IncreasePointIndex() {
