@@ -7,10 +7,9 @@
 
 namespace cpu {
 
-void CpuWorkerContext::Loop(std::stop_token stoken) {
-  core::WorkerLoopGuard guard(*this);
+void CpuWorkerContext::Loop(std::stop_token &stoken) {
   // 100ms is a scheduling period
-  while (stoken.stop_requested()) [[likely]] {
+  while (!stoken.stop_requested()) [[likely]] {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
       cpu::CriticalLoop(base_loop_count_);

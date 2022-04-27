@@ -18,7 +18,6 @@ class Runtime final {
   void Init();
   void CreateWorkers();
   void MainLoop();
-  void JoinWorkers();
   void StopWorkers();
 
  private:

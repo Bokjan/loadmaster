@@ -4,7 +4,7 @@
 
 #include <unistd.h>
 
-#include "core/options.h"
+#include "constants.h"
 #include "cpu/cpu.h"
 #include "util/log.h"
 
@@ -24,7 +24,6 @@ CpuResourceManager::CpuResourceManager(const core::Options &options)
 void CpuResourceManager::CreateWorkerThreads() {
   for (auto &ctx : workers_) {
     ctx.jthread_ = std::jthread([&](std::stop_token stoken) { ctx.Loop(stoken); });
-    wg_.Incr();
   }
 }
 
@@ -121,7 +120,7 @@ void CpuResourceManager::UpdateProcStat(TimePoint time_point) {
 
 bool CpuResourceManager::ConstructWorkerThreads(int count) {
   for (int i = 0; i < count; ++i) {
-    CpuWorkerContext ctx(i, wg_, base_loop_count_);
+    CpuWorkerContext ctx(i, base_loop_count_);
     workers_.emplace_back(std::move(ctx));
   }
   return true;

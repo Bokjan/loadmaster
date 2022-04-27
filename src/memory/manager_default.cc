@@ -1,13 +1,13 @@
 #include "manager_default.h"
 
+#include "constants.h"
 #include "core/options.h"
 #include "util/log.h"
 
 namespace memory {
 
 MemoryResourceManagerDefault::MemoryResourceManagerDefault(const core::Options &options)
-    : MemoryResourceManager(options),
-      generator_(std::random_device{}()) {}
+    : MemoryResourceManager(options), generator_(std::random_device{}()) {}
 
 MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // dtor is invoked after wg.Done(), no race conditions

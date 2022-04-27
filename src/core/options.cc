@@ -6,6 +6,7 @@
 #include <string>
 
 #include "cli/cli.h"
+#include "constants.h"
 #include "cpu/cpu.h"
 #include "util/log.h"
 

@@ -1,6 +1,7 @@
 #include "runtime.h"
 
 #include <functional>
+#include <thread>
 
 #include "constants.h"
 #include "core/options.h"
@@ -44,18 +45,12 @@ void Runtime::MainLoop() {
     LOG_FATAL("no module is enabled, quit");
   }
   while (RunningFlag::Get().IsRunning()) [[likely]] {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (auto &mgr : managers_) {
-      mgr->Schedule(start);
+      auto start = std::chrono::high_resolution_clock::now();
+      for (auto &mgr : managers_) {
+        mgr->Schedule(start);
+      }
+      std::this_thread::sleep_until(this->NextSchedulingTime(start));
     }
-    std::this_thread::sleep_until(this->NextSchedulingTime(start));
-  }
-}
-
-void Runtime::JoinWorkers() {
-  for (auto &mgr : managers_) {
-    mgr->WaitThreads();
-  }
 }
 
 void Runtime::StopWorkers() {
@@ -73,7 +68,7 @@ TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   // ns -> 1e-9 s
   // ms -> 1e-3 s
   // 100ms -> 1e-1 s
-  constexpr int64_t kScaleFactor = 100000000;
+  constexpr int64_t kScaleFactor = 100'000'000;
   auto next_ns_count = next_us.count() / kScaleFactor * kScaleFactor;
   auto ns_diff = next_ns_count - start_us.count();
   return start_tp + std::chrono::nanoseconds(ns_diff);
