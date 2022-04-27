@@ -18,11 +18,12 @@ SET(COMP_FILES ${COMP_FILES}
 SET(COMP_FILES ${COMP_FILES}
                cli/cli.cc cli/version_string.cc)
 SET(COMP_FILES ${COMP_FILES}
-               cpu/cpu.cc cpu/worker.cc 
+               cpu/stat.cc cpu/worker.cc 
                cpu/manager.cc cpu/manager_default.cc
-               cpu/manager_random_normal.cc)
+               cpu/manager_random_normal.cc cpu/factory.cc
+               cpu/critical_loop.cc)
 SET(COMP_FILES ${COMP_FILES}
-               memory/memory.cc memory/manager.cc 
+               memory/factory.cc memory/manager.cc 
                memory/manager_default.cc memory/allocator.cc)
 SET(COMP_FILES ${COMP_FILES}
                util/log.cc util/normal_dist.cc

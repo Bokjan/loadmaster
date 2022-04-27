@@ -4,10 +4,11 @@
 
 #include <map>
 #include <string>
+#include <thread>
 
 #include "cli/cli.h"
 #include "constants.h"
-#include "cpu/cpu.h"
+#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace core {
@@ -27,8 +28,8 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
     }
     // CPU count
     if (args.cpu_count) {
-      if (args.cpu_count.value() > cpu::Count()) {
-        LOG_FATAL("hardware CPU count: %d, you require %d, abort", cpu::Count(),
+      if (args.cpu_count.value() > cpu::CoreCount()) {
+        LOG_FATAL("hardware CPU count: %u, you require %d, abort", cpu::CoreCount(),
                   args.cpu_count.value());
         break;
       }

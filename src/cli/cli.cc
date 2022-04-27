@@ -5,10 +5,11 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "cli/version_string.h"
-#include "cpu/cpu.h"
+#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace cli {

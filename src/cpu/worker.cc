@@ -2,14 +2,15 @@
 
 #include "constants.h"
 #include "core/runtime.h"
-#include "cpu/cpu.h"
+#include "cpu/stat.h"
+#include "cpu/critical_loop.h"
 #include "util/log.h"
 
 namespace cpu {
 
 void CpuWorkerContext::Loop(std::stop_token &stoken) {
   // 100ms is a scheduling period
-  while (!stoken.stop_requested()) [[likely]] {
+  [[likely]] while (!stoken.stop_requested()) {
     auto start = std::chrono::high_resolution_clock::now();
     for (;;) {
       cpu::CriticalLoop(base_loop_count_);

@@ -2,11 +2,13 @@
 
 #include <cstdint>
 
-#include <memory>
-
-#include "core/resource_manager.h"
+#include <thread>
 
 namespace cpu {
+
+inline int CoreCount() {
+  return static_cast<int>(std::thread::hardware_concurrency());
+}
 
 struct CpuStatInfo {
   uint64_t user;
@@ -32,11 +34,7 @@ struct CpuStatInfo {
         guest_nice(0) {}
 };
 
-int Count();
 int GetJiffyMillisecond();
 bool GetCpuProcStat(CpuStatInfo &info);
-void CriticalLoop(int count);
-
-std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options &options);
 
 }  // namespace cpu

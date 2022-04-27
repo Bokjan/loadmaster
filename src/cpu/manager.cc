@@ -5,7 +5,8 @@
 #include <unistd.h>
 
 #include "constants.h"
-#include "cpu/cpu.h"
+#include "cpu/stat.h"
+#include "cpu/critical_loop.h"
 #include "util/log.h"
 
 namespace cpu {

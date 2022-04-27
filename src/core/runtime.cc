@@ -5,8 +5,8 @@
 
 #include "constants.h"
 #include "core/options.h"
-#include "cpu/cpu.h"
-#include "memory/memory.h"
+#include "cpu/factory.h"
+#include "memory/factory.h"
 #include "util/log.h"
 
 namespace core {
@@ -44,13 +44,13 @@ void Runtime::MainLoop() {
   if (managers_.empty()) {
     LOG_FATAL("no module is enabled, quit");
   }
-  while (RunningFlag::Get().IsRunning()) [[likely]] {
-      auto start = std::chrono::high_resolution_clock::now();
-      for (auto &mgr : managers_) {
-        mgr->Schedule(start);
-      }
-      std::this_thread::sleep_until(this->NextSchedulingTime(start));
+  [[likely]] while (RunningFlag::Get().IsRunning()) {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (auto &mgr : managers_) {
+      mgr->Schedule(start);
     }
+    std::this_thread::sleep_until(this->NextSchedulingTime(start));
+  }
 }
 
 void Runtime::StopWorkers() {

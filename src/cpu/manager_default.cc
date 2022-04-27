@@ -18,8 +18,8 @@ bool CpuResourceManagerDefault::Init() {
   } else {
     count = (options_.GetCpuLoad() + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
-  if (count > Count()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.GetCpuLoad(), count, Count());
+  if (count > CoreCount()) {
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %u", options_.GetCpuLoad(), count, CoreCount());
     return false;
   }
   if (count <= 0) {
