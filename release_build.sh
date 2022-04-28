@@ -1,12 +1,14 @@
 #!/bin/bash
 
+set -o errexit
+
 if [ $# -ge 1 ] &&  ([ $1 == "-h" ] || [ $1 == "--help" ]) ; then
 echo "USAGE: $0 [binary_name] [build_dir]"
 exit 0;
 fi
 
 binary_name="loadmaster"
-build_dir="build_rel"
+build_dir="rel_build"
 
 if [ $# -ge 1 ] ; then
     binary_name=$1

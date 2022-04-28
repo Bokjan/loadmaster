@@ -12,6 +12,7 @@ int main(int argc, const char *argv[]) {
   cli::ParseCommandLineArguments(options, argc, argv);
   RegisterSignalHandler();
   Work(options);
+  LOG_INFO("main() finished");
 }
 
 static void Work(const core::Options &options) {
@@ -20,6 +21,7 @@ static void Work(const core::Options &options) {
   runtime.CreateWorkers();
   runtime.MainLoop();
   runtime.StopWorkers();
+  runtime.JoinWorkers();
 }
 
 static void RegisterSignalHandler() {

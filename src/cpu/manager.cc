@@ -5,8 +5,8 @@
 #include <unistd.h>
 
 #include "constants.h"
-#include "cpu/stat.h"
 #include "cpu/critical_loop.h"
+#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -31,6 +31,12 @@ void CpuResourceManager::CreateWorkerThreads() {
 void CpuResourceManager::RequestWorkerThreadsStop() {
   for (auto &ctx : workers_) {
     ctx.jthread_.request_stop();
+  }
+}
+
+void CpuResourceManager::JoinWorkerThreads() {
+  for (auto &ctx : workers_) {
+    ctx.jthread_.join();
   }
 }
 
@@ -84,7 +90,7 @@ int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
   int64_t accurate_elapsed = 0;
 
   do {
-    int new_base_loop_count = (min + max) / 2;
+    int new_base_loop_count = std::midpoint(min, max);
     if (new_base_loop_count == base_loop_count) {
       break;
     }

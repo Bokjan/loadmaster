@@ -2,8 +2,8 @@
 
 #include "constants.h"
 #include "core/runtime.h"
-#include "cpu/stat.h"
 #include "cpu/critical_loop.h"
+#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -26,6 +26,7 @@ void CpuWorkerContext::Loop(std::stop_token &stoken) {
       }
     }
   }
+  LOG_TRACE("id=%d, stoken.stop_requested()=%d", id_, stoken.stop_requested());
 }
 
 }  // namespace cpu

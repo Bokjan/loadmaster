@@ -14,4 +14,6 @@ void MemoryResourceManager::CreateWorkerThreads() {}
 
 void MemoryResourceManager::RequestWorkerThreadsStop() {}
 
+void MemoryResourceManager::JoinWorkerThreads() {}
+
 }  // namespace memory

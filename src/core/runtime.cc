@@ -59,6 +59,12 @@ void Runtime::StopWorkers() {
   }
 }
 
+void Runtime::JoinWorkers() {
+  for (auto &mgr : managers_) {
+    mgr->JoinWorkerThreads();
+  }
+}
+
 TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   // Calc start + 100ms
   auto start_us = std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp.time_since_epoch());
