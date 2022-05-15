@@ -4,7 +4,8 @@
 #include <thread>
 
 #include "constants.h"
-#include "core/options.h"
+#include "options.h"
+
 #include "cpu/factory.h"
 #include "memory/factory.h"
 #include "util/log.h"

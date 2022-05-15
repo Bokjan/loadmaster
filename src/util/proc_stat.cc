@@ -4,7 +4,7 @@
 
 #include <unistd.h>
 
-#include "constants.h"
+#include "core/constants.h"
 #include "util/log.h"
 
 // Ref: https://man7.org/linux/man-pages/man5/proc.5.html

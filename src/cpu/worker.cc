@@ -1,9 +1,10 @@
 #include "worker.h"
 
-#include "constants.h"
+#include "critical_loop.h"
+#include "stat.h"
+
+#include "core/constants.h"
 #include "core/runtime.h"
-#include "cpu/critical_loop.h"
-#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace cpu {

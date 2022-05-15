@@ -3,7 +3,8 @@
 #include <random>
 #include <vector>
 
-#include "cpu/manager.h"
+#include "manager.h"
+
 #include "util/normal_dist.h"
 
 namespace cpu {

@@ -6,8 +6,8 @@
 #include <string>
 #include <thread>
 
-#include "cli/cli.h"
 #include "constants.h"
+
 #include "cpu/stat.h"
 #include "util/log.h"
 
@@ -19,7 +19,7 @@ Options::Options()
       cpu_algorithm_(CpuAlgorithm::kDefault),
       memory_(kDefaultMemoryLoadMiB) {}
 
-void Options::ProcessCliArguments(const cli::CliArgs &args) {
+void Options::ProcessCliArguments(const cli::CliArgument &args) {
   bool success = false;
   do {
     // CPU load
@@ -54,7 +54,7 @@ void Options::ProcessCliArguments(const cli::CliArgs &args) {
     }
     // Log level
     if (args.log_level) {
-      if (!util::logger_internal::g_logger->SetLevel(args.log_level.value().data())) {
+      if (!util::logger_internal::g_default_logger->SetLevel(args.log_level.value().data())) {
         LOG_FATAL("invalid log level [%s]", args.log_level.value().data());
         break;
       }

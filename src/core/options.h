@@ -1,8 +1,6 @@
 #pragma once
 
-namespace cli {
-struct CliArgs;
-}
+#include "cli/cli_argument.h"
 
 namespace core {
 
@@ -12,7 +10,7 @@ class Options final {
 
   Options();
 
-  void ProcessCliArguments(const cli::CliArgs &args);
+  void ProcessCliArguments(const cli::CliArgument &args);
   template <typename T>
   static inline int EnumToInt(T value) {
     return static_cast<int>(value);

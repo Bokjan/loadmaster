@@ -2,8 +2,6 @@
 
 #include <cstdarg>
 
-#include <source_location>
-
 #ifndef SOURCE_PATH_SIZE  // this should be defined by CMake scripts
 #  define SOURCE_PATH_SIZE 0
 #endif
@@ -22,7 +20,7 @@ namespace util {
 
 class Logger {
  public:
-  enum LogLevel : int { kUnknown = 0, kTrace, kDebug, kInfo, kWarn, kError, kFatal, kOff };
+  enum LogLevel : int { kUnknown = 0, kTrace, kDebug, kInfo, kWarn, kError, kFatal, kAll, kOff };
 
   Logger() : current_level_(kWarn) {}
   virtual ~Logger();
@@ -50,28 +48,29 @@ class StderrLogger final : public Logger {
 
 namespace logger_internal {
 
-extern Logger *g_logger;
+extern Logger *g_default_logger;
 extern const char *g_log_level_cstr[];
 
-void SetLogger(Logger *ptr);
+void SetDefaultLogger(Logger *ptr);
 void FatalTrigger();
 
 }  // namespace logger_internal
 
 }  // namespace util
 
-#define LOG_LOG_FORWARD(lvl, fmt, args...)                                                      \
-  ::util::logger_internal::g_logger->Log(                                                       \
-      lvl, "[%s] %s (%s:%d) " fmt "\n", ::util::logger_internal::g_logger->GetTimeCString(lvl), \
-      ::util::logger_internal::g_log_level_cstr[lvl],                                           \
-      FILE_NAME(__FILE__), __LINE__, ##args)
-#define LOG_TRACE(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kTrace, fmt, ##args)
-#define LOG_DEBUG(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kDebug, fmt, ##args)
-#define LOG_INFO(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kInfo, fmt, ##args)
-#define LOG_WARN(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kWarn, fmt, ##args)
-#define LOG_ERROR(fmt, args...) LOG_LOG_FORWARD(::util::Logger::kError, fmt, ##args)
-#define LOG_FATAL(fmt, args...)                           \
-  do {                                                    \
-    LOG_LOG_FORWARD(::util::Logger::kFatal, fmt, ##args); \
-    ::util::logger_internal::FatalTrigger();              \
+#define LOG_GENERAL_FORWARD(p, lvl, fmt, args...)                      \
+  (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl), \
+           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, ##args)
+#define LOG_DEFAULT_FORWARD(lvl, fmt, args...) \
+  LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt, ##args)
+#define LOG_TRACE(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt, ##args)
+#define LOG_DEBUG(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kDebug, fmt, ##args)
+#define LOG_INFO(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kInfo, fmt, ##args)
+#define LOG_WARN(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##args)
+#define LOG_ERROR(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##args)
+#define LOG_ALL(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##args)
+#define LOG_FATAL(fmt, args...)                               \
+  do {                                                        \
+    LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##args); \
+    ::util::logger_internal::FatalTrigger();                  \
   } while (false)

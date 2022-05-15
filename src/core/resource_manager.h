@@ -2,7 +2,7 @@
 
 #include <chrono>
 
-#include "core/options.h"
+#include "options.h"
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 

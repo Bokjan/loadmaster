@@ -4,7 +4,8 @@
 #include <memory>
 #include <vector>
 
-#include "core/resource_manager.h"
+#include "resource_manager.h"
+
 #include "util/proc_stat.h"
 
 namespace core {

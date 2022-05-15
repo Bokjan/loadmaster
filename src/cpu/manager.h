@@ -2,9 +2,10 @@
 
 #include <vector>
 
+#include "stat.h"
+#include "worker.h"
+
 #include "core/resource_manager.h"
-#include "cpu/stat.h"
-#include "cpu/worker.h"
 #include "util/proc_stat.h"
 #include "util/rolling_sampler.h"
 

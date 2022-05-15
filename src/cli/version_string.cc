@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-#include "version.h"
+#include "core/version.h"
 
 namespace version_impl {
 
@@ -18,10 +18,10 @@ class VersionStringGenerator final {
   std::string version_string_;
   VersionStringGenerator() {
     std::ostringstream oss;
-    oss << kVersionProject << ' ';
-    oss << kVersionMajor << '.' << kVersionMinor << '.' << kVersionPatch;
-    if (kVersionSuffix[0] != '\0') {
-      oss << '-' << kVersionSuffix;
+    oss << core::kVersionProject << ' ';
+    oss << core::kVersionMajor << '.' << core::kVersionMinor << '.' << core::kVersionPatch;
+    if (core::kVersionSuffix[0] != '\0') {
+      oss << '-' << core::kVersionSuffix;
     }
     version_string_.assign(std::move(oss.str()));
   }

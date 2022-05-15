@@ -15,10 +15,11 @@ namespace util {
 namespace logger_internal {
 
 StderrLogger g_default_stderr_logger;
-Logger *g_logger = &g_default_stderr_logger;
+Logger *g_default_logger = &g_default_stderr_logger;
 const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", "<WARN> ",
                                   "<ERROR>",   "<FATAL>", "<ALL>  ", "<OFF>  "};
-void SetLogger(Logger *ptr) { g_logger = ptr; }
+                                  
+void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 
 void FatalTrigger() { raise(SIGTERM); }
 
@@ -55,7 +56,7 @@ const char *Logger::GetTimeCString(LogLevel level) {
 bool Logger::SetLevel(const char *target) {
   static std::map<std::string_view, LogLevel> level_map = {
       {"trace", kTrace}, {"debug", kDebug}, {"info", kInfo}, {"warn", kWarn},
-      {"error", kError}, {"fatal", kFatal}, {"off", kOff}};
+      {"error", kError}, {"fatal", kFatal}, {"all", kAll}, {"off", kOff}};
   auto find = level_map.find(target);
   if (find == level_map.end()) {
     return false;

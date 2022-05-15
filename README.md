@@ -36,5 +36,5 @@ This module is disabled by default. Use `-m <memory_mib>` to specify an extra me
 
 # Usage Sample
 ```bash
-$ ./loadmaster -l 160 -ca rand_normal -m 32
+$ ./loadmaster -l 180 -ca rand_normal -m 32
 ```

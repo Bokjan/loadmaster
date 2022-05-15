@@ -4,9 +4,10 @@
 
 #include <unistd.h>
 
-#include "constants.h"
-#include "cpu/critical_loop.h"
-#include "cpu/stat.h"
+#include "critical_loop.h"
+#include "stat.h"
+
+#include "core/constants.h"
 #include "util/log.h"
 
 namespace cpu {

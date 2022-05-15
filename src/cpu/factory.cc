@@ -1,8 +1,9 @@
 #include "factory.h"
 
+#include "manager_default.h"
+#include "manager_random_normal.h"
+
 #include "util/log.h"
-#include "cpu/manager_default.h"
-#include "cpu/manager_random_normal.h"
 
 namespace cpu {
 

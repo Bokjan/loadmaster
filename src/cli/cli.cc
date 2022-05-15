@@ -8,7 +8,9 @@
 #include <memory>
 #include <string>
 
-#include "cli/version_string.h"
+#include "cli_argument.h"
+#include "version_string.h"
+
 #include "cpu/stat.h"
 #include "util/log.h"
 
@@ -16,7 +18,19 @@ namespace cli {
 
 static void PrintUsage(const char *path);
 
-bool ParseInt(int argc, const char *argv[], int &idx, std::optional<int> &value) {
+using FnArgumentProcessor = std::function<bool(int argc, const char *argv[], int &idx)>;
+
+static bool ProcessorHelp(int argc, const char *argv[], int &idx) {
+  PrintUsage(argv[0]);
+  return false;
+}
+
+static bool ProcessorVersion(int argc, const char *argv[], int &idx) {
+  puts(VersionString());
+  return false;
+}
+
+static bool ProcessorInt(int argc, const char *argv[], int &idx, std::optional<int> &value_ref) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
@@ -29,100 +43,57 @@ bool ParseInt(int argc, const char *argv[], int &idx, std::optional<int> &value)
     LOG_FATAL("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
     return false;
   }
-  value = target;
+  value_ref = target;
   return true;
-};
+}
 
-bool ParseStringView(int argc, const char *argv[], int &idx,
-                     std::optional<std::string_view> &value) {
+static bool ProcessorStringView(int argc, const char *argv[], int &idx,
+                                std::optional<std::string_view> &value_ref) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
     return false;
   }
   const char *int_str = argv[++idx];
-  value = int_str;
+  value_ref = int_str;
   return true;
-};
+}
 
-struct CmdArgOption {
-  virtual ~CmdArgOption() = default;
-  virtual bool Process(int argc, const char *argv[], int &idx) = 0;
-};
-
-struct CmdArgOptionHelp : public CmdArgOption {
-  bool Process(int argc, const char *argv[], int &idx) {
-    PrintUsage(argv[0]);
-    return false;
-  }
-};
-
-struct CmdArgOptionVersion : public CmdArgOption {
-  bool Process(int argc, const char *argv[], int &idx) {
-    puts(VersionString());
-    return false;
-  }
-};
-
-struct CmdArgOptionInt : public CmdArgOption {
-  std::optional<int> &value_ref;
-  explicit CmdArgOptionInt(std::optional<int> &ref) : value_ref(ref) {}
-  bool Process(int argc, const char *argv[], int &idx) {
-    return ParseInt(argc, argv, idx, value_ref);
-  }
-};
-
-struct CmdArgOptionStringView : public CmdArgOption {
-  std::optional<std::string_view> &value_ref;
-  explicit CmdArgOptionStringView(std::optional<std::string_view> &ref) : value_ref(ref) {}
-  bool Process(int argc, const char *argv[], int &idx) {
-    return ParseStringView(argc, argv, idx, value_ref);
-  }
-};
-
-class CliArgumentProcessor final {
- public:
-  CliArgumentProcessor(CliArgs &cli_args) {
-    arg_regist_.insert(std::make_pair("-h", std::make_unique<CmdArgOptionHelp>()));
-    arg_regist_.insert(std::make_pair("-v", std::make_unique<CmdArgOptionVersion>()));
-    arg_regist_.insert(std::make_pair("-l", std::make_unique<CmdArgOptionInt>(cli_args.cpu_load)));
-    arg_regist_.insert(std::make_pair("-c", std::make_unique<CmdArgOptionInt>(cli_args.cpu_count)));
-    arg_regist_.insert(std::make_pair("-m", std::make_unique<CmdArgOptionInt>(cli_args.memory_mb)));
-    arg_regist_.insert(
-        std::make_pair("-L", std::make_unique<CmdArgOptionStringView>(cli_args.log_level)));
-    arg_regist_.insert(
-        std::make_pair("-ca", std::make_unique<CmdArgOptionStringView>(cli_args.cpu_algorithm)));
-  }
-  void ExtractArguments(int argc, const char *argv[]) {
-    bool terminate = false;
-    for (int i = 1; i < argc; ++i) {
-      auto f = arg_regist_.find(argv[i]);
-      if (f == arg_regist_.end()) {
-        LOG_FATAL("unrecognizable option `%s`", argv[i]);
-        continue;
-      }
-      if (!f->second->Process(argc, argv, i)) {
-        terminate = true;
-        break;
-      }
+static void ExtractArguments(CliArgument &cli_args, int argc, const char *argv[]) {
+  std::map<std::string_view, FnArgumentProcessor> processors = {
+      {"-h", ProcessorHelp},
+      {"-v", ProcessorVersion},
+      {"-l", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
+                       std::placeholders::_3, std::ref(cli_args.cpu_load))},
+      {"-c", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
+                       std::placeholders::_3, std::ref(cli_args.cpu_count))},
+      {"-m", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
+                       std::placeholders::_3, std::ref(cli_args.memory_mb))},
+      {"-L", std::bind(ProcessorStringView, std::placeholders::_1, std::placeholders::_2,
+                       std::placeholders::_3, std::ref(cli_args.log_level))},
+      {"-ca", std::bind(ProcessorStringView, std::placeholders::_1, std::placeholders::_2,
+                        std::placeholders::_3, std::ref(cli_args.cpu_algorithm))},
+  };
+  bool terminate = false;
+  for (int i = 1; i < argc; ++i) {
+    auto f = processors.find(argv[i]);
+    if (f == processors.end()) {
+      LOG_FATAL("unrecognizable option `%s`", argv[i]);
+      continue;
     }
-    if (terminate) {
-      exit(EXIT_SUCCESS);
+    if (!f->second(argc, argv, i)) {
+      terminate = true;
+      break;
     }
   }
-
- private:
-  std::map<std::string, std::unique_ptr<CmdArgOption>> arg_regist_;
-};
-
-static void ExtractRawCliData(CliArgs &cli_args, int argc, const char *argv[]) {
-  CliArgumentProcessor processor(cli_args);
-  processor.ExtractArguments(argc, argv);
+  if (terminate) {
+    exit(EXIT_SUCCESS);
+  }
 }
 
 void ParseCommandLineArguments(core::Options &options, int argc, const char *argv[]) {
-  CliArgs cli_args;
-  ExtractRawCliData(cli_args, argc, argv);
+  CliArgument cli_args;
+  ExtractArguments(cli_args, argc, argv);
   options.ProcessCliArguments(cli_args);
 }
 
