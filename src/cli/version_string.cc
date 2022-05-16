@@ -18,10 +18,11 @@ class VersionStringGenerator final {
   std::string version_string_;
   VersionStringGenerator() {
     std::ostringstream oss;
-    oss << core::kVersionProject << ' ';
-    oss << core::kVersionMajor << '.' << core::kVersionMinor << '.' << core::kVersionPatch;
-    if (core::kVersionSuffix[0] != '\0') {
-      oss << '-' << core::kVersionSuffix;
+    using namespace core::version;
+    oss << kVersionProject << ' ';
+    oss << kVersionMajor << '.' << kVersionMinor << '.' << kVersionPatch;
+    if (kVersionSuffix[0] != '\0') {
+      oss << '-' << kVersionSuffix;
     }
     version_string_.assign(std::move(oss.str()));
   }

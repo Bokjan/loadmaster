@@ -1,6 +1,6 @@
 #pragma once
 
-namespace core {
+namespace core::version {
 
 // Version
 constexpr auto kVersionProject = "loadmaster";
