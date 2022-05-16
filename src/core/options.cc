@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-#include <map>
+#include <algorithm>
 #include <string>
 #include <thread>
 
@@ -37,11 +37,14 @@ void Options::ProcessCliArguments(const cli::CliArgument &args) {
     }
     // CPU scheduling algorithm
     if (args.cpu_algorithm) {
-      static std::map<std::string, Options::CpuAlgorithm> map = {
+      using SvAlgoPair = std::pair<std::string_view, Options::CpuAlgorithm>;
+      static const SvAlgoPair algorithm_pairs[] = {
           {"default", Options::CpuAlgorithm::kDefault},
           {"rand_normal", Options::CpuAlgorithm::kRandomNormal}};
-      auto find = map.find(args.cpu_algorithm.value().data());
-      if (find == map.end()) {
+      auto find = std::find_if(
+          std::begin(algorithm_pairs), std::end(algorithm_pairs),
+          [&args](const SvAlgoPair &pair) { return pair.first == args.cpu_algorithm; });
+      if (find == std::end(algorithm_pairs)) {
         LOG_FATAL("invalid CPU algorithm [%s]", args.cpu_algorithm.value().data());
         break;
       }

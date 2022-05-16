@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <ctime>
 
+#include <algorithm>
 #include <map>
 #include <string_view>
 
@@ -18,7 +19,7 @@ StderrLogger g_default_stderr_logger;
 Logger *g_default_logger = &g_default_stderr_logger;
 const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", "<WARN> ",
                                   "<ERROR>",   "<FATAL>", "<ALL>  ", "<OFF>  "};
-                                  
+
 void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 
 void FatalTrigger() { raise(SIGTERM); }
@@ -54,11 +55,14 @@ const char *Logger::GetTimeCString(LogLevel level) {
 }
 
 bool Logger::SetLevel(const char *target) {
-  static std::map<std::string_view, LogLevel> level_map = {
-      {"trace", kTrace}, {"debug", kDebug}, {"info", kInfo}, {"warn", kWarn},
-      {"error", kError}, {"fatal", kFatal}, {"all", kAll}, {"off", kOff}};
-  auto find = level_map.find(target);
-  if (find == level_map.end()) {
+  using SvLevelPair = std::pair<std::string_view, LogLevel>;
+  static const SvLevelPair level_pairs[] = {{"trace", kTrace}, {"debug", kDebug}, {"info", kInfo},
+                                            {"warn", kWarn},   {"error", kError}, {"fatal", kFatal},
+                                            {"all", kAll},     {"off", kOff}};
+  const std::string_view sv(target);
+  auto find = std::find_if(std::begin(level_pairs), std::end(level_pairs),
+                           [&sv](const SvLevelPair &pair) { return pair.first == sv; });
+  if (find == std::end(level_pairs)) {
     return false;
   }
   const auto [_, level] = *find;

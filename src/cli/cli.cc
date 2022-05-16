@@ -60,7 +60,8 @@ static bool ProcessorStringView(int argc, const char *argv[], int &idx,
 }
 
 static void ExtractArguments(CliArgument &cli_args, int argc, const char *argv[]) {
-  std::map<std::string_view, FnArgumentProcessor> processors = {
+  using SvProcessor = std::pair<std::string_view, FnArgumentProcessor>;
+  const SvProcessor processors[] = {
       {"-h", ProcessorHelp},
       {"-v", ProcessorVersion},
       {"-l", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
@@ -76,12 +77,14 @@ static void ExtractArguments(CliArgument &cli_args, int argc, const char *argv[]
   };
   bool terminate = false;
   for (int i = 1; i < argc; ++i) {
-    auto f = processors.find(argv[i]);
-    if (f == processors.end()) {
+    const std::string_view sv(argv[i]);
+    auto find = std::find_if(std::begin(processors), std::end(processors),
+                             [&sv](const SvProcessor &pair) { return sv == pair.first; });
+    if (find == std::end(processors)) {
       LOG_FATAL("unrecognizable option `%s`", argv[i]);
       continue;
     }
-    if (!f->second(argc, argv, i)) {
+    if (!find->second(argc, argv, i)) {
       terminate = true;
       break;
     }
