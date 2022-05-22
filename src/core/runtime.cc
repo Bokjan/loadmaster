@@ -1,24 +1,32 @@
 #include "runtime.h"
 
-#include <functional>
 #include <thread>
 
 #include "constants.h"
 #include "options.h"
 
+#include "core/signal_flag.h"
 #include "cpu/factory.h"
 #include "memory/factory.h"
 #include "util/log.h"
 
 namespace core {
 
-using FnCreateResourceManager =
-    std::function<std::unique_ptr<ResourceManager>(const Options &options)>;
+const static FnCreateResourceManager resmgr_creators[] = {
+    cpu::CreateResourceManager,
+    memory::CreateResourceManager,
+};
 
-const static FnCreateResourceManager resmgr_creators[] = {cpu::CreateResourceManager,
-                                                          memory::CreateResourceManager};
+Runtime::PairMetaSignalHandler Runtime::meta_signal_handlers_[] = {
+    {SIGINT, &Runtime::SigIntTerm},
+    {SIGTERM, &Runtime::SigIntTerm},
+    {SIGUSR1, &Runtime::SigUsr1},
+    {SIGUSR2, &Runtime::SigUsr2},
+};
 
-Runtime::Runtime(const Options &options) : options_(options) {}
+Runtime::Runtime(const Options &options) : running_flag_(true), options_(options) {
+  CreateSignalHandlerFunctors();
+}
 
 void Runtime::Init() {
   // Create
@@ -45,7 +53,8 @@ void Runtime::MainLoop() {
   if (managers_.empty()) {
     LOG_FATAL("no module is enabled, quit");
   }
-  [[likely]] while (RunningFlag::Get().IsRunning()) {
+  [[likely]] while (running_flag_) {
+    DealSignals();
     auto start = std::chrono::high_resolution_clock::now();
     for (auto &mgr : managers_) {
       mgr->Schedule(start);
@@ -66,6 +75,22 @@ void Runtime::JoinWorkers() {
   }
 }
 
+void Runtime::DealSignals() {
+  auto &sf = core::SignalFlag::Get();
+  for (const auto &h : signal_handlers_) {
+    if (sf.Has(h.first)) {
+      h.second();
+      sf.Reset(h.first);
+    }
+  }
+}
+
+void Runtime::CreateSignalHandlerFunctors() {
+  for (const auto &h : meta_signal_handlers_) {
+    signal_handlers_.push_back(std::make_pair(h.first, std::bind(h.second, this)));
+  }
+}
+
 TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   // Calc start + 100ms
   auto start_us = std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp.time_since_epoch());
@@ -80,5 +105,11 @@ TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   auto ns_diff = next_ns_count - start_us.count();
   return start_tp + std::chrono::nanoseconds(ns_diff);
 }
+
+void Runtime::SigIntTerm() { running_flag_ = false; }
+
+void Runtime::SigUsr1() {}
+
+void Runtime::SigUsr2() {}
 
 }  // namespace core

@@ -2,6 +2,7 @@
 
 #include "cli/cli.h"
 #include "core/runtime.h"
+#include "core/signal_flag.h"
 #include "util/log.h"
 
 static void Work(const core::Options &options);
@@ -25,10 +26,17 @@ static void Work(const core::Options &options) {
 }
 
 static void RegisterSignalHandler() {
-  auto exit_handler = [](int signal) {
-    LOG_INFO("signal %d captured, exit", signal);
-    core::RunningFlag::Get().Stop();
+  static int concerned_signals[] = {
+      SIGINT,
+      SIGTERM,
+      SIGUSR1,
+      SIGUSR2,
   };
-  signal(SIGINT, exit_handler);
-  signal(SIGTERM, exit_handler);
+  auto sf_writer = [](int signal) {
+    LOG_INFO("signal %d captured", signal);
+    core::SignalFlag::Get().Set(signal);
+  };
+  for (auto s : concerned_signals) {
+    signal(s, sf_writer);
+  }
 }
