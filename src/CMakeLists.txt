@@ -27,7 +27,7 @@ SET(COMP_FILES ${COMP_FILES}
                memory/manager_default.cc memory/allocator.cc)
 SET(COMP_FILES ${COMP_FILES}
                util/log.cc util/normal_dist.cc
-               util/proc_stat.cc)
+               util/proc_stat.cc util/win_util.cc)
 
 ADD_EXECUTABLE(loadmaster ${COMP_FILES})
 TARGET_LINK_LIBRARIES(loadmaster -static)

@@ -1,5 +1,17 @@
 #pragma once
 
+#ifndef IS_WINDOWS
+#if defined(_WIN32) || defined(_WIN64)
+#  define IS_WINDOWS (1)
+#else
+#  define IS_WINDOWS (0)
+#endif
+#endif
+
+#if IS_WINDOWS
+#include "Windows.h"
+#endif
+
 #include <cstdint>
 
 // Default options

@@ -38,7 +38,11 @@ static bool ProcessorInt(int argc, const char *argv[], int &idx, std::optional<i
   }
   const char *int_str = argv[++idx];
   int target = 0;
+#if IS_WINDOWS
+  int affected = sscanf_s(int_str, "%d", &target);
+#else
   int affected = sscanf(int_str, "%d", &target);
+#endif
   if (affected != 1) {
     LOG_FATAL("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
     return false;
@@ -111,7 +115,12 @@ static void PrintUsage(const char *path) {
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
+#if IS_WINDOWS
+  printf_s("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d", 
+    _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
+#else
   puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
+#endif
 }
 
 }  // namespace cli

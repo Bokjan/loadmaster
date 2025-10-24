@@ -8,7 +8,33 @@
 #include <algorithm>
 #include <string_view>
 
+#include "core/constants.h"
+
+#if IS_WINDOWS
+#include <Windows.h>
+#include <cstdint>
+#else
 #include <sys/time.h>
+#endif
+
+#if IS_WINDOWS
+static int gettimeofday(timeval *tp, struct timezone *tzp) {
+ constexpr uint64_t kEpoch = ((uint64_t)116444736000000000ULL);
+
+ SYSTEMTIME system_time;
+ FILETIME file_time;
+ uint64_t time;
+
+ GetSystemTime(&system_time);
+ SystemTimeToFileTime(&system_time, &file_time);
+ time = ((uint64_t)file_time.dwLowDateTime);
+ time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+ tp->tv_sec = (long)((time - kEpoch) / 10000000L);
+ tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+ return 0;
+}
+#endif
 
 namespace util {
 
@@ -45,7 +71,14 @@ const char *Logger::GetTimeCString(LogLevel level) {
   }
   struct timeval time_val;
   gettimeofday(&time_val, nullptr);
+#if IS_WINDOWS
+  time_t tsec = time_val.tv_sec;
+  struct tm time_struct_real{};
+  auto time_struct = &time_struct_real;
+  (void)localtime_s(&time_struct_real, &tsec);
+#else
   struct tm *time_struct = localtime(&time_val.tv_sec);
+#endif
   snprintf(buffer, sizeof(buffer), "%04d%02d%02d %02d:%02d:%02d.%.6d", 1900 + time_struct->tm_year,
            1 + time_struct->tm_mon, time_struct->tm_mday, time_struct->tm_hour, time_struct->tm_min,
            time_struct->tm_sec,

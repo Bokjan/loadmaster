@@ -2,10 +2,13 @@
 
 #include <cstdio>
 
+#if !IS_WINDOWS
 #include <unistd.h>
+#endif
 
 #include "core/constants.h"
 #include "util/log.h"
+#include "util/win_util.h"
 
 // Ref: https://man7.org/linux/man-pages/man5/proc.5.html
 
@@ -52,6 +55,7 @@ struct StatmFields final {
   uint64_t dt;
 };
 
+#if !IS_WINDOWS
 static int GetJiffyMillisecond() {
   static auto ret = static_cast<int>(kMillisecondsPerSecond / sysconf(_SC_CLK_TCK));
   return ret;
@@ -61,9 +65,17 @@ static int GetPageSize() {
   static auto ret = sysconf(_SC_PAGE_SIZE);
   return ret;
 }
+#endif
 
-ProcStat::ProcStat(int pid) : pid_(pid), jiffies_self_(0), jiffies_child_(0), cpu_load_cached_(0) {}
+ProcStat::ProcStat() {
+#if !IS_WINDOWS
+  pid_ = getpid();
+#else
+  process_handle_ = GetCurrentProcess();
+#endif
+}
 
+#if !IS_WINDOWS
 void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   // Time diff
   auto elapsed_ms =
@@ -114,7 +126,38 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   jiffies_self_ = jiffies_self;
   jiffies_child_ = jiffies_child;
 }
+#else
+void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
+  // Time diff
+  auto elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
+  if (force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
+    return;
+  }
+  // Output data
+  FILETIME creation, exit, kernel, user;
+  if (!GetProcessTimes(process_handle_, &creation, &exit, &kernel, &user)) {
+    LOG_FATAL("failed to invoke GetProcessTimes, this=%p", this);
+    return;
+  }
+  // Calc
+  auto epoch = FiletimeTo100Ns(&kernel) + FiletimeTo100Ns(&user);
+  do {
+    if (time_point_.time_since_epoch().count() == 0) {
+      LOG_DEBUG("first time in ProcStat::UpdateCpuStat, this=%p", this);
+      break;
+    }
+    auto epoch_diff = epoch - epoch_;
+    auto cpu_ms = WindowsEpochToMilliseconds(epoch_diff);
+    cpu_load_cached_ = static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * 100.0);
+  } while (false);
+  // Update
+  time_point_ = now;
+  epoch_ = epoch;
+}
+#endif
 
+#if !IS_WINDOWS
 uint64_t ProcStat::GetMemory() const {
   // Declare a struct on stack
   StatmFields statm;
@@ -139,5 +182,16 @@ uint64_t ProcStat::GetMemory() const {
   // Page count to byte count
   return static_cast<uint64_t>(statm.size * GetPageSize());
 }
+#else
+uint64_t ProcStat::GetMemory() const {
+  APP_MEMORY_INFORMATION mem_info;
+  constexpr auto info_cls = ProcessAppMemoryInfo;
+  if (!GetProcessInformation(process_handle_, info_cls, &mem_info, sizeof(mem_info))) {
+    LOG_FATAL("failed to invoke GetProcessInformation, this=%p", this);
+    return 0;
+  }
+  return mem_info.TotalCommitUsage;
+}
+#endif
 
 }  // namespace util

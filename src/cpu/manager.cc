@@ -2,22 +2,24 @@
 
 #include <algorithm>
 
-#include <unistd.h>
-
 #include "critical_loop.h"
 #include "stat.h"
 
 #include "core/constants.h"
 #include "util/log.h"
+#include "util/win_util.h"
+
+#if !IS_WINDOWS
+#include <unistd.h>
+#endif
 
 namespace cpu {
 
 CpuResourceManager::CpuResourceManager(const core::Options &options)
     : ResourceManager(options),
-      jiffy_ms_(cpu::GetJiffyMillisecond()),
       base_loop_count_(0),
       system_sampler_(kCpuAvgLoadSamplingCount),
-      proc_stat_(getpid()),
+      proc_stat_(),
       process_sampler_(kCpuAvgLoadSamplingCount) {
   // Find a finest base loop count
   base_loop_count_ = FindAccurateBaseLoopCount(kCpuBaseLoopCountTestIteration);
@@ -41,13 +43,26 @@ void CpuResourceManager::JoinWorkerThreads() {
   }
 }
 
-inline uint64_t GetUserNiceSystemJiffies(const CpuStatInfo &info) {
+#if !IS_WINDOWS
+inline uint64_t GetConcernedJiffies(const CpuStatInfo &info) {
   return info.user + info.nice + info.system;
 }
+inline uint64_t GetMilliFromEpoch(uint64_t epoch) { 
+  static auto jiffy_ms = GetJiffyMillisecond();
+  return epoch * jiffy_ms;
+}
+#else
+inline uint64_t GetConcernedJiffies(const CpuStatInfo &info) {
+  return info.windows_concerned_100ns_;
+}
+inline uint64_t GetMilliFromEpoch(uint64_t epoch) {
+  return util::WindowsEpochToMilliseconds(epoch);
+}
+#endif
 
 void CpuResourceManager::Schedule(TimePoint time_point) {
   bool will_schedule = false;
-  auto last_jiffies = GetUserNiceSystemJiffies(cpu_stat_);
+  auto last_jiffies = GetConcernedJiffies(cpu_stat_);
 
   do {
     // refresh `cpu_stat_`
@@ -65,9 +80,9 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
     // Update average load
     this->UpdateProcStat(time_point);
     // Calculate system load
-    auto current_jiffies = GetUserNiceSystemJiffies(cpu_stat_);
+    auto current_jiffies = GetConcernedJiffies(cpu_stat_);
     auto diff = current_jiffies - last_jiffies;
-    auto cpu_ms = diff * jiffy_ms_;
+    auto cpu_ms = GetMilliFromEpoch(diff);
     auto elapsed_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_scheduling_)
             .count();
@@ -135,7 +150,7 @@ bool CpuResourceManager::ConstructWorkerThreads(int count) {
 }
 
 void CpuResourceManager::SetWorkerLoadWithTotalLoad(int total_load) {
-  int thread_count = workers_.size();
+  int thread_count = static_cast<int>(workers_.size());
   int avg_load = total_load / thread_count;
   for (auto &th : workers_) {
     th.SetLoadSet(avg_load);

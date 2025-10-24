@@ -14,7 +14,7 @@
 #  define SRC_PREFIX_SIZE STR_LITERAL_LEN("src/")
 #endif
 
-#define FILE_NAME(full_path) ((full_path) + SOURCE_PATH_SIZE + SRC_PREFIX_SIZE)
+#define FILE_NAME(full_path) ((full_path) + SOURCE_PATH_SIZE)
 
 namespace util {
 
@@ -58,19 +58,19 @@ void FatalTrigger();
 
 }  // namespace util
 
-#define LOG_GENERAL_FORWARD(p, lvl, fmt, args...)                      \
+#define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                      \
   (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl), \
-           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, ##args)
-#define LOG_DEFAULT_FORWARD(lvl, fmt, args...) \
-  LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt, ##args)
-#define LOG_TRACE(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt, ##args)
-#define LOG_DEBUG(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kDebug, fmt, ##args)
-#define LOG_INFO(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kInfo, fmt, ##args)
-#define LOG_WARN(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##args)
-#define LOG_ERROR(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##args)
-#define LOG_ALL(fmt, args...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##args)
-#define LOG_FATAL(fmt, args...)                               \
+           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, ##__VA_ARGS__)
+#define LOG_DEFAULT_FORWARD(lvl, fmt, ...) \
+  LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt, ##__VA_ARGS__)
+#define LOG_TRACE(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kDebug, fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kInfo, fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##__VA_ARGS__)
+#define LOG_ALL(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##__VA_ARGS__)
+#define LOG_FATAL(fmt, ...)                               \
   do {                                                        \
-    LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##args); \
+    LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##__VA_ARGS__); \
     ::util::logger_internal::FatalTrigger();                  \
   } while (false)

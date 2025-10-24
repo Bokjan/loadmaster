@@ -3,13 +3,17 @@
 #include <stdexcept>
 #include <string_view>
 
-#include <unistd.h>
-
 #include "core/constants.h"
 #include "util/log.h"
+#include "util/win_util.h"
+
+#if !IS_WINDOWS
+#include <unistd.h>
+#endif
 
 namespace cpu {
 
+#if !IS_WINDOWS
 int GetJiffyMillisecond() {
   long freq = sysconf(_SC_CLK_TCK);
   return static_cast<int>(kMillisecondsPerSecond / freq);
@@ -43,5 +47,23 @@ bool GetCpuProcStat(CpuStatInfo &info) {
   }
   return ret;
 }
+#else
+bool GetCpuProcStat(CpuStatInfo &info) { 
+  FILETIME idle, kernel, user;
+  if (!GetSystemTimes(&idle, &kernel, &user)) {
+    LOG_FATAL("failed to invoke GetSystemTimes");
+    return false;
+  }
+  uint64_t idle_100ns = util::FiletimeTo100Ns(&idle);
+  uint64_t kernel_100ns = util::FiletimeTo100Ns(&kernel);
+  uint64_t user_100ns = util::FiletimeTo100Ns(&user);
+
+  info.windows_concerned_100ns_ = user_100ns + (kernel_100ns - idle_100ns);
+
+  // LOG_TRACE("GetSystemTimes idle=%llu, kernel=%llu, user=%llu, concerned=%llu",
+  //           idle_100ns, kernel_100ns, user_100ns, info.windows_concerned_100ns_);
+  return true;
+}
+#endif
 
 }  // namespace cpu

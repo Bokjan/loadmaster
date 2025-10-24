@@ -29,8 +29,10 @@ static void RegisterSignalHandler() {
   static int concerned_signals[] = {
       SIGINT,
       SIGTERM,
+#if !IS_WINDOWS
       SIGUSR1,
       SIGUSR2,
+#endif
   };
   auto sf_writer = [](int signal) {
     LOG_INFO("signal %d captured", signal);

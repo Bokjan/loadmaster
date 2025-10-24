@@ -20,8 +20,10 @@ const static FnCreateResourceManager resmgr_creators[] = {
 Runtime::PairMetaSignalHandler Runtime::meta_signal_handlers_[] = {
     {SIGINT, &Runtime::SigIntTerm},
     {SIGTERM, &Runtime::SigIntTerm},
+#if !IS_WINDOWS
     {SIGUSR1, &Runtime::SigUsr1},
     {SIGUSR2, &Runtime::SigUsr2},
+#endif
 };
 
 Runtime::Runtime(const Options &options) : running_flag_(true), options_(options) {
@@ -34,11 +36,11 @@ void Runtime::Init() {
     managers_.push_back(std::move(fn(options_)));
   }
   // Initialize
-  for (auto it = managers_.begin(); it != managers_.end();) {
-    if (!(*it)->Init()) {
-      managers_.erase(it);
+  for (size_t i = 0; i < managers_.size(); ) {
+    if (!managers_[i]->Init()) {
+      managers_.erase(managers_.begin() + i);
     } else {
-      ++it;
+      ++i;
     }
   }
 }

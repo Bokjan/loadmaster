@@ -32,7 +32,6 @@ class CpuResourceManager : public core::ResourceManager {
   int GetProcessAverageLoad() const { return process_sampler_.GetMean(); }
 
  private:
-  int jiffy_ms_;
   TimePoint last_scheduling_;
   std::vector<CpuWorkerContext> workers_;
   int base_loop_count_;
