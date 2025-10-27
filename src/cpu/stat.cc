@@ -11,6 +11,10 @@
 #if !IS_WINDOWS
 #  include <unistd.h>
 #endif
+
+#define LMPU64 "%" PRIu64
+#define LMPI64 "%" PRIi64
+
 namespace cpu {
 
 #if !IS_WINDOWS
@@ -28,7 +32,7 @@ bool GetCpuProcStat(CpuStatInfo &info) {
       LOG_ERROR("failed to open /proc/stat");
       break;
     }
-    auto kStatFormat = "%s" PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64;
+    constexpr auto kStatFormat = "%s" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
     int count =
         fscanf(fp, kStatFormat, buffer, &info.user, &info.nice, &info.system, &info.idle,
                &info.iowait, &info.irq, &info.softirq, &info.steal, &info.guest, &info.guest_nice);

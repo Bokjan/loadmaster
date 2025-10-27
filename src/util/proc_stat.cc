@@ -11,6 +11,9 @@
 #include "util/log.h"
 #include "util/win_util.h"
 
+#define LMPU64 "%" PRIu64
+#define LMPI64 "%" PRIi64
+
 // Ref: https://man7.org/linux/man-pages/man5/proc.5.html
 
 namespace util {
@@ -95,8 +98,8 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
       LOG_FATAL("failed to open %s", file_path);
       break;
     }
-    auto kStatFormat = "%d%s%s%d%d%d%d%d%u" PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIi64 PRIi64
-        PRIi64 PRIi64 PRIi64 PRIi64 PRIu64;
+    constexpr auto kStatFormat = "%d%s%s%d%d%d%d%d%u" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPI64 LMPI64
+        LMPI64 LMPI64 LMPI64 LMPI64 LMPU64;
     int count =
         fscanf(fp, kStatFormat, &stat.pid, stat.comm, &stat.state, &stat.ppid, &stat.pgrp,
                &stat.session, &stat.tty_nr, &stat.tpgid, &stat.flags, &stat.minflt, &stat.cminflt,
@@ -172,7 +175,7 @@ uint64_t ProcStat::GetMemory() const {
       LOG_FATAL("failed to open %s", file_path);
       break;
     }
-    auto kMemoryFormat = PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64;
+    constexpr auto kMemoryFormat = LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
     int count = fscanf(fp, kMemoryFormat, &statm.size, &statm.resident, &statm.shared, &statm.text,
                        &statm.lib, &statm.data, &statm.dt);
     if (count != kStatmFieldsCount) {
