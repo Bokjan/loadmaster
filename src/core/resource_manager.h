@@ -11,6 +11,7 @@ namespace core {
 class ResourceManager {
  public:
   explicit ResourceManager(const Options &options) : options_(options) {}
+  virtual ~ResourceManager() = default;
   virtual bool Init() = 0;
   virtual void CreateWorkerThreads() = 0;
   virtual void RequestWorkerThreadsStop() = 0;

@@ -2,6 +2,6 @@
 
 namespace cpu {
 
-void CriticalLoop(int count);
+int CriticalLoop(int count);
 
 }

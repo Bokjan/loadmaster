@@ -24,7 +24,7 @@ class VersionStringGenerator final {
     if (kVersionSuffix[0] != '\0') {
       oss << '-' << kVersionSuffix;
     }
-    version_string_.assign(std::move(oss.str()));
+    version_string_.assign(oss.str());
   }
 };
 

@@ -10,7 +10,7 @@
 #include "util/win_util.h"
 
 #if !IS_WINDOWS
-#include <unistd.h>
+#  include <unistd.h>
 #endif
 
 namespace cpu {
@@ -47,7 +47,7 @@ void CpuResourceManager::JoinWorkerThreads() {
 inline uint64_t GetConcernedJiffies(const CpuStatInfo &info) {
   return info.user + info.nice + info.system;
 }
-inline uint64_t GetMilliFromEpoch(uint64_t epoch) { 
+inline uint64_t GetMilliFromEpoch(uint64_t epoch) {
   static auto jiffy_ms = GetJiffyMillisecond();
   return epoch * jiffy_ms;
 }

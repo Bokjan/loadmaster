@@ -18,6 +18,6 @@ inline uint64_t FiletimeTo100Ns(LPFILETIME filetime) {
   return large_int.QuadPart;
 }
 
-}
+}  // namespace util
 
 #endif

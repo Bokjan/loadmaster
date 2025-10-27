@@ -2,8 +2,8 @@
 
 #include <random>
 
-#include "manager.h"
 #include "allocator.h"
+#include "manager.h"
 
 namespace memory {
 

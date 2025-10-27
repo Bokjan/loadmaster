@@ -8,9 +8,7 @@
 
 namespace cpu {
 
-inline int CoreCount() {
-  return static_cast<int>(std::thread::hardware_concurrency());
-}
+inline int CoreCount() { return static_cast<int>(std::thread::hardware_concurrency()); }
 
 struct CpuStatInfo {
 #if !IS_WINDOWS

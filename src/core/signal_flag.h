@@ -14,17 +14,11 @@ class SignalFlag final {
     return instance;
   }
 
-  bool Has(int signal) const {
-    return bitmap_.Test(signal);
-  }
+  bool Has(int signal) const { return bitmap_.Test(signal); }
 
-  void Set(int signal) {
-    bitmap_.Set(signal);
-  }
+  void Set(int signal) { bitmap_.Set(signal); }
 
-  void Reset(int signal) {
-    bitmap_.Reset(signal);
-  }
+  void Reset(int signal) { bitmap_.Reset(signal); }
 
  private:
   util::AtomicBitmap<uint64_t> bitmap_;

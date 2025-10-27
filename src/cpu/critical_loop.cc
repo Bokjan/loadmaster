@@ -4,7 +4,7 @@
 
 namespace cpu {
 
-void CriticalLoop(int count) {
+int CriticalLoop(int count) {
   thread_local std::mt19937 gen(std::random_device{}());
   std::uniform_int_distribution<> udist(0, count - 1);
   int factor = udist(gen);
@@ -12,6 +12,7 @@ void CriticalLoop(int count) {
   for (int i = 0; i < count; ++i) {
     val *= factor;
   }
+  return val;
 }
 
 }  // namespace cpu

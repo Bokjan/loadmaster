@@ -8,7 +8,7 @@ namespace memory {
 
 class MemoryResourceManager : public core::ResourceManager {
  public:
-  virtual bool Init();
+  virtual bool Init() override;
   virtual void CreateWorkerThreads() override final;
   virtual void RequestWorkerThreadsStop() override final;
   virtual void JoinWorkerThreads() override final;

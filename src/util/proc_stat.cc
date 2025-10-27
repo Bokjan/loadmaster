@@ -1,9 +1,10 @@
 #include "proc_stat.h"
 
+#include <cinttypes>
 #include <cstdio>
 
 #if !IS_WINDOWS
-#include <unistd.h>
+#  include <unistd.h>
 #endif
 
 #include "core/constants.h"
@@ -94,12 +95,13 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
       LOG_FATAL("failed to open %s", file_path);
       break;
     }
+    auto kStatFormat = "%d%s%s%d%d%d%d%d%u" PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIi64 PRIi64
+        PRIi64 PRIi64 PRIi64 PRIi64 PRIu64;
     int count =
-        fscanf(fp, "%d%s%s%d%d%d%d%d%u%lu%lu%lu%lu%lu%lu%ld%ld%ld%ld%ld%ld%lu", &stat.pid,
-               stat.comm, &stat.state, &stat.ppid, &stat.pgrp, &stat.session, &stat.tty_nr,
-               &stat.tpgid, &stat.flags, &stat.minflt, &stat.cminflt, &stat.majflt, &stat.cmajflt,
-               &stat.utime, &stat.stime, &stat.cutime, &stat.cstime, &stat.priority, &stat.nice,
-               &stat.num_threads, &stat.iteralvalue, &stat.starttime);
+        fscanf(fp, kStatFormat, &stat.pid, stat.comm, &stat.state, &stat.ppid, &stat.pgrp,
+               &stat.session, &stat.tty_nr, &stat.tpgid, &stat.flags, &stat.minflt, &stat.cminflt,
+               &stat.majflt, &stat.cmajflt, &stat.utime, &stat.stime, &stat.cutime, &stat.cstime,
+               &stat.priority, &stat.nice, &stat.num_threads, &stat.iteralvalue, &stat.starttime);
     if (count != kStatFieldsCount) {
       LOG_FATAL("failed to `fscanf` from %s, get val: %d, expect: %d", file_path, count,
                 kStatFieldsCount);
@@ -170,8 +172,9 @@ uint64_t ProcStat::GetMemory() const {
       LOG_FATAL("failed to open %s", file_path);
       break;
     }
-    int count = fscanf(fp, "%lu%lu%lu%lu%lu%lu%lu", &statm.size, &statm.resident, &statm.shared,
-                       &statm.text, &statm.lib, &statm.data, &statm.dt);
+    auto kMemoryFormat = PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64;
+    int count = fscanf(fp, kMemoryFormat, &statm.size, &statm.resident, &statm.shared, &statm.text,
+                       &statm.lib, &statm.data, &statm.dt);
     if (count != kStatmFieldsCount) {
       LOG_FATAL("failed to `fscanf` from %s, get val: %d, expect: %d", file_path, count,
                 kStatmFieldsCount);

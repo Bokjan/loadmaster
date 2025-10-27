@@ -27,11 +27,11 @@ static void Work(const core::Options &options) {
 
 static void RegisterSignalHandler() {
   static int concerned_signals[] = {
-      SIGINT,
-      SIGTERM,
+    SIGINT,
+    SIGTERM,
 #if !IS_WINDOWS
-      SIGUSR1,
-      SIGUSR2,
+    SIGUSR1,
+    SIGUSR2,
 #endif
   };
   auto sf_writer = [](int signal) {

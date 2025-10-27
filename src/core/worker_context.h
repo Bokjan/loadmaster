@@ -13,4 +13,4 @@ class WorkerContext {
   virtual void Loop(std::stop_token &stoken) = 0;
 };
 
-}
+}  // namespace core

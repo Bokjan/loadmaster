@@ -1,5 +1,6 @@
 #include "stat.h"
 
+#include <cinttypes>
 #include <stdexcept>
 #include <string_view>
 
@@ -8,9 +9,8 @@
 #include "util/win_util.h"
 
 #if !IS_WINDOWS
-#include <unistd.h>
+#  include <unistd.h>
 #endif
-
 namespace cpu {
 
 #if !IS_WINDOWS
@@ -28,9 +28,10 @@ bool GetCpuProcStat(CpuStatInfo &info) {
       LOG_ERROR("failed to open /proc/stat");
       break;
     }
-    int count = fscanf(fp, "%s%lu%lu%lu%lu%lu%lu%lu%lu%lu%lu", buffer, &info.user, &info.nice,
-                       &info.system, &info.idle, &info.iowait, &info.irq, &info.softirq,
-                       &info.steal, &info.guest, &info.guest_nice);
+    auto kStatFormat = "%s" PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64 PRIu64;
+    int count =
+        fscanf(fp, kStatFormat, buffer, &info.user, &info.nice, &info.system, &info.idle,
+               &info.iowait, &info.irq, &info.softirq, &info.steal, &info.guest, &info.guest_nice);
     if (count != 11) {
       LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
       break;
@@ -48,7 +49,7 @@ bool GetCpuProcStat(CpuStatInfo &info) {
   return ret;
 }
 #else
-bool GetCpuProcStat(CpuStatInfo &info) { 
+bool GetCpuProcStat(CpuStatInfo &info) {
   FILETIME idle, kernel, user;
   if (!GetSystemTimes(&idle, &kernel, &user)) {
     LOG_FATAL("failed to invoke GetSystemTimes");

@@ -58,9 +58,10 @@ void FatalTrigger();
 
 }  // namespace util
 
-#define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                      \
-  (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl), \
-           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, ##__VA_ARGS__)
+#define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                                           \
+  (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl),                  \
+           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, \
+           ##__VA_ARGS__)
 #define LOG_DEFAULT_FORWARD(lvl, fmt, ...) \
   LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt, ##__VA_ARGS__)
 #define LOG_TRACE(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt, ##__VA_ARGS__)
@@ -69,8 +70,8 @@ void FatalTrigger();
 #define LOG_WARN(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##__VA_ARGS__)
 #define LOG_ALL(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##__VA_ARGS__)
-#define LOG_FATAL(fmt, ...)                               \
-  do {                                                        \
+#define LOG_FATAL(fmt, ...)                                          \
+  do {                                                               \
     LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##__VA_ARGS__); \
-    ::util::logger_internal::FatalTrigger();                  \
+    ::util::logger_internal::FatalTrigger();                         \
   } while (false)

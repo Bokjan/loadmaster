@@ -11,28 +11,28 @@
 #include "core/constants.h"
 
 #if IS_WINDOWS
-#include <Windows.h>
-#include <cstdint>
+#  include <Windows.h>
+#  include <cstdint>
 #else
-#include <sys/time.h>
+#  include <sys/time.h>
 #endif
 
 #if IS_WINDOWS
 static int gettimeofday(timeval *tp, struct timezone *tzp) {
- constexpr uint64_t kEpoch = ((uint64_t)116444736000000000ULL);
+  constexpr uint64_t kEpoch = ((uint64_t)116444736000000000ULL);
 
- SYSTEMTIME system_time;
- FILETIME file_time;
- uint64_t time;
+  SYSTEMTIME system_time;
+  FILETIME file_time;
+  uint64_t time;
 
- GetSystemTime(&system_time);
- SystemTimeToFileTime(&system_time, &file_time);
- time = ((uint64_t)file_time.dwLowDateTime);
- time += ((uint64_t)file_time.dwHighDateTime) << 32;
+  GetSystemTime(&system_time);
+  SystemTimeToFileTime(&system_time, &file_time);
+  time = ((uint64_t)file_time.dwLowDateTime);
+  time += ((uint64_t)file_time.dwHighDateTime) << 32;
 
- tp->tv_sec = (long)((time - kEpoch) / 10000000L);
- tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
- return 0;
+  tp->tv_sec = (long)((time - kEpoch) / 10000000L);
+  tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+  return 0;
 }
 #endif
 
@@ -73,7 +73,7 @@ const char *Logger::GetTimeCString(LogLevel level) {
   gettimeofday(&time_val, nullptr);
 #if IS_WINDOWS
   time_t tsec = time_val.tv_sec;
-  struct tm time_struct_real{};
+  struct tm time_struct_real {};
   auto time_struct = &time_struct_real;
   (void)localtime_s(&time_struct_real, &tsec);
 #else

@@ -30,7 +30,7 @@ class ProcStat final {
   uint64_t jiffies_self_ = 0;
   int64_t jiffies_child_ = 0;
 #else
-  uint64_t epoch_ = 0; // 100 ns
+  uint64_t epoch_ = 0;  // 100 ns
 #endif
   int cpu_load_cached_ = 0;
 };

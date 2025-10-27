@@ -1,15 +1,15 @@
 #pragma once
 
 #ifndef IS_WINDOWS
-#if defined(_WIN32) || defined(_WIN64)
-#  define IS_WINDOWS (1)
-#else
-#  define IS_WINDOWS (0)
-#endif
+#  if defined(_WIN32) || defined(_WIN64)
+#    define IS_WINDOWS (1)
+#  else
+#    define IS_WINDOWS (0)
+#  endif
 #endif
 
 #if IS_WINDOWS
-#include "Windows.h"
+#  include "Windows.h"
 #endif
 
 #include <cstdint>
@@ -28,7 +28,7 @@ constexpr int64_t kMebiByte = 1024 * kKibiByte;
 constexpr int64_t kGibiByte = 1024 * kMebiByte;
 
 // CPU
-constexpr int kCpuSchedulingGranularityNS = 1 * 1000 * 1000; // 1 ms
+constexpr int kCpuSchedulingGranularityNS = 1 * 1000 * 1000;  // 1 ms
 constexpr int kCpuMaxLoadPerCore = 100;
 constexpr int kCpuBaseLoopCountMin = 0;
 constexpr int kCpuBaseLoopCountMax = 25'000'000;

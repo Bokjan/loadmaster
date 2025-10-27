@@ -1,9 +1,7 @@
 # loadmaster
-loadmaster(负载大师) is designed to waste your machine performance. Powerful, flexible, simple. 
+loadmaster is designed to waste your machine performance. Powerful, flexible, simple. 
 
 # Prerequisites
-- Linux
-- CMake 3.1 +
 - C++ compiler with C++20 support
 
 # Build & Run

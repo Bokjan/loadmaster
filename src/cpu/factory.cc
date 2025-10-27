@@ -24,5 +24,4 @@ std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options
   return ret;
 }
 
-
 }  // namespace cpu

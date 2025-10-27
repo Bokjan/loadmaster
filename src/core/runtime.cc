@@ -33,10 +33,10 @@ Runtime::Runtime(const Options &options) : running_flag_(true), options_(options
 void Runtime::Init() {
   // Create
   for (auto &&fn : resmgr_creators) {
-    managers_.push_back(std::move(fn(options_)));
+    managers_.emplace_back(fn(options_));
   }
   // Initialize
-  for (size_t i = 0; i < managers_.size(); ) {
+  for (size_t i = 0; i < managers_.size();) {
     if (!managers_[i]->Init()) {
       managers_.erase(managers_.begin() + i);
     } else {
