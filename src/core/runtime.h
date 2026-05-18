@@ -7,14 +7,12 @@
 
 #include "resource_manager.h"
 
-#include "util/proc_stat.h"
-
 namespace core {
+
+class Options;
 
 using FnCreateResourceManager =
     std::function<std::unique_ptr<ResourceManager>(const Options &options)>;
-
-class Options;
 
 class Runtime final {
  public:
@@ -44,7 +42,7 @@ class Runtime final {
   void DealSignals();
   void CreateSignalHandlerFunctors();
 
-  TimePoint NextSchedulingTime(TimePoint current_start);
+  static TimePoint NextSchedulingTime(TimePoint current_start);
 };
 
 }  // namespace core

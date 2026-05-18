@@ -20,6 +20,12 @@ class ResourceManager {
 
  protected:
   const Options &options_;
+
+  TimePoint GetLastScheduling() const { return last_scheduling_; }
+  void SetLastScheduling(TimePoint tp) { last_scheduling_ = tp; }
+
+ private:
+  TimePoint last_scheduling_;
 };
 
 }  // namespace core

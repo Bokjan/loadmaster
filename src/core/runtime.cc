@@ -12,10 +12,14 @@
 
 namespace core {
 
-const static FnCreateResourceManager resmgr_creators[] = {
+namespace {
+
+const FnCreateResourceManager kResmgrCreators[] = {
     cpu::CreateResourceManager,
     memory::CreateResourceManager,
 };
+
+}  // namespace
 
 Runtime::PairMetaSignalHandler Runtime::meta_signal_handlers_[] = {
     {SIGINT, &Runtime::SigIntTerm},
@@ -32,15 +36,18 @@ Runtime::Runtime(const Options &options) : running_flag_(true), options_(options
 
 void Runtime::Init() {
   // Create
-  for (auto &&fn : resmgr_creators) {
-    managers_.emplace_back(fn(options_));
+  for (auto &&fn : kResmgrCreators) {
+    auto mgr = fn(options_);
+    if (mgr) {
+      managers_.emplace_back(std::move(mgr));
+    }
   }
-  // Initialize
-  for (size_t i = 0; i < managers_.size();) {
-    if (!managers_[i]->Init()) {
-      managers_.erase(managers_.begin() + i);
+  // Initialize; drop those that fail to init.
+  for (auto it = managers_.begin(); it != managers_.end();) {
+    if (!(*it)->Init()) {
+      it = managers_.erase(it);
     } else {
-      ++i;
+      ++it;
     }
   }
 }
@@ -53,15 +60,16 @@ void Runtime::CreateWorkers() {
 
 void Runtime::MainLoop() {
   if (managers_.empty()) {
-    LOG_FATAL("no module is enabled, quit");
+    LOG_WARN("no module is enabled, quit");
+    return;
   }
   [[likely]] while (running_flag_) {
     DealSignals();
-    auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::high_resolution_clock::now();
     for (auto &mgr : managers_) {
       mgr->Schedule(start);
     }
-    std::this_thread::sleep_until(this->NextSchedulingTime(start));
+    std::this_thread::sleep_until(NextSchedulingTime(start));
   }
 }
 
@@ -89,23 +97,21 @@ void Runtime::DealSignals() {
 
 void Runtime::CreateSignalHandlerFunctors() {
   for (const auto &h : meta_signal_handlers_) {
-    signal_handlers_.push_back(std::make_pair(h.first, std::bind(h.second, this)));
+    signal_handlers_.emplace_back(h.first, std::bind(h.second, this));
   }
 }
 
 TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
-  // Calc start + 100ms
-  auto start_us = std::chrono::duration_cast<std::chrono::nanoseconds>(start_tp.time_since_epoch());
-  auto next_us = start_us + std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                std::chrono::milliseconds(kScheduleIntervalMS));
-  // Floor to 100 millisecond
-  // ns -> 1e-9 s
-  // ms -> 1e-3 s
-  // 100ms -> 1e-1 s
-  constexpr int64_t kScaleFactor = 100'000'000;
-  auto next_ns_count = next_us.count() / kScaleFactor * kScaleFactor;
-  auto ns_diff = next_ns_count - start_us.count();
-  return start_tp + std::chrono::nanoseconds(ns_diff);
+  // Align "start + kScheduleIntervalMS" down to the nearest
+  // kScheduleIntervalMS boundary so all scheduling ticks land on a stable
+  // wall-clock grid.
+  using namespace std::chrono;
+  const auto start_ns = duration_cast<nanoseconds>(start_tp.time_since_epoch());
+  const auto next_ns = start_ns + duration_cast<nanoseconds>(milliseconds(kScheduleIntervalMS));
+  constexpr int64_t kScaleNs = static_cast<int64_t>(kScheduleIntervalMS) * 1'000'000;
+  const auto floored_ns = next_ns.count() / kScaleNs * kScaleNs;
+  const auto delta = floored_ns - start_ns.count();
+  return start_tp + nanoseconds(delta);
 }
 
 void Runtime::SigIntTerm() { running_flag_ = false; }

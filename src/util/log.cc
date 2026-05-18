@@ -1,8 +1,8 @@
 #include "log.h"
 
-#include <csignal>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 
 #include <algorithm>
@@ -18,7 +18,7 @@
 #endif
 
 #if IS_WINDOWS
-static int gettimeofday(timeval *tp, struct timezone *tzp) {
+static int gettimeofday(timeval *tp, struct timezone * /*tzp*/) {
   constexpr uint64_t kEpoch = ((uint64_t)116444736000000000ULL);
 
   SYSTEMTIME system_time;
@@ -47,20 +47,23 @@ const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", 
 
 void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 
-void FatalTrigger() { raise(SIGTERM); }
+[[noreturn]] void FatalAbort() {
+  std::fflush(stderr);
+  std::abort();
+}
 
 }  // namespace logger_internal
 
 Logger::~Logger() {}
 
-void Logger::Log(LogLevel level, const char *Format, ...) {
+void Logger::Log(LogLevel level, const char *format, ...) {
   if (!WillPrint(level)) {
     return;
   }
-  va_list Arguments;
-  va_start(Arguments, Format);
-  this->Log(Format, Arguments);
-  va_end(Arguments);
+  va_list args;
+  va_start(args, format);
+  this->Log(format, args);
+  va_end(args);
 }
 
 const char *Logger::GetTimeCString(LogLevel level) {
@@ -71,18 +74,21 @@ const char *Logger::GetTimeCString(LogLevel level) {
   }
   struct timeval time_val;
   gettimeofday(&time_val, nullptr);
+  struct tm time_struct {};
 #if IS_WINDOWS
   time_t tsec = time_val.tv_sec;
-  struct tm time_struct_real {};
-  auto time_struct = &time_struct_real;
-  (void)localtime_s(&time_struct_real, &tsec);
+  (void)localtime_s(&time_struct, &tsec);
 #else
-  struct tm *time_struct = localtime(&time_val.tv_sec);
+  // POSIX: use localtime_r for thread safety; the global `tzset()` call inside
+  // is fine to be invoked concurrently because it only touches process-wide
+  // mutable state guarded by libc.
+  time_t tsec = time_val.tv_sec;
+  localtime_r(&tsec, &time_struct);
 #endif
-  snprintf(buffer, sizeof(buffer), "%04d%02d%02d %02d:%02d:%02d.%.6d", 1900 + time_struct->tm_year,
-           1 + time_struct->tm_mon, time_struct->tm_mday, time_struct->tm_hour, time_struct->tm_min,
-           time_struct->tm_sec,
-           static_cast<int>(time_val.tv_usec));  // type of `tv_usec` varies on platforms
+  snprintf(buffer, sizeof(buffer), "%04d%02d%02d %02d:%02d:%02d.%.6d",
+           1900 + time_struct.tm_year, 1 + time_struct.tm_mon, time_struct.tm_mday,
+           time_struct.tm_hour, time_struct.tm_min, time_struct.tm_sec,
+           static_cast<int>(time_val.tv_usec));
   return buffer;
 }
 
@@ -102,8 +108,6 @@ bool Logger::SetLevel(const char *target) {
   return true;
 }
 
-void StderrLogger::Log(const char *Format, va_list Arguments) {
-  vfprintf(stderr, Format, Arguments);
-}
+void StderrLogger::Log(const char *format, va_list args) { vfprintf(stderr, format, args); }
 
 }  // namespace util

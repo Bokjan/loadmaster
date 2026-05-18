@@ -1,6 +1,8 @@
 #include "stat.h"
 
 #include <cinttypes>
+#include <cstdio>
+#include <memory>
 #include <stdexcept>
 #include <string_view>
 
@@ -17,46 +19,58 @@
 
 namespace cpu {
 
+namespace {
+
+// RAII wrapper for FILE*.
+struct FileCloser {
+  void operator()(FILE *fp) const noexcept {
+    if (fp != nullptr) {
+      std::fclose(fp);
+    }
+  }
+};
+using UniqueFile = std::unique_ptr<FILE, FileCloser>;
+
+}  // namespace
+
 #if !IS_WINDOWS
 int GetJiffyMillisecond() {
   long freq = sysconf(_SC_CLK_TCK);
+  if (freq <= 0) {
+    // Defensive: fall back to 10 ms / jiffy (HZ=100), a common Linux default.
+    return 10;
+  }
   return static_cast<int>(kMillisecondsPerSecond / freq);
 }
 
 bool GetCpuProcStat(CpuStatInfo &info) {
-  bool ret = false;
-  do {
-    char buffer[kSmallBufferLength];
-    FILE *fp = fopen("/proc/stat", "r");
-    if (fp == nullptr) {
-      LOG_ERROR("failed to open /proc/stat");
-      break;
-    }
-    constexpr auto kStatFormat = "%s" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
-    int count =
-        fscanf(fp, kStatFormat, buffer, &info.user, &info.nice, &info.system, &info.idle,
-               &info.iowait, &info.irq, &info.softirq, &info.steal, &info.guest, &info.guest_nice);
-    if (count != 11) {
-      LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
-      break;
-    }
-    if (!std::string_view(buffer).starts_with("cpu")) {
-      LOG_ERROR("failed to read /proc/stat, have: %s, expect: cpu", buffer);
-      break;
-    }
-    fclose(fp);
-    ret = true;
-  } while (false);
-  if (!ret) {
-    throw std::runtime_error("failed to read /proc/stat");
+  // Constrain `%s` width to avoid buffer overflow.
+  char buffer[kSmallBufferLength];
+  UniqueFile fp(std::fopen("/proc/stat", "r"));
+  if (!fp) {
+    LOG_ERROR("failed to open /proc/stat");
+    throw std::runtime_error("failed to open /proc/stat");
   }
-  return ret;
+  constexpr auto kStatFormat =
+      "%127s" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
+  const int count = std::fscanf(
+      fp.get(), kStatFormat, buffer, &info.user, &info.nice, &info.system, &info.idle, &info.iowait,
+      &info.irq, &info.softirq, &info.steal, &info.guest, &info.guest_nice);
+  if (count != 11) {
+    LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
+    throw std::runtime_error("malformed /proc/stat");
+  }
+  if (!std::string_view(buffer).starts_with("cpu")) {
+    LOG_ERROR("failed to read /proc/stat, have: %s, expect: cpu", buffer);
+    throw std::runtime_error("unexpected /proc/stat content");
+  }
+  return true;
 }
 #else
 bool GetCpuProcStat(CpuStatInfo &info) {
   FILETIME idle, kernel, user;
   if (!GetSystemTimes(&idle, &kernel, &user)) {
-    LOG_FATAL("failed to invoke GetSystemTimes");
+    LOG_ERROR("failed to invoke GetSystemTimes");
     return false;
   }
   uint64_t idle_100ns = util::FiletimeTo100Ns(&idle);
@@ -64,9 +78,6 @@ bool GetCpuProcStat(CpuStatInfo &info) {
   uint64_t user_100ns = util::FiletimeTo100Ns(&user);
 
   info.windows_concerned_100ns_ = user_100ns + (kernel_100ns - idle_100ns);
-
-  // LOG_TRACE("GetSystemTimes idle=%llu, kernel=%llu, user=%llu, concerned=%llu",
-  //           idle_100ns, kernel_100ns, user_100ns, info.windows_concerned_100ns_);
   return true;
 }
 #endif

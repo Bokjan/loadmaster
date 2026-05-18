@@ -1,39 +1,34 @@
 #include "version_string.h"
 
-#include <sstream>
+#include <string>
+#include <string_view>
 
 #include "core/version.h"
-
-namespace version_impl {
-
-class VersionStringGenerator final {
- public:
-  static VersionStringGenerator &GetInstance() {
-    static VersionStringGenerator instance;
-    return instance;
-  }
-  const std::string &GetVersionString() { return version_string_; }
-
- private:
-  std::string version_string_;
-  VersionStringGenerator() {
-    std::ostringstream oss;
-    using namespace core::version;
-    oss << kVersionProject << ' ';
-    oss << kVersionMajor << '.' << kVersionMinor << '.' << kVersionPatch;
-    if (kVersionSuffix[0] != '\0') {
-      oss << '-' << kVersionSuffix;
-    }
-    version_string_.assign(oss.str());
-  }
-};
-
-}  // namespace version_impl
 
 namespace cli {
 
 const char *VersionString() {
-  return version_impl::VersionStringGenerator::GetInstance().GetVersionString().c_str();
+  // Built once on first use; cheaper than std::ostringstream and the address
+  // remains valid for the lifetime of the program.
+  static const std::string kCached = [] {
+    using namespace core::version;
+    std::string s;
+    s.reserve(64);
+    s.append(kVersionProject);
+    s.push_back(' ');
+    s.append(std::to_string(kVersionMajor));
+    s.push_back('.');
+    s.append(std::to_string(kVersionMinor));
+    s.push_back('.');
+    s.append(std::to_string(kVersionPatch));
+    std::string_view suffix(kVersionSuffix);
+    if (!suffix.empty()) {
+      s.push_back('-');
+      s.append(suffix);
+    }
+    return s;
+  }();
+  return kCached.c_str();
 }
 
 }  // namespace cli

@@ -15,7 +15,7 @@ class CpuResourceManagerRandomNormal final : public CpuResourceManager {
   virtual bool Init() override;
 
  private:
-  size_t point_idx_;
+  int point_idx_;
   std::vector<int> schedule_points_;
   util::NormalDistribution dist_;
   std::mt19937 generator_;

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
 namespace cpu {
 
-int CriticalLoop(int count);
+uint32_t CriticalLoop(int count);
 
 }

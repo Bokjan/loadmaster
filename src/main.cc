@@ -1,22 +1,15 @@
 #include <csignal>
+#include <cstdlib>
+#include <cstring>
 
 #include "cli/cli.h"
 #include "core/runtime.h"
 #include "core/signal_flag.h"
 #include "util/log.h"
 
-static void Work(const core::Options &options);
-static void RegisterSignalHandler();
+namespace {
 
-int main(int argc, const char *argv[]) {
-  core::Options options;
-  cli::ParseCommandLineArguments(options, argc, argv);
-  RegisterSignalHandler();
-  Work(options);
-  LOG_INFO("main() finished");
-}
-
-static void Work(const core::Options &options) {
+void Work(const core::Options &options) {
   core::Runtime runtime(options);
   runtime.Init();
   runtime.CreateWorkers();
@@ -25,20 +18,48 @@ static void Work(const core::Options &options) {
   runtime.JoinWorkers();
 }
 
-static void RegisterSignalHandler() {
-  static int concerned_signals[] = {
-    SIGINT,
-    SIGTERM,
+void HandleSignal(int signal) {
+  // Async-signal-safe path: write to atomic bitmap only. Don't log here.
+  core::SignalFlag::Get().Set(signal);
+}
+
+void RegisterSignalHandlers() {
+  static const int kSignals[] = {
+      SIGINT,
+      SIGTERM,
 #if !IS_WINDOWS
-    SIGUSR1,
-    SIGUSR2,
+      SIGUSR1,
+      SIGUSR2,
 #endif
   };
-  auto sf_writer = [](int signal) {
-    LOG_INFO("signal %d captured", signal);
-    core::SignalFlag::Get().Set(signal);
-  };
-  for (auto s : concerned_signals) {
-    signal(s, sf_writer);
+#if !IS_WINDOWS
+  // Use sigaction for well-defined POSIX behavior (signal() semantics vary).
+  struct sigaction sa {};
+  sa.sa_handler = HandleSignal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;  // do NOT set SA_RESTART; we want syscalls to be interruptible
+  for (int s : kSignals) {
+    if (sigaction(s, &sa, nullptr) != 0) {
+      LOG_WARN("sigaction failed for signal %d: %s", s, std::strerror(errno));
+    }
   }
+#else
+  for (int s : kSignals) {
+    std::signal(s, HandleSignal);
+  }
+#endif
+}
+
+}  // namespace
+
+int main(int argc, const char *argv[]) {
+  core::Options options;
+  const auto parse = cli::ParseCommandLineArguments(options, argc, argv);
+  if (parse.should_exit) {
+    return parse.exit_code;
+  }
+  RegisterSignalHandlers();
+  Work(options);
+  LOG_INFO("main() finished");
+  return EXIT_SUCCESS;
 }

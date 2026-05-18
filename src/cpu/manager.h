@@ -26,12 +26,10 @@ class CpuResourceManager : public core::ResourceManager {
   void SetWorkerLoadWithTotalLoad(int total_load);
   int CalculateLoadDemand(int target);
 
-  TimePoint GetLastScheduling() const { return last_scheduling_; }
   int GetSystemAverageLoad() const { return system_sampler_.GetMean(); }
   int GetProcessAverageLoad() const { return process_sampler_.GetMean(); }
 
  private:
-  TimePoint last_scheduling_;
   std::vector<CpuWorkerContext> workers_;
   int base_loop_count_;
   CpuStatInfo cpu_stat_;

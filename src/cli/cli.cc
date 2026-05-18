@@ -3,10 +3,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <algorithm>
 #include <functional>
-#include <map>
-#include <memory>
 #include <string>
+#include <string_view>
 
 #include "cli_argument.h"
 #include "version_string.h"
@@ -16,24 +16,22 @@
 
 namespace cli {
 
-static void PrintUsage(const char *path);
+namespace {
+
+void PrintUsage(const char *path);
 
 using FnArgumentProcessor = std::function<bool(int argc, const char *argv[], int &idx)>;
 
-static bool ProcessorHelp(int argc, const char *argv[], int &idx) {
-  PrintUsage(argv[0]);
-  return false;
-}
+// Result of processing a single argument:
+//   * kContinue  : keep parsing
+//   * kExitOk    : print-and-exit (e.g. -h / -v)
+//   * kFail      : parse error
+enum class StepResult { kContinue, kExitOk, kFail };
 
-static bool ProcessorVersion(int argc, const char *argv[], int &idx) {
-  puts(VersionString());
-  return false;
-}
-
-static bool ProcessorInt(int argc, const char *argv[], int &idx, std::optional<int> &value_ref) {
+bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
-    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
+    LOG_ERROR("[%s] failed to read option, arguments insufficient", prompt);
     return false;
   }
   const char *int_str = argv[++idx];
@@ -41,73 +39,84 @@ static bool ProcessorInt(int argc, const char *argv[], int &idx, std::optional<i
 #if IS_WINDOWS
   int affected = sscanf_s(int_str, "%d", &target);
 #else
-  int affected = sscanf(int_str, "%d", &target);
+  int affected = std::sscanf(int_str, "%d", &target);
 #endif
   if (affected != 1) {
-    LOG_FATAL("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
+    LOG_ERROR("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
     return false;
   }
-  value_ref = target;
+  out = target;
   return true;
 }
 
-static bool ProcessorStringView(int argc, const char *argv[], int &idx,
-                                std::optional<std::string_view> &value_ref) {
+bool ReadStringView(int argc, const char *argv[], int &idx,
+                    std::optional<std::string_view> &out) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
-    LOG_FATAL("[%s] failed to read option, arguments insufficient", prompt);
+    LOG_ERROR("[%s] failed to read option, arguments insufficient", prompt);
     return false;
   }
-  const char *int_str = argv[++idx];
-  value_ref = int_str;
+  out = argv[++idx];
   return true;
 }
 
-static void ExtractArguments(CliArgument &cli_args, int argc, const char *argv[]) {
-  using SvProcessor = std::pair<std::string_view, FnArgumentProcessor>;
-  const SvProcessor processors[] = {
-      {"-h", ProcessorHelp},
-      {"-v", ProcessorVersion},
-      {"-l", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
-                       std::placeholders::_3, std::ref(cli_args.cpu_load))},
-      {"-c", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
-                       std::placeholders::_3, std::ref(cli_args.cpu_count))},
-      {"-m", std::bind(ProcessorInt, std::placeholders::_1, std::placeholders::_2,
-                       std::placeholders::_3, std::ref(cli_args.memory_mb))},
-      {"-L", std::bind(ProcessorStringView, std::placeholders::_1, std::placeholders::_2,
-                       std::placeholders::_3, std::ref(cli_args.log_level))},
-      {"-ca", std::bind(ProcessorStringView, std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::ref(cli_args.cpu_algorithm))},
+StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[]) {
+  struct Spec {
+    std::string_view flag;
+    FnArgumentProcessor handler;
+    bool is_terminal;  // -h / -v: print and exit cleanly
   };
-  bool terminate = false;
+  const Spec specs[] = {
+      {"-h",
+       [&](int, const char **a, int &) {
+         PrintUsage(a[0]);
+         return true;
+       },
+       true},
+      {"-v",
+       [](int, const char **, int &) {
+         std::puts(VersionString());
+         return true;
+       },
+       true},
+      {"-l", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.cpu_load); },
+       false},
+      {"-c", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.cpu_count); },
+       false},
+      {"-m", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.memory_mb); },
+       false},
+      {"-L",
+       [&](int c, const char **v, int &i) { return ReadStringView(c, v, i, cli_args.log_level); },
+       false},
+      {"-ca",
+       [&](int c, const char **v, int &i) {
+         return ReadStringView(c, v, i, cli_args.cpu_algorithm);
+       },
+       false},
+  };
+
   for (int i = 1; i < argc; ++i) {
     const std::string_view sv(argv[i]);
-    auto find = std::find_if(std::begin(processors), std::end(processors),
-                             [&sv](const SvProcessor &pair) { return sv == pair.first; });
-    if (find == std::end(processors)) {
-      LOG_FATAL("unrecognizable option `%s`", argv[i]);
-      continue;
+    auto find = std::find_if(std::begin(specs), std::end(specs),
+                             [&sv](const Spec &s) { return sv == s.flag; });
+    if (find == std::end(specs)) {
+      LOG_ERROR("unrecognizable option `%s`", argv[i]);
+      return StepResult::kFail;
     }
-    if (!find->second(argc, argv, i)) {
-      terminate = true;
-      break;
+    if (!find->handler(argc, argv, i)) {
+      return StepResult::kFail;
+    }
+    if (find->is_terminal) {
+      return StepResult::kExitOk;
     }
   }
-  if (terminate) {
-    exit(EXIT_SUCCESS);
-  }
+  return StepResult::kContinue;
 }
 
-void ParseCommandLineArguments(core::Options &options, int argc, const char *argv[]) {
-  CliArgument cli_args;
-  ExtractArguments(cli_args, argc, argv);
-  options.ProcessCliArguments(cli_args);
-}
-
-static void PrintUsage(const char *path) {
-  puts(VersionString());
-  printf("USAGE: %s [options] \n", path);
-  puts(R"deli(OPTIONS:
+void PrintUsage(const char *path) {
+  std::puts(VersionString());
+  std::printf("USAGE: %s [options] \n", path);
+  std::puts(R"deli(OPTIONS:
     -v                      print version info and quit
     -h                      print this message and quit
     -l  <load>              target CPU usage (100 each core), default: 200
@@ -116,11 +125,28 @@ static void PrintUsage(const char *path) {
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
 #if IS_WINDOWS
-  printf_s("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d", _MSC_FULL_VER / 10000000,
-           _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
+  std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n",
+              _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
 #else
-  puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
+  std::puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
 #endif
+}
+
+}  // namespace
+
+ParseResult ParseCommandLineArguments(core::Options &options, int argc, const char *argv[]) {
+  CliArgument cli_args;
+  const StepResult step = ExtractArguments(cli_args, argc, argv);
+  if (step == StepResult::kFail) {
+    return {EXIT_FAILURE, true};
+  }
+  if (step == StepResult::kExitOk) {
+    return {EXIT_SUCCESS, true};
+  }
+  if (!options.ProcessCliArguments(cli_args)) {
+    return {EXIT_FAILURE, true};
+  }
+  return {EXIT_SUCCESS, false};
 }
 
 }  // namespace cli

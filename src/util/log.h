@@ -52,7 +52,9 @@ extern Logger *g_default_logger;
 extern const char *g_log_level_cstr[];
 
 void SetDefaultLogger(Logger *ptr);
-void FatalTrigger();
+
+// Logs a fatal message and aborts the process immediately. Never returns.
+[[noreturn]] void FatalAbort();
 
 }  // namespace logger_internal
 
@@ -70,8 +72,11 @@ void FatalTrigger();
 #define LOG_WARN(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##__VA_ARGS__)
 #define LOG_ALL(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##__VA_ARGS__)
+// LOG_FATAL logs and aborts immediately. Use it ONLY for unrecoverable bugs.
+// For "startup failed, exit cleanly" cases, log at ERROR/WARN and return a
+// status to the caller, then exit(EXIT_FAILURE) from main.
 #define LOG_FATAL(fmt, ...)                                          \
   do {                                                               \
     LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##__VA_ARGS__); \
-    ::util::logger_internal::FatalTrigger();                         \
+    ::util::logger_internal::FatalAbort();                           \
   } while (false)

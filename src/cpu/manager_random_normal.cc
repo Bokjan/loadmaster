@@ -33,7 +33,8 @@ bool CpuResourceManagerRandomNormal::Init() {
     count = (max_load + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
   if (count > CoreCount()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.GetCpuLoad(), count, CoreCount());
+    LOG_ERROR("rand_normal peak load=%d needs %d CPU cores, have %d (avg target=%d)", max_load,
+              count, CoreCount(), options_.GetCpuLoad());
     return false;
   }
   if (count <= 0) {
@@ -73,7 +74,7 @@ void CpuResourceManagerRandomNormal::ShuffleSchedulePoints() {
 
 void CpuResourceManagerRandomNormal::IncreasePointIndex() {
   ++point_idx_;
-  if (point_idx_ == schedule_points_.size()) {
+  if (point_idx_ == static_cast<int>(schedule_points_.size())) {
     point_idx_ = 0;
   }
 }

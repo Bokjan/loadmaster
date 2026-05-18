@@ -8,7 +8,7 @@ namespace memory {
 MemoryResourceManager::MemoryResourceManager(const core::Options &options)
     : ResourceManager(options) {}
 
-bool MemoryResourceManager::Init() { return options_.GetMemoryMiB() > 0; }
+bool MemoryResourceManager::Init() { return options_.GetMemoryBytes() > 0; }
 
 void MemoryResourceManager::CreateWorkerThreads() {}
 

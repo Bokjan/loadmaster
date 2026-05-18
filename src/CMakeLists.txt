@@ -1,33 +1,62 @@
-SET(CMAKE_CXX_STANDARD 20)
-SET(CMAKE_CXX_FLAGS "-Wall -fPIC -O2 -pthread")
+# Length of the absolute source-root prefix; used by the logger to print
+# short file paths ("src/foo/bar.cc" instead of "/abs/path/src/foo/bar.cc").
+string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 
-STRING(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
-ADD_DEFINITIONS("-DSOURCE_PATH_SIZE=${SOURCE_PATH_SIZE}")
+find_package(Threads REQUIRED)
 
-SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-# SET(CMAKE_EXE_LINKER_FLAGS "-static -pthread")
-IF(CMAKE_BUILD_TYPE MATCHES DEBUG)
-    SET(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-DDEBUG")
-ENDIF(CMAKE_BUILD_TYPE MATCHES DEBUG)
+add_executable(loadmaster)
 
-INCLUDE_DIRECTORIES(.)
+target_sources(loadmaster PRIVATE
+    main.cc
+    core/runtime.cc
+    core/options.cc
+    cli/cli.cc
+    cli/version_string.cc
+    cpu/stat.cc
+    cpu/worker.cc
+    cpu/manager.cc
+    cpu/manager_default.cc
+    cpu/manager_random_normal.cc
+    cpu/factory.cc
+    cpu/critical_loop.cc
+    memory/factory.cc
+    memory/manager.cc
+    memory/manager_default.cc
+    memory/allocator.cc
+    util/log.cc
+    util/normal_dist.cc
+    util/proc_stat.cc
+)
 
-SET(COMP_FILES main.cc)
-SET(COMP_FILES ${COMP_FILES}
-               core/runtime.cc core/options.cc)
-SET(COMP_FILES ${COMP_FILES}
-               cli/cli.cc cli/version_string.cc)
-SET(COMP_FILES ${COMP_FILES}
-               cpu/stat.cc cpu/worker.cc 
-               cpu/manager.cc cpu/manager_default.cc
-               cpu/manager_random_normal.cc cpu/factory.cc
-               cpu/critical_loop.cc)
-SET(COMP_FILES ${COMP_FILES}
-               memory/factory.cc memory/manager.cc 
-               memory/manager_default.cc memory/allocator.cc)
-SET(COMP_FILES ${COMP_FILES}
-               util/log.cc util/normal_dist.cc
-               util/proc_stat.cc util/win_util.cc)
+target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-ADD_EXECUTABLE(loadmaster ${COMP_FILES})
-TARGET_LINK_LIBRARIES(loadmaster -static)
+target_compile_features(loadmaster PRIVATE cxx_std_20)
+
+target_compile_definitions(loadmaster PRIVATE SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
+
+# Warnings: keep them strict, but don't error out on the few legacy bits the
+# project still produces (let CI/devs see them and decide).
+if(MSVC)
+    target_compile_options(loadmaster PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(loadmaster PRIVATE
+        -Wall -Wextra -Wpedantic
+        -Wshadow
+        -Wno-unused-parameter
+        -fPIC
+    )
+endif()
+
+# Debug-only macro
+target_compile_definitions(loadmaster PRIVATE
+    $<$<CONFIG:Debug>:DEBUG>
+)
+
+# Threading
+target_link_libraries(loadmaster PRIVATE Threads::Threads)
+
+# Optional fully-static linking: ON by default on Linux/GCC, off elsewhere.
+option(LOADMASTER_STATIC_LINK "Statically link the loadmaster executable" ON)
+if(LOADMASTER_STATIC_LINK AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(loadmaster PRIVATE -static)
+endif()
