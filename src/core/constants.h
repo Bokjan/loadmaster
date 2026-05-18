@@ -17,6 +17,8 @@
 // Default options
 constexpr int kDefaultCpuLoad = 200;
 constexpr int kDefaultMemoryLoadMiB = 0;
+constexpr int kDefaultGpuLoad = 0;
+constexpr int kDefaultGpuMemoryMiB = 0;
 
 // General
 constexpr int kSmallBufferLength = 128;
@@ -46,3 +48,17 @@ constexpr int kCpuAvgLoadSamplingCount = 100;
 constexpr int kMemoryScheduleIntervalSecond = 45;
 constexpr double kMemoryMinimumRatio = 0.5;
 constexpr int kMemoryNoThreadSpawnThresholdMiB = 32;
+
+// GPU
+// Per-device load is in the range [0, 100], expressed as the fraction of
+// each `kScheduleIntervalMS` tick spent submitting / waiting on the busy
+// kernel. The kernel itself does pure ALU work (32-bit integer madd
+// chains) and is launched with a fixed grid size; we tune the per-thread
+// loop count once at startup so a "100% busy" tick equals one full
+// scheduling period.
+constexpr int kGpuMaxLoadPerDevice = 100;
+constexpr int kGpuKernelGridSize = 1024;
+constexpr int kGpuKernelBlockSize = 256;
+constexpr int kGpuKernelLoopBaseMin = 0;
+constexpr int kGpuKernelLoopBaseMax = 50'000'000;
+constexpr int kGpuKernelLoopBaseTestIteration = 12;

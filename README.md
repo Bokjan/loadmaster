@@ -7,7 +7,9 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 
 # Build & Run
 - Typical CMake building routine (see `release_build.sh` for a one-shot helper).
-- Statically linked by default on Linux. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
+- libstdc++/libgcc are linked statically by default so the binary is portable
+  across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
+  the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`.
 - It's recommended to rename the executable as you want.
 
@@ -38,7 +40,50 @@ memory usage, then this process won't look so weird.
   allocate-and-fill work is done in a one-shot background thread so the main
   scheduling loop never blocks on a large `memset`/page-fault storm.
 
+## GPU
+Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
+
+- `-g  <load>`     per-device compute load in `[0, 100]`. 0 means disabled.
+- `-gm <mib>`      per-device device-memory load in MiB. 0 means no extra memory.
+- `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all`
+                   (default).
+- `-gv <vendor>`   `auto` (default), `nvidia`, or `amd`. `auto` prefers NVIDIA
+                   and falls back to AMD.
+
+Each selected device gets its own worker thread that runs the same busy/sleep
+pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker
+launches a busy kernel sized to occupy `load%` of the period, then sleeps for
+the remainder. A one-time calibration probe at startup tunes the per-thread
+loop count to the actual device.
+
+### Runtime dependencies
+The GPU module is fully **runtime-loaded** via `dlopen`. The loadmaster binary
+itself does not link against any GPU library, so a build runs on any machine
+regardless of which (if any) GPU vendor stack is installed:
+
+| Vendor | Dependencies (loaded at runtime) | Source of kernel code |
+|--------|----------------------------------|----------------------|
+| NVIDIA | `libcuda.so.1` (NVIDIA driver) | embedded PTX, JITed by the driver |
+| AMD    | `libamdhip64.so` + `libhiprtc.so` (ROCm runtime) | embedded HIP C++ source, compiled at startup by hipRTC |
+
+If the requested vendor's libraries aren't found, the module logs and disables
+itself; other modules (CPU/memory) still run normally.
+
+### Notes
+- Mixed-vendor hosts (e.g., NVIDIA + AMD installed at the same time) are
+  intentionally out of scope: with `-gv auto` only one vendor is used.
+- WSL2 is supported on NVIDIA via the `/usr/lib/wsl/lib/libcuda.so.1` shim.
+- WSL2 is **not** supported on AMD: ROCm's WSL story is preview-only and
+  doesn't expose `/dev/kfd` for most cards (including RDNA4 like RX 9070 XT).
+  On WSL2 the AMD path short-circuits with a clear diagnostic and the rest
+  of loadmaster (CPU/Memory/NVIDIA) keeps working. Run on native Linux for
+  full AMD support.
+
 # Usage Sample
 ```bash
+# CPU + memory
 $ ./loadmaster -l 180 -ca rand_normal -m 32
+
+# Same, but also drive GPU #0 at 60% with 256 MiB of VRAM occupied
+$ ./loadmaster -l 180 -m 32 -g 60 -gm 256 -gi 0
 ```

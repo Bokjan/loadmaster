@@ -7,6 +7,7 @@
 
 #include "core/signal_flag.h"
 #include "cpu/factory.h"
+#include "gpu/factory.h"
 #include "memory/factory.h"
 #include "util/log.h"
 
@@ -17,6 +18,7 @@ namespace {
 const FnCreateResourceManager kResmgrCreators[] = {
     cpu::CreateResourceManager,
     memory::CreateResourceManager,
+    gpu::CreateResourceManager,
 };
 
 }  // namespace

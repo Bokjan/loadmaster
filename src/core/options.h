@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace cli {
 struct CliArgument;
@@ -11,6 +13,7 @@ namespace core {
 class Options final {
  public:
   enum class CpuAlgorithm : int { kDefault, kRandomNormal };
+  enum class GpuVendor : int { kAuto, kNvidia, kAmd };
 
   Options();
 
@@ -23,16 +26,34 @@ class Options final {
     return static_cast<int>(value);
   }
 
+  // CPU
   int GetCpuLoad() const { return cpu_load_; }
   int GetCpuCount() const { return cpu_count_; }
   CpuAlgorithm GetCpuAlgorithm() const { return cpu_algorithm_; }
+
+  // Memory
   int64_t GetMemoryBytes() const { return memory_bytes_; }
 
+  // GPU
+  int GetGpuLoad() const { return gpu_load_; }
+  int64_t GetGpuMemoryBytes() const { return gpu_memory_bytes_; }
+  // Empty vector means "use every device the chosen vendor exposes".
+  const std::vector<int> &GetGpuIndices() const { return gpu_indices_; }
+  bool GpuUseAllDevices() const { return gpu_indices_.empty(); }
+  GpuVendor GetGpuVendor() const { return gpu_vendor_; }
+
  private:
-  int cpu_load_;                // 100 per core
-  int cpu_count_;               // worker thread count
-  CpuAlgorithm cpu_algorithm_;  // as shown
-  int64_t memory_bytes_;        // memory load in bytes
+  // CPU
+  int cpu_load_;
+  int cpu_count_;
+  CpuAlgorithm cpu_algorithm_;
+  // Memory
+  int64_t memory_bytes_;
+  // GPU
+  int gpu_load_;
+  int64_t gpu_memory_bytes_;
+  std::vector<int> gpu_indices_;
+  GpuVendor gpu_vendor_;
 };
 
 }  // namespace core

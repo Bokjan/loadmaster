@@ -93,6 +93,17 @@ StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[])
          return ReadStringView(c, v, i, cli_args.cpu_algorithm);
        },
        false},
+      {"-g", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.gpu_load); },
+       false},
+      {"-gm",
+       [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.gpu_memory_mb); },
+       false},
+      {"-gi",
+       [&](int c, const char **v, int &i) { return ReadStringView(c, v, i, cli_args.gpu_indices); },
+       false},
+      {"-gv",
+       [&](int c, const char **v, int &i) { return ReadStringView(c, v, i, cli_args.gpu_vendor); },
+       false},
   };
 
   for (int i = 1; i < argc; ++i) {
@@ -123,7 +134,11 @@ void PrintUsage(const char *path) {
     -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
-    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0 )deli");
+    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0
+    -g  <gpu_load>          per-device GPU compute load (0..100), default: 0 (disabled)
+    -gm <gpu_memory>        per-device GPU memory load (MiB), default: 0
+    -gi <indices>           GPU device indices, e.g. "0", "0,2,3", or "all"; default: all
+    -gv <vendor>            GPU vendor: auto/nvidia/amd, default: auto)deli");
 #if IS_WINDOWS
   std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n",
               _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);

@@ -23,6 +23,13 @@ target_sources(loadmaster PRIVATE
     memory/manager.cc
     memory/manager_default.cc
     memory/allocator.cc
+    gpu/factory.cc
+    gpu/manager.cc
+    gpu/worker.cc
+    gpu/nvidia/cuda_driver.cc
+    gpu/nvidia/nvidia_device.cc
+    gpu/amd/hip_driver.cc
+    gpu/amd/amd_device.cc
     util/log.cc
     util/normal_dist.cc
     util/proc_stat.cc
@@ -53,10 +60,16 @@ target_compile_definitions(loadmaster PRIVATE
 )
 
 # Threading
-target_link_libraries(loadmaster PRIVATE Threads::Threads)
+target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 
-# Optional fully-static linking: ON by default on Linux/GCC, off elsewhere.
-option(LOADMASTER_STATIC_LINK "Statically link the loadmaster executable" ON)
-if(LOADMASTER_STATIC_LINK AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_options(loadmaster PRIVATE -static)
+# Linking strategy:
+#   The GPU module dynamically opens vendor libraries (libcuda.so.1 /
+#   libamdhip64.so) at runtime via dlopen(), which is incompatible with a
+#   fully-static (`-static`) executable on glibc. We therefore link
+#   libstdc++ and libgcc statically (so the binary remains portable across
+#   distros) while letting libc and libdl stay dynamic.
+option(LOADMASTER_STATIC_LINK
+       "Statically link libstdc++/libgcc into the loadmaster executable" ON)
+if(LOADMASTER_STATIC_LINK AND NOT MSVC)
+    target_link_options(loadmaster PRIVATE -static-libstdc++ -static-libgcc)
 endif()
