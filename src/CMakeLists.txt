@@ -37,6 +37,17 @@ target_sources(loadmaster PRIVATE
     util/proc_stat.cc
 )
 
+# macOS-only sources: Apple Metal GPU backend. Compiled as Objective-C++
+# (.mm) so we can use the Metal/Foundation frameworks directly. ARC is
+# enabled below.
+if(APPLE)
+    target_sources(loadmaster PRIVATE
+        gpu/apple/metal_device.mm
+    )
+    set_source_files_properties(gpu/apple/metal_device.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+endif()
+
 target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_compile_features(loadmaster PRIVATE cxx_std_20)
@@ -105,12 +116,20 @@ if(LOADMASTER_STATIC_LINK)
     endif()
 endif()
 
-# macOS: link the system frameworks the Mach / libproc APIs ultimately
-# resolve through. Apple's libc/dyld pulls them in transparently when
-# present, so this is mostly belt-and-braces; explicitly listing them
-# makes the dependency obvious and protects against future toolchain
-# changes that might drop implicit linking.
+# macOS: link the system frameworks we depend on.
+#   * CoreFoundation: pulled in transparently by libSystem today, but
+#     listed explicitly so the dependency is obvious.
+#   * Foundation     : Objective-C runtime + NSString/NSError used by
+#     gpu/apple/metal_device.mm.
+#   * Metal          : MTLDevice / MTLCommandQueue / MTLLibrary etc.,
+#     i.e. the entire Apple-side GPU backend.
 if(APPLE)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
-    target_link_libraries(loadmaster PRIVATE ${COREFOUNDATION_FRAMEWORK})
+    find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(METAL_FRAMEWORK Metal REQUIRED)
+    target_link_libraries(loadmaster PRIVATE
+        ${COREFOUNDATION_FRAMEWORK}
+        ${FOUNDATION_FRAMEWORK}
+        ${METAL_FRAMEWORK}
+    )
 endif()

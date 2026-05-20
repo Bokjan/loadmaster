@@ -53,9 +53,9 @@ linked: Apple does not ship static archives for `libc++`/`libSystem`,
 so `loadmaster` links against the OS-provided dylibs (which are part of
 the macOS ABI guarantee). Pick the deployment target via
 `CMAKE_OSX_DEPLOYMENT_TARGET` (the script defaults to 11.0). The GPU
-module is automatically a no-op on macOS because neither the NVIDIA
-CUDA driver nor the AMD HIP runtime is shipped/supported on Apple
-platforms; CPU and memory modules behave the same as on Linux/Windows.
+module is supported on macOS via a built-in Metal backend (see the
+[Runtime dependencies](#runtime-dependencies) section below); CPU and
+memory modules behave the same as on Linux/Windows.
 
 # Workload
 ## CPU
@@ -91,8 +91,9 @@ Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 - `-gm <mib>`      per-device device-memory load in MiB. 0 means no extra memory.
 - `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all`
                    (default).
-- `-gv <vendor>`   `auto` (default), `nvidia`, or `amd`. `auto` prefers NVIDIA
-                   and falls back to AMD.
+- `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, or `apple`. `auto`
+                   prefers Apple Metal on macOS, otherwise NVIDIA, with
+                   AMD as the final fallback.
 
 Each selected device gets its own worker thread that runs the same busy/sleep
 pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker
@@ -101,14 +102,16 @@ the remainder. A one-time calibration probe at startup tunes the per-thread
 loop count to the actual device.
 
 ### Runtime dependencies
-The GPU module is fully **runtime-loaded** via `dlopen`. The loadmaster binary
-itself does not link against any GPU library, so a build runs on any machine
+On Linux and Windows the GPU module is fully **runtime-loaded** via
+`dlopen` / `LoadLibrary`. The loadmaster binary itself does not link
+against any vendor GPU library, so a build runs on any machine
 regardless of which (if any) GPU vendor stack is installed:
 
 | Vendor | Dependencies (loaded at runtime) | Source of kernel code |
-|--------|----------------------------------|----------------------|
+|--------|----------------------------------|-----------------------|
 | NVIDIA | `libcuda.so.1` (NVIDIA driver) | embedded PTX, JITed by the driver |
 | AMD    | `libamdhip64.so` + `libhiprtc.so` (ROCm runtime) | embedded HIP C++ source, compiled at startup by hipRTC |
+| Apple  | `Metal.framework` (linked at build time on macOS) | embedded MSL source, compiled at startup by `MTLDevice newLibraryWithSource:` |
 
 If the requested vendor's libraries aren't found, the module logs and disables
 itself; other modules (CPU/memory) still run normally.
@@ -125,11 +128,15 @@ itself; other modules (CPU/memory) still run normally.
 - On Windows the runtime libraries we look for are `nvcuda.dll` (NVIDIA,
   ships with the driver) and `amdhip64*.dll` + `hiprtc*.dll` (AMD, ships
   with the HIP SDK).
-- macOS has no supported NVIDIA / AMD GPU compute stack (Apple dropped
-  the NVIDIA driver after macOS 10.13 and ROCm/HIP has never targeted
-  Darwin). The GPU module disables itself silently on macOS; if you
-  want to drive Apple-Silicon GPUs in the future, that would need a
-  Metal-based backend rather than the existing CUDA/HIP loaders.
+- On macOS the only supported GPU backend is Apple Metal (`-gv apple`,
+  also picked by `-gv auto`). NVIDIA / AMD compute stacks have never
+  been or are no longer available on Darwin: Apple dropped the NVIDIA
+  Web Driver after 10.13, and ROCm/HIP has never targeted macOS. The
+  Metal backend works on every Apple Silicon Mac and on Intel Macs with
+  Metal-capable GPUs (any model from ~2012 onwards).
+- On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>`
+  reserves that many MiB of physical memory rather than dedicated VRAM.
+  Plan accordingly when running with `-gm` and a large `-m`.
 
 # Usage Sample
 ```bash
@@ -138,4 +145,7 @@ $ ./loadmaster -l 180 -ca rand_normal -m 32
 
 # Same, but also drive GPU #0 at 60% with 256 MiB of VRAM occupied
 $ ./loadmaster -l 180 -m 32 -g 60 -gm 256 -gi 0
+
+# macOS: drive the Apple Silicon GPU at 80% (auto-picks Metal)
+$ ./loadmaster -l 0 -g 80 -gm 512
 ```

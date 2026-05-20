@@ -13,7 +13,11 @@ namespace core {
 class Options final {
  public:
   enum class CpuAlgorithm : int { kDefault, kRandomNormal };
-  enum class GpuVendor : int { kAuto, kNvidia, kAmd };
+  // GPU vendor selection. `kApple` drives the Apple Silicon / Intel Mac
+  // GPU through Metal and is only meaningful on macOS builds; on other
+  // platforms it is accepted by the parser but the corresponding factory
+  // path is compiled out and immediately yields "no device".
+  enum class GpuVendor : int { kAuto, kNvidia, kAmd, kApple };
 
   Options();
 

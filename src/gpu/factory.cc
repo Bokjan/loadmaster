@@ -3,14 +3,19 @@
 #include <utility>
 #include <vector>
 
+#include "core/constants.h"
+#include "core/options.h"
+#include "util/log.h"
+
 #include "amd/amd_device.h"
 #include "amd/hip_driver.h"
 #include "manager.h"
 #include "nvidia/cuda_driver.h"
 #include "nvidia/nvidia_device.h"
 
-#include "core/options.h"
-#include "util/log.h"
+#if IS_MACOS
+#  include "apple/metal_device.h"
+#endif
 
 namespace gpu {
 
@@ -86,6 +91,40 @@ std::vector<IndexedDevice> EnumerateAmd(const core::Options &options) {
   return out;
 }
 
+std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
+  std::vector<IndexedDevice> out;
+#if IS_MACOS
+  const int count = apple::AppleMetalDevice::DeviceCount();
+  if (count <= 0) {
+    LOG_INFO("Apple: no Metal devices reported");
+    return out;
+  }
+  LOG_INFO("Apple: %d Metal device(s) detected", count);
+
+  auto wants = [&](int idx) -> bool {
+    if (options.GpuUseAllDevices()) {
+      return true;
+    }
+    for (int wanted : options.GetGpuIndices()) {
+      if (wanted == idx) {
+        return true;
+      }
+    }
+    return false;
+  };
+  for (int i = 0; i < count; ++i) {
+    if (!wants(i)) {
+      continue;
+    }
+    out.emplace_back(i, std::make_unique<apple::AppleMetalDevice>());
+  }
+#else
+  (void)options;
+  LOG_INFO("Apple GPU backend is only available on macOS builds");
+#endif
+  return out;
+}
+
 }  // namespace
 
 std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options &options) {
@@ -104,13 +143,23 @@ std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options
     case core::Options::GpuVendor::kAmd:
       devices = EnumerateAmd(options);
       break;
+    case core::Options::GpuVendor::kApple:
+      devices = EnumerateApple(options);
+      break;
     case core::Options::GpuVendor::kAuto:
+#if IS_MACOS
+      // On macOS the only viable backend is Apple Metal -- NVIDIA/AMD
+      // shared libraries are simply not present, so probing them adds
+      // nothing but noise.
+      devices = EnumerateApple(options);
+#else
       // Prefer NVIDIA, fall back to AMD. Mixed-vendor hosts are rare and
       // intentionally out of scope for now.
       devices = EnumerateNvidia(options);
       if (devices.empty()) {
         devices = EnumerateAmd(options);
       }
+#endif
       break;
   }
 
