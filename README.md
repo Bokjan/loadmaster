@@ -23,15 +23,17 @@ virtually any distro from the last decade, use the helper scripts in
 
 | Target | Script | Output |
 |--------|--------|--------|
-| Linux x86_64   | `scripts/build_x86_64.sh`  (run on any x86_64 Linux host)    | `dist/loadmaster-x86_64`             |
-| Linux aarch64  | `scripts/build_aarch64.sh` (run on an aarch64 Linux host)    | `dist/loadmaster-aarch64`            |
-| Windows x86_64 | `scripts\build_windows.ps1` (run on Windows w/ VS 2022)      | `dist/loadmaster-windows-x86_64.exe` |
+| Linux x86_64   | `scripts/build_linux.sh`               (host auto-detected) | `dist/loadmaster-x86_64`             |
+| Linux aarch64  | `scripts/build_linux.sh --arch aarch64` (run on aarch64 host) | `dist/loadmaster-aarch64`            |
+| Windows x86_64 | `scripts\build_windows.ps1`            (Windows + VS 2022)   | `dist/loadmaster-windows-x86_64.exe` |
 
-The Linux scripts only require Docker. They build inside the
-manylinux2014 image (CentOS 7 / glibc 2.17), strip the result, and drop
-it into `dist/`. Cross-architecture Linux builds (e.g. arm64 from
-x86_64) work via qemu-user-static binfmt but are much slower; running
-each script on its native host is recommended.
+The Linux script only requires Docker. It builds inside the
+manylinux2014 image (CentOS 7 / glibc 2.17), strips the result, and
+drops it into `dist/`. By default it targets the host's architecture
+(`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture
+builds (e.g. arm64 from x86_64) work via qemu-user-static binfmt but
+are much slower; running on a native host of the target arch is
+recommended.
 
 The Windows script uses MSVC 2022 + CMake (both bundled with "Build
 Tools for Visual Studio 2022") and statically links the C/C++ runtime
