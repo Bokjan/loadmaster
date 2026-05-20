@@ -32,14 +32,18 @@ bool CpuResourceManagerRandomNormal::Init() {
   } else {
     count = (max_load + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
+  if (count <= 0) {
+    return false;
+  }
   if (count > CoreCount()) {
     LOG_ERROR("rand_normal peak load=%d needs %d CPU cores, have %d (avg target=%d)", max_load,
               count, CoreCount(), options_.GetCpuLoad());
     return false;
   }
-  if (count <= 0) {
-    return false;
-  }
+  // Shuffle once before the first scheduling tick so the first 5-minute
+  // period is also random (otherwise the points would walk a non-random
+  // monotonic-ish sequence on cold start).
+  ShuffleSchedulePoints();
   return this->ConstructWorkerThreads(count);
 }
 

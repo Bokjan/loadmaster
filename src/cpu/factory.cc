@@ -1,5 +1,7 @@
 #include "factory.h"
 
+#include <utility>
+
 #include "manager_default.h"
 #include "manager_random_normal.h"
 
@@ -8,20 +10,15 @@
 namespace cpu {
 
 std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options &options) {
-  std::unique_ptr<core::ResourceManager> ret;
   switch (options.GetCpuAlgorithm()) {
     case core::Options::CpuAlgorithm::kDefault:
-      ret = std::make_unique<CpuResourceManagerDefault>(options);
-      break;
+      return std::make_unique<CpuResourceManagerDefault>(options);
     case core::Options::CpuAlgorithm::kRandomNormal:
-      ret = std::make_unique<CpuResourceManagerRandomNormal>(options);
-      break;
-    default:
-      LOG_FATAL("invalid CPU algorithm type [%d]",
-                core::Options::EnumToInt(options.GetCpuAlgorithm()));
-      break;
+      return std::make_unique<CpuResourceManagerRandomNormal>(options);
   }
-  return ret;
+  // Unreachable: Options validates the algorithm at parse time. If we ever
+  // see this, it's a bug.
+  LOG_FATAL("invalid CPU algorithm type [%d]", core::Options::EnumToInt(options.GetCpuAlgorithm()));
 }
 
 }  // namespace cpu

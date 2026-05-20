@@ -36,8 +36,8 @@ struct CudaApi {
   CUresult (*cuModuleGetFunction)(CUfunction *hfunc, CUmodule hmod, const char *name);
   CUresult (*cuLaunchKernel)(CUfunction f, unsigned int gridDimX, unsigned int gridDimY,
                              unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY,
-                             unsigned int blockDimZ, unsigned int sharedMemBytes,
-                             CUstream hStream, void **kernelParams, void **extra);
+                             unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream,
+                             void **kernelParams, void **extra);
   CUresult (*cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
   CUresult (*cuMemFree)(CUdeviceptr dptr);
   CUresult (*cuMemsetD8)(CUdeviceptr dstDevice, unsigned char uc, size_t N);

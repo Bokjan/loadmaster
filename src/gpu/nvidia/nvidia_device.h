@@ -25,9 +25,9 @@ class NvidiaDevice final : public GpuDevice {
   CUcontext context_;
   CUmodule module_;
   CUfunction busy_func_;
-  CUdeviceptr out_ptr_;            // scratch buffer written by the kernel
+  CUdeviceptr out_ptr_;  // scratch buffer written by the kernel
   size_t out_bytes_;
-  CUdeviceptr mem_load_ptr_;       // optional memory-load block
+  CUdeviceptr mem_load_ptr_;  // optional memory-load block
   size_t mem_load_bytes_;
   std::string name_;
   int device_index_;

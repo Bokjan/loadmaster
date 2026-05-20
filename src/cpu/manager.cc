@@ -8,34 +8,8 @@
 
 #include "core/constants.h"
 #include "util/log.h"
-#include "util/win_util.h"
-
-#if !IS_WINDOWS
-#  include <unistd.h>
-#endif
 
 namespace cpu {
-
-namespace {
-
-#if !IS_WINDOWS
-inline uint64_t GetConcernedJiffies(const CpuStatInfo &info) {
-  return info.user + info.nice + info.system;
-}
-inline uint64_t GetMilliFromEpoch(uint64_t epoch) {
-  static auto jiffy_ms = GetJiffyMillisecond();
-  return epoch * jiffy_ms;
-}
-#else
-inline uint64_t GetConcernedJiffies(const CpuStatInfo &info) {
-  return info.windows_concerned_100ns_;
-}
-inline uint64_t GetMilliFromEpoch(uint64_t epoch) {
-  return util::WindowsEpochToMilliseconds(epoch);
-}
-#endif
-
-}  // namespace
 
 CpuResourceManager::CpuResourceManager(const core::Options &options)
     : ResourceManager(options),
@@ -49,26 +23,24 @@ CpuResourceManager::CpuResourceManager(const core::Options &options)
 
 void CpuResourceManager::CreateWorkerThreads() {
   for (auto &ctx : workers_) {
-    ctx.jthread_ = std::jthread([&](std::stop_token stoken) { ctx.Loop(stoken); });
+    ctx->Start();
   }
 }
 
 void CpuResourceManager::RequestWorkerThreadsStop() {
   for (auto &ctx : workers_) {
-    ctx.jthread_.request_stop();
+    ctx->RequestStop();
   }
 }
 
 void CpuResourceManager::JoinWorkerThreads() {
   for (auto &ctx : workers_) {
-    if (ctx.jthread_.joinable()) {
-      ctx.jthread_.join();
-    }
+    ctx->Join();
   }
 }
 
 void CpuResourceManager::Schedule(TimePoint time_point) {
-  const auto last_jiffies = GetConcernedJiffies(cpu_stat_);
+  const auto last_busy_ticks = GetBusyTicks(cpu_stat_);
 
   // Refresh system CPU snapshot.
   try {
@@ -84,7 +56,7 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   }
 
   // First call: nothing to diff against yet.
-  if (last_jiffies == 0) {
+  if (last_busy_ticks == 0) {
     SetLastScheduling(time_point);
     return;
   }
@@ -92,10 +64,10 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   // Update process snapshot/average.
   UpdateProcStat(time_point);
 
-  // Compute current system-wide CPU load.
-  const auto current_jiffies = GetConcernedJiffies(cpu_stat_);
-  const auto diff = current_jiffies - last_jiffies;
-  const auto cpu_ms = GetMilliFromEpoch(diff);
+  // Compute current system-wide CPU load (platform-agnostic).
+  const auto current_busy_ticks = GetBusyTicks(cpu_stat_);
+  const auto diff = current_busy_ticks - last_busy_ticks;
+  const auto cpu_ms = TicksToMilliseconds(diff);
   const auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(time_point - GetLastScheduling())
           .count();
@@ -148,7 +120,7 @@ int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
   } while (iteration < max_iteration);
 
   // Ensure we never return 0 (would make CriticalLoop a no-op and cause UB
-  // in some downstream math).
+  // in some downstream math). Workers will further refine this at runtime.
   if (accurate_loop_count <= 0) {
     accurate_loop_count = 1;
   }
@@ -163,7 +135,7 @@ void CpuResourceManager::UpdateProcStat(TimePoint time_point) {
 bool CpuResourceManager::ConstructWorkerThreads(int count) {
   workers_.reserve(count);
   for (int i = 0; i < count; ++i) {
-    workers_.emplace_back(i, base_loop_count_);
+    workers_.push_back(std::make_unique<CpuWorkerContext>(i, base_loop_count_));
   }
   return true;
 }
@@ -175,7 +147,7 @@ void CpuResourceManager::SetWorkerLoadWithTotalLoad(int total_load) {
   }
   const int avg_load = total_load / thread_count;
   for (auto &th : workers_) {
-    th.SetLoadSet(avg_load);
+    th->SetLoadSet(avg_load);
   }
 }
 

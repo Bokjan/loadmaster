@@ -3,8 +3,8 @@
 #include <string>
 #include <vector>
 
-#include "hip_driver.h"
 #include "gpu/device.h"
+#include "hip_driver.h"
 
 namespace gpu::amd {
 

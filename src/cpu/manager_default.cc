@@ -18,14 +18,13 @@ bool CpuResourceManagerDefault::Init() {
   } else {
     count = (options_.GetCpuLoad() + (kCpuMaxLoadPerCore - 1)) / kCpuMaxLoadPerCore;
   }
+  if (count <= 0) {
+    return false;
+  }
   if (count > CoreCount()) {
     LOG_ERROR("CPU load `%d` needs %d CPU, have %u", options_.GetCpuLoad(), count, CoreCount());
     return false;
   }
-  if (count <= 0) {
-    return false;
-  }
-
   return this->ConstructWorkerThreads(count);
 }
 

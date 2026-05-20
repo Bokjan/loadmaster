@@ -49,8 +49,7 @@ bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
   return true;
 }
 
-bool ReadStringView(int argc, const char *argv[], int &idx,
-                    std::optional<std::string_view> &out) {
+bool ReadStringView(int argc, const char *argv[], int &idx, std::optional<std::string_view> &out) {
   const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_ERROR("[%s] failed to read option, arguments insufficient", prompt);
@@ -140,8 +139,8 @@ void PrintUsage(const char *path) {
     -gi <indices>           GPU device indices, e.g. "0", "0,2,3", or "all"; default: all
     -gv <vendor>            GPU vendor: auto/nvidia/amd, default: auto)deli");
 #if IS_WINDOWS
-  std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n",
-              _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
+  std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n", _MSC_FULL_VER / 10000000,
+              _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
 #else
   std::puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
 #endif

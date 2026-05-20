@@ -65,8 +65,8 @@ bool AmdDevice::MakeCurrent() {
 
 bool AmdDevice::CompileKernel(std::vector<char> &code_out) {
   hiprtcProgram prog = nullptr;
-  hiprtcResult rc = api_->hiprtcCreateProgram(&prog, kBusyKernelHipSrc, "busy.hip", 0, nullptr,
-                                              nullptr);
+  hiprtcResult rc =
+      api_->hiprtcCreateProgram(&prog, kBusyKernelHipSrc, "busy.hip", 0, nullptr, nullptr);
   if (rc != HIPRTC_SUCCESS) {
     LOG_WARN("hiprtcCreateProgram failed: %s", HiprtcErrorString(rc));
     return false;

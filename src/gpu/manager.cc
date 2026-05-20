@@ -7,8 +7,7 @@
 namespace gpu {
 
 GpuResourceManager::GpuResourceManager(
-    const core::Options &options,
-    std::vector<std::pair<int, std::unique_ptr<GpuDevice>>> devices)
+    const core::Options &options, std::vector<std::pair<int, std::unique_ptr<GpuDevice>>> devices)
     : ResourceManager(options), pending_devices_(std::move(devices)) {}
 
 bool GpuResourceManager::Init() {

@@ -7,15 +7,11 @@
 #include <string_view>
 
 #include "core/constants.h"
+#include "util/clock.h"
 #include "util/log.h"
 #include "util/win_util.h"
 
-#if !IS_WINDOWS
-#  include <unistd.h>
-#endif
-
 #define LMPU64 "%" PRIu64
-#define LMPI64 "%" PRIi64
 
 namespace cpu {
 
@@ -34,15 +30,6 @@ using UniqueFile = std::unique_ptr<FILE, FileCloser>;
 }  // namespace
 
 #if !IS_WINDOWS
-int GetJiffyMillisecond() {
-  long freq = sysconf(_SC_CLK_TCK);
-  if (freq <= 0) {
-    // Defensive: fall back to 10 ms / jiffy (HZ=100), a common Linux default.
-    return 10;
-  }
-  return static_cast<int>(kMillisecondsPerSecond / freq);
-}
-
 bool GetCpuProcStat(CpuStatInfo &info) {
   // Constrain `%s` width to avoid buffer overflow.
   char buffer[kSmallBufferLength];
@@ -53,9 +40,9 @@ bool GetCpuProcStat(CpuStatInfo &info) {
   }
   constexpr auto kStatFormat =
       "%127s" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
-  const int count = std::fscanf(
-      fp.get(), kStatFormat, buffer, &info.user, &info.nice, &info.system, &info.idle, &info.iowait,
-      &info.irq, &info.softirq, &info.steal, &info.guest, &info.guest_nice);
+  const int count = std::fscanf(fp.get(), kStatFormat, buffer, &info.user, &info.nice, &info.system,
+                                &info.idle, &info.iowait, &info.irq, &info.softirq, &info.steal,
+                                &info.guest, &info.guest_nice);
   if (count != 11) {
     LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
     throw std::runtime_error("malformed /proc/stat");
@@ -65,6 +52,18 @@ bool GetCpuProcStat(CpuStatInfo &info) {
     throw std::runtime_error("unexpected /proc/stat content");
   }
   return true;
+}
+
+uint64_t GetBusyTicks(const CpuStatInfo &info) {
+  // Match the historical "concerned" definition: count user-space, niced
+  // user-space, and kernel-space time only. Idle/iowait/steal etc. are
+  // explicitly excluded so that "system load" reflects what loadmaster's
+  // controller cares about.
+  return info.user + info.nice + info.system;
+}
+
+uint64_t TicksToMilliseconds(uint64_t ticks) {
+  return ticks * static_cast<uint64_t>(util::GetJiffyMillisecond());
 }
 #else
 bool GetCpuProcStat(CpuStatInfo &info) {
@@ -77,9 +76,13 @@ bool GetCpuProcStat(CpuStatInfo &info) {
   uint64_t kernel_100ns = util::FiletimeTo100Ns(&kernel);
   uint64_t user_100ns = util::FiletimeTo100Ns(&user);
 
-  info.windows_concerned_100ns_ = user_100ns + (kernel_100ns - idle_100ns);
+  info.windows_concerned_100ns = user_100ns + (kernel_100ns - idle_100ns);
   return true;
 }
+
+uint64_t GetBusyTicks(const CpuStatInfo &info) { return info.windows_concerned_100ns; }
+
+uint64_t TicksToMilliseconds(uint64_t ticks) { return util::WindowsEpochToMilliseconds(ticks); }
 #endif
 
 }  // namespace cpu

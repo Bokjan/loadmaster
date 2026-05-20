@@ -82,9 +82,9 @@ bool Options::ProcessCliArguments(const cli::CliArgument &args) {
     static const SvAlgoPair algorithm_pairs[] = {
         {"default", Options::CpuAlgorithm::kDefault},
         {"rand_normal", Options::CpuAlgorithm::kRandomNormal}};
-    auto find = std::find_if(
-        std::begin(algorithm_pairs), std::end(algorithm_pairs),
-        [&args](const SvAlgoPair &pair) { return pair.first == args.cpu_algorithm; });
+    auto find =
+        std::find_if(std::begin(algorithm_pairs), std::end(algorithm_pairs),
+                     [&args](const SvAlgoPair &pair) { return pair.first == args.cpu_algorithm; });
     if (find == std::end(algorithm_pairs)) {
       LOG_ERROR("invalid CPU algorithm [%s]", args.cpu_algorithm.value().data());
       return false;
@@ -135,12 +135,11 @@ bool Options::ProcessCliArguments(const cli::CliArgument &args) {
   // GPU vendor
   if (args.gpu_vendor) {
     using SvVendorPair = std::pair<std::string_view, Options::GpuVendor>;
-    static const SvVendorPair vendor_pairs[] = {{"auto", GpuVendor::kAuto},
-                                                {"nvidia", GpuVendor::kNvidia},
-                                                {"amd", GpuVendor::kAmd}};
-    auto find = std::find_if(
-        std::begin(vendor_pairs), std::end(vendor_pairs),
-        [&args](const SvVendorPair &pair) { return pair.first == args.gpu_vendor; });
+    static const SvVendorPair vendor_pairs[] = {
+        {"auto", GpuVendor::kAuto}, {"nvidia", GpuVendor::kNvidia}, {"amd", GpuVendor::kAmd}};
+    auto find =
+        std::find_if(std::begin(vendor_pairs), std::end(vendor_pairs),
+                     [&args](const SvVendorPair &pair) { return pair.first == args.gpu_vendor; });
     if (find == std::end(vendor_pairs)) {
       LOG_ERROR("invalid GPU vendor [%s] (expected: auto/nvidia/amd)",
                 args.gpu_vendor.value().data());

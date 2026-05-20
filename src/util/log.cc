@@ -85,10 +85,9 @@ const char *Logger::GetTimeCString(LogLevel level) {
   time_t tsec = time_val.tv_sec;
   localtime_r(&tsec, &time_struct);
 #endif
-  snprintf(buffer, sizeof(buffer), "%04d%02d%02d %02d:%02d:%02d.%.6d",
-           1900 + time_struct.tm_year, 1 + time_struct.tm_mon, time_struct.tm_mday,
-           time_struct.tm_hour, time_struct.tm_min, time_struct.tm_sec,
-           static_cast<int>(time_val.tv_usec));
+  snprintf(buffer, sizeof(buffer), "%04d%02d%02d %02d:%02d:%02d.%.6d", 1900 + time_struct.tm_year,
+           1 + time_struct.tm_mon, time_struct.tm_mday, time_struct.tm_hour, time_struct.tm_min,
+           time_struct.tm_sec, static_cast<int>(time_val.tv_usec));
   return buffer;
 }
 

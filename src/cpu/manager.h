@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "stat.h"
@@ -13,10 +14,10 @@ namespace cpu {
 
 class CpuResourceManager : public core::ResourceManager {
  public:
-  virtual void CreateWorkerThreads() override final;
-  virtual void RequestWorkerThreadsStop() override final;
-  virtual void JoinWorkerThreads() override final;
-  virtual void Schedule(TimePoint time_point) override final;
+  void CreateWorkerThreads() override final;
+  void RequestWorkerThreadsStop() override final;
+  void JoinWorkerThreads() override final;
+  void Schedule(TimePoint time_point) override final;
 
  protected:
   explicit CpuResourceManager(const core::Options &options);
@@ -30,7 +31,9 @@ class CpuResourceManager : public core::ResourceManager {
   int GetProcessAverageLoad() const { return process_sampler_.GetMean(); }
 
  private:
-  std::vector<CpuWorkerContext> workers_;
+  // unique_ptr because CpuWorkerContext owns non-movable members
+  // (std::atomic, std::jthread).
+  std::vector<std::unique_ptr<CpuWorkerContext>> workers_;
   int base_loop_count_;
   CpuStatInfo cpu_stat_;
   util::RollingSampler<int> system_sampler_;

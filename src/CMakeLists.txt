@@ -31,6 +31,7 @@ target_sources(loadmaster PRIVATE
     gpu/amd/hip_driver.cc
     gpu/amd/amd_device.cc
     util/log.cc
+    util/clock.cc
     util/normal_dist.cc
     util/proc_stat.cc
 )

@@ -14,8 +14,8 @@ struct CliArgument {
   // GPU
   std::optional<int> gpu_load;
   std::optional<int> gpu_memory_mb;
-  std::optional<std::string_view> gpu_indices;   // e.g. "0,2,3" or "all"
-  std::optional<std::string_view> gpu_vendor;    // auto / nvidia / amd
+  std::optional<std::string_view> gpu_indices;  // e.g. "0,2,3" or "all"
+  std::optional<std::string_view> gpu_vendor;   // auto / nvidia / amd
 };
 
 }  // namespace cli

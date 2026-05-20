@@ -3,9 +3,9 @@
 #include <utility>
 #include <vector>
 
-#include "manager.h"
 #include "amd/amd_device.h"
 #include "amd/hip_driver.h"
+#include "manager.h"
 #include "nvidia/cuda_driver.h"
 #include "nvidia/nvidia_device.h"
 

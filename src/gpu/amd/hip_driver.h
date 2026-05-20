@@ -36,11 +36,11 @@ struct HipApi {
   hipError_t (*hipModuleLoadData)(hipModule_t *module, const void *image);
   hipError_t (*hipModuleUnload)(hipModule_t hmod);
   hipError_t (*hipModuleGetFunction)(hipFunction_t *hfunc, hipModule_t hmod, const char *name);
-  hipError_t (*hipModuleLaunchKernel)(hipFunction_t f, unsigned int gridDimX,
-                                      unsigned int gridDimY, unsigned int gridDimZ,
-                                      unsigned int blockDimX, unsigned int blockDimY,
-                                      unsigned int blockDimZ, unsigned int sharedMemBytes,
-                                      hipStream_t hStream, void **kernelParams, void **extra);
+  hipError_t (*hipModuleLaunchKernel)(hipFunction_t f, unsigned int gridDimX, unsigned int gridDimY,
+                                      unsigned int gridDimZ, unsigned int blockDimX,
+                                      unsigned int blockDimY, unsigned int blockDimZ,
+                                      unsigned int sharedMemBytes, hipStream_t hStream,
+                                      void **kernelParams, void **extra);
   hipError_t (*hipMalloc)(void **ptr, size_t size);
   hipError_t (*hipFree)(void *ptr);
   hipError_t (*hipMemset)(void *dst, int value, size_t sizeBytes);

@@ -1,9 +1,9 @@
 #include "proc_stat.h"
 
+#include <algorithm>
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
-#include <algorithm>
 #include <memory>
 
 #if !IS_WINDOWS
@@ -11,6 +11,7 @@
 #endif
 
 #include "core/constants.h"
+#include "util/clock.h"
 #include "util/log.h"
 #include "util/win_util.h"
 
@@ -79,17 +80,6 @@ struct StatmFields final {
 };
 
 #if !IS_WINDOWS
-static int GetJiffyMillisecond() {
-  static auto ret = []() -> int {
-    long freq = sysconf(_SC_CLK_TCK);
-    if (freq <= 0) {
-      return 10;  // sensible fallback (HZ=100)
-    }
-    return static_cast<int>(kMillisecondsPerSecond / freq);
-  }();
-  return ret;
-}
-
 static int GetPageSize() {
   static auto ret = sysconf(_SC_PAGE_SIZE);
   return ret;

@@ -42,15 +42,13 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
   std::uniform_int_distribution<int> byte_dis(0, 255);
   const auto seed = static_cast<std::byte>(byte_dis(generator_));
 
-  const size_t threshold_bytes =
-      static_cast<size_t>(kMemoryNoThreadSpawnThresholdMiB) * kMebiByte;
+  const size_t threshold_bytes = static_cast<size_t>(kMemoryNoThreadSpawnThresholdMiB) * kMebiByte;
   if (byte_count >= threshold_bytes) {
     // Spawn a one-shot background thread to allocate + fill the block,
     // so the main scheduling loop is not blocked on a potentially long
     // memset/page-fault storm.
-    bg_alloc_thread_ = std::jthread([this, byte_count, seed](std::stop_token) {
-      AllocateAndFill(byte_count, seed);
-    });
+    bg_alloc_thread_ = std::jthread(
+        [this, byte_count, seed](std::stop_token) { AllocateAndFill(byte_count, seed); });
   } else {
     AllocateAndFill(byte_count, seed);
   }

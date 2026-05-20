@@ -85,8 +85,8 @@ bool DoLoad() {
   // we accept any without locking to a version.
   static const char *const kHipCandidates[] = {"libamdhip64.so", "libamdhip64.so.6",
                                                "libamdhip64.so.5", nullptr};
-  static const char *const kRtcCandidates[] = {"libhiprtc.so", "libhiprtc.so.6",
-                                               "libhiprtc.so.5", nullptr};
+  static const char *const kRtcCandidates[] = {"libhiprtc.so", "libhiprtc.so.6", "libhiprtc.so.5",
+                                               nullptr};
 
   g_hip_handle = DlopenAny(kHipCandidates);
   if (g_hip_handle == nullptr) {
@@ -159,9 +159,10 @@ bool DoLoad() {
         (g_api.hipGetErrorString != nullptr) ? g_api.hipGetErrorString(probe_rc) : "<unknown>";
     LOG_INFO("HIP runtime present but unusable (hipGetDeviceCount rc=%d: %s)", probe_rc,
              msg ? msg : "<unknown>");
-    LOG_INFO("Hint: check that the user is in the 'render'/'video' group, that "
-             "/dev/kfd is accessible, and that the GPU's gfx arch is supported "
-             "by the installed ROCm version.");
+    LOG_INFO(
+        "Hint: check that the user is in the 'render'/'video' group, that "
+        "/dev/kfd is accessible, and that the GPU's gfx arch is supported "
+        "by the installed ROCm version.");
     return false;
   }
   if (probe_count <= 0) {
