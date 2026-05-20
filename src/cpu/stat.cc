@@ -11,6 +11,11 @@
 #include "util/log.h"
 #include "util/win_util.h"
 
+#if IS_MACOS
+#  include <mach/mach.h>
+#  include <mach/mach_host.h>
+#endif
+
 #define LMPU64 "%" PRIu64
 
 namespace cpu {
@@ -29,7 +34,7 @@ using UniqueFile = std::unique_ptr<FILE, FileCloser>;
 
 }  // namespace
 
-#if !IS_WINDOWS
+#if IS_LINUX
 bool GetCpuProcStat(CpuStatInfo &info) {
   // Constrain `%s` width to avoid buffer overflow.
   char buffer[kSmallBufferLength];
@@ -65,7 +70,42 @@ uint64_t GetBusyTicks(const CpuStatInfo &info) {
 uint64_t TicksToMilliseconds(uint64_t ticks) {
   return ticks * static_cast<uint64_t>(util::GetJiffyMillisecond());
 }
-#else
+#elif IS_MACOS
+// macOS has no /proc; query the Mach host for system-wide CPU tick counters.
+// host_cpu_load_info_data_t reports user / system / idle / nice ticks summed
+// across all CPUs, expressed in the same unit as Linux jiffies (driven by
+// sysconf(_SC_CLK_TCK), typically 100 Hz on macOS), so the rest of the
+// pipeline (GetBusyTicks / TicksToMilliseconds) works unchanged.
+bool GetCpuProcStat(CpuStatInfo &info) {
+  host_cpu_load_info_data_t load{};
+  mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
+  const kern_return_t kr = ::host_statistics64(::mach_host_self(), HOST_CPU_LOAD_INFO,
+                                               reinterpret_cast<host_info64_t>(&load), &count);
+  if (kr != KERN_SUCCESS) {
+    LOG_ERROR("host_statistics64(HOST_CPU_LOAD_INFO) failed: kr=%d", kr);
+    throw std::runtime_error("host_statistics64 failed");
+  }
+  info.user       = load.cpu_ticks[CPU_STATE_USER];
+  info.nice       = load.cpu_ticks[CPU_STATE_NICE];
+  info.system     = load.cpu_ticks[CPU_STATE_SYSTEM];
+  info.idle       = load.cpu_ticks[CPU_STATE_IDLE];
+  info.iowait     = 0;  // not reported by Mach
+  info.irq        = 0;
+  info.softirq    = 0;
+  info.steal      = 0;
+  info.guest      = 0;
+  info.guest_nice = 0;
+  return true;
+}
+
+uint64_t GetBusyTicks(const CpuStatInfo &info) {
+  return info.user + info.nice + info.system;
+}
+
+uint64_t TicksToMilliseconds(uint64_t ticks) {
+  return ticks * static_cast<uint64_t>(util::GetJiffyMillisecond());
+}
+#else  // IS_WINDOWS
 bool GetCpuProcStat(CpuStatInfo &info) {
   FILETIME idle, kernel, user;
   if (!GetSystemTimes(&idle, &kernel, &user)) {

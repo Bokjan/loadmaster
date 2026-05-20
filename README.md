@@ -26,6 +26,8 @@ virtually any distro from the last decade, use the helper scripts in
 | Linux x86_64   | `scripts/build_linux.sh`               (host auto-detected) | `dist/loadmaster-x86_64`             |
 | Linux aarch64  | `scripts/build_linux.sh --arch aarch64` (run on aarch64 host) | `dist/loadmaster-aarch64`            |
 | Windows x86_64 | `scripts\build_windows.ps1`            (Windows + VS 2022)   | `dist/loadmaster-windows-x86_64.exe` |
+| macOS arm64    | `scripts/build_macos.sh`               (Apple Silicon host)  | `dist/loadmaster-macos-arm64`        |
+| macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (Apple Silicon or Intel host) | `dist/loadmaster-macos-x86_64`       |
 
 The Linux script only requires Docker. It builds inside the
 manylinux2014 image (CentOS 7 / glibc 2.17), strips the result, and
@@ -42,6 +44,18 @@ Redistributable on the target machine. The NVIDIA GPU path works out of
 the box with any standard NVIDIA driver install (`nvcuda.dll` lives in
 `C:\Windows\System32`); the AMD GPU path requires the AMD HIP SDK for
 Windows installed and on the `PATH` of the final user.
+
+The macOS script uses the Xcode Command Line Tools (`AppleClang` +
+`libc++` + `ld64`) and CMake; install the former with
+`xcode-select --install` and the latter via Homebrew (`brew install
+cmake`) if needed. Unlike Linux/Windows the binary is *not* statically
+linked: Apple does not ship static archives for `libc++`/`libSystem`,
+so `loadmaster` links against the OS-provided dylibs (which are part of
+the macOS ABI guarantee). Pick the deployment target via
+`CMAKE_OSX_DEPLOYMENT_TARGET` (the script defaults to 11.0). The GPU
+module is automatically a no-op on macOS because neither the NVIDIA
+CUDA driver nor the AMD HIP runtime is shipped/supported on Apple
+platforms; CPU and memory modules behave the same as on Linux/Windows.
 
 # Workload
 ## CPU
@@ -111,6 +125,11 @@ itself; other modules (CPU/memory) still run normally.
 - On Windows the runtime libraries we look for are `nvcuda.dll` (NVIDIA,
   ships with the driver) and `amdhip64*.dll` + `hiprtc*.dll` (AMD, ships
   with the HIP SDK).
+- macOS has no supported NVIDIA / AMD GPU compute stack (Apple dropped
+  the NVIDIA driver after macOS 10.13 and ROCm/HIP has never targeted
+  Darwin). The GPU module disables itself silently on macOS; if you
+  want to drive Apple-Silicon GPUs in the future, that would need a
+  Metal-based backend rather than the existing CUDA/HIP loaders.
 
 # Usage Sample
 ```bash

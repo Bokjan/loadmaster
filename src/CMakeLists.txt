@@ -79,6 +79,12 @@ target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 #     incompatible with a fully-static (-static) executable on glibc.
 #     Link libstdc++/libgcc statically so the binary is portable across
 #     distros while libc/libdl stay dynamic.
+#   * macOS/AppleClang:
+#     Apple does not support / does not ship static libc++ or libSystem
+#     archives, and `-static-libstdc++ -static-libgcc` are GCC-only flags
+#     that AppleClang silently accepts but ld64 then rejects. We rely on
+#     the system-provided libc++.dylib + libSystem.dylib, which are
+#     guaranteed-present on every supported macOS version.
 #   * Windows/MSVC:
 #     Use the static C/C++ runtime (/MT, /MTd in Debug) so the binary
 #     does not require the Visual C++ Redistributable on the target
@@ -90,7 +96,21 @@ if(LOADMASTER_STATIC_LINK)
         # CMake 3.15+: pick the static runtime via this property.
         set_property(TARGET loadmaster PROPERTY
                      MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    elseif(APPLE)
+        # No-op: see comment above. Honoring the option here would just
+        # produce a broken link line. We keep the option ON by default for
+        # cross-platform parity in build scripts.
     else()
         target_link_options(loadmaster PRIVATE -static-libstdc++ -static-libgcc)
     endif()
+endif()
+
+# macOS: link the system frameworks the Mach / libproc APIs ultimately
+# resolve through. Apple's libc/dyld pulls them in transparently when
+# present, so this is mostly belt-and-braces; explicitly listing them
+# makes the dependency obvious and protects against future toolchain
+# changes that might drop implicit linking.
+if(APPLE)
+    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+    target_link_libraries(loadmaster PRIVATE ${COREFOUNDATION_FRAMEWORK})
 endif()

@@ -10,6 +10,11 @@
 #  include <unistd.h>
 #endif
 
+#if IS_MACOS
+#  include <libproc.h>
+#  include <sys/resource.h>
+#endif
+
 #include "core/constants.h"
 #include "util/clock.h"
 #include "util/log.h"
@@ -24,7 +29,7 @@ namespace util {
 
 namespace {
 
-#if !IS_WINDOWS
+#if IS_LINUX
 // RAII wrapper for FILE*.
 struct FileCloser {
   void operator()(FILE *fp) const noexcept {
@@ -38,7 +43,14 @@ using UniqueFile = std::unique_ptr<FILE, FileCloser>;
 
 }  // namespace
 
+// Used by all platforms to throttle the per-process stat refresh rate.
 constexpr int kProcStatIntervalMS = 500;
+
+#if IS_LINUX
+// /proc/<pid>/stat and /proc/<pid>/statm parsing helpers. These types and
+// constants are Linux-specific (Windows uses GetProcessTimes / macOS uses
+// proc_pid_rusage) so we keep them inside the IS_LINUX guard to avoid
+// "unused" diagnostics on the other platforms.
 constexpr int kTaskCommLen = 16;
 constexpr int kStatFieldsCount = 22;
 constexpr int kStatmFieldsCount = 7;
@@ -79,7 +91,6 @@ struct StatmFields final {
   uint64_t dt;
 };
 
-#if !IS_WINDOWS
 static int GetPageSize() {
   static auto ret = sysconf(_SC_PAGE_SIZE);
   return ret;
@@ -94,7 +105,7 @@ ProcStat::ProcStat() {
 #endif
 }
 
-#if !IS_WINDOWS
+#if IS_LINUX
 // Parse /proc/<pid>/stat into `stat`. Robust against process names that
 // contain spaces or parentheses (the `comm` field is wrapped in parens).
 //
@@ -169,7 +180,43 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   jiffies_self_ = jiffies_self;
   jiffies_child_ = jiffies_child;
 }
-#else
+#elif IS_MACOS
+// macOS has no /proc; query libproc for absolute CPU time of this process.
+// `rusage_info_v2` exposes ri_user_time / ri_system_time in nanoseconds of
+// machine time, accumulated across the entire process tree we care about
+// here (current process + already-reaped children's time is already folded
+// in by the kernel).
+void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
+  auto elapsed_ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
+  if (force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
+    return;
+  }
+  rusage_info_current rusage{};
+  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2,
+                        reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
+    LOG_ERROR("proc_pid_rusage failed for pid %d", pid_);
+    return;
+  }
+  // Both are uint64_t nanoseconds; combine into a single "self CPU ns"
+  // counter. We reuse jiffies_self_ as the running total (in ns here);
+  // its semantics on macOS differ from Linux but it's only used as a
+  // monotonic baseline for diffs below, never exposed.
+  const uint64_t cpu_ns_total = rusage.ri_user_time + rusage.ri_system_time;
+  if (time_point_.time_since_epoch().count() == 0) {
+    LOG_DEBUG("first time");
+  } else {
+    const uint64_t cpu_ns_diff = cpu_ns_total - jiffies_self_;
+    const auto cpu_ms = static_cast<int64_t>(cpu_ns_diff / 1'000'000ULL);
+    if (elapsed_ms > 0) {
+      cpu_load_cached_ = static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * 100.0);
+    }
+  }
+  time_point_ = now;
+  jiffies_self_ = cpu_ns_total;
+  jiffies_child_ = 0;  // unused on macOS
+}
+#else  // IS_WINDOWS
 void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
@@ -196,7 +243,7 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
 }
 #endif
 
-#if !IS_WINDOWS
+#if IS_LINUX
 uint64_t ProcStat::GetMemory() const {
   StatmFields statm{};
   char file_path[kSmallBufferLength];
@@ -216,7 +263,18 @@ uint64_t ProcStat::GetMemory() const {
   }
   return static_cast<uint64_t>(statm.size * GetPageSize());
 }
-#else
+#elif IS_MACOS
+uint64_t ProcStat::GetMemory() const {
+  rusage_info_current rusage{};
+  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2,
+                        reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
+    LOG_ERROR("proc_pid_rusage failed for pid %d", pid_);
+    return 0;
+  }
+  // ri_resident_size is already in bytes.
+  return rusage.ri_resident_size;
+}
+#else  // IS_WINDOWS
 uint64_t ProcStat::GetMemory() const {
   APP_MEMORY_INFORMATION mem_info;
   constexpr auto info_cls = ProcessAppMemoryInfo;

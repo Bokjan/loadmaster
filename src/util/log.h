@@ -60,23 +60,33 @@ void SetDefaultLogger(Logger *ptr);
 
 }  // namespace util
 
-#define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                                           \
-  (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl),                  \
-           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__, \
-           ##__VA_ARGS__)
+// LOG_* helpers. We use C++20's __VA_OPT__(,) instead of GCC's
+// `, ##__VA_ARGS__` extension so that all three supported toolchains
+// (Clang, GCC, MSVC with /Zc:preprocessor) compile these macros without
+// any compiler-specific extension warnings:
+//   * Clang would warn `-Wgnu-zero-variadic-macro-arguments` on `, ##__VA_ARGS__`.
+//   * GCC accepts it but it's non-standard.
+//   * MSVC's standards-conformant preprocessor (/Zc:preprocessor) does
+//     not implement the `##` swallow-the-comma trick.
+// __VA_OPT__ is part of C++20 and is supported by Clang 9+, GCC 8+
+// (full in 10+), and MSVC 19.25+ (VS 2019 16.5+) under /Zc:preprocessor.
+#define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                                            \
+  (p)->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", (p)->GetTimeCString(lvl),                   \
+           util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), __LINE__   \
+           __VA_OPT__(,) __VA_ARGS__)
 #define LOG_DEFAULT_FORWARD(lvl, fmt, ...) \
-  LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt, ##__VA_ARGS__)
-#define LOG_TRACE(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt, ##__VA_ARGS__)
-#define LOG_DEBUG(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kDebug, fmt, ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kInfo, fmt, ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt, ##__VA_ARGS__)
-#define LOG_ERROR(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt, ##__VA_ARGS__)
-#define LOG_ALL(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt, ##__VA_ARGS__)
+  LOG_GENERAL_FORWARD(util::logger_internal::g_default_logger, lvl, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_TRACE(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kTrace, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_DEBUG(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kDebug, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_INFO(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kInfo, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_WARN(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kWarn, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_ERROR(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kError, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_ALL(fmt, ...) LOG_DEFAULT_FORWARD(::util::Logger::kAll, fmt __VA_OPT__(,) __VA_ARGS__)
 // LOG_FATAL logs and aborts immediately. Use it ONLY for unrecoverable bugs.
 // For "startup failed, exit cleanly" cases, log at ERROR/WARN and return a
 // status to the caller, then exit(EXIT_FAILURE) from main.
-#define LOG_FATAL(fmt, ...)                                          \
-  do {                                                               \
-    LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt, ##__VA_ARGS__); \
-    ::util::logger_internal::FatalAbort();                           \
+#define LOG_FATAL(fmt, ...)                                                             \
+  do {                                                                                  \
+    LOG_DEFAULT_FORWARD(::util::Logger::kFatal, fmt __VA_OPT__(,) __VA_ARGS__);         \
+    ::util::logger_internal::FatalAbort();                                              \
   } while (false)

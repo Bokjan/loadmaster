@@ -8,6 +8,26 @@
 #    endif
 #endif
 
+// macOS / Darwin (XNU). Has POSIX dlopen/sigaction/sysconf, but no /proc
+// filesystem -- CPU / memory stats use Mach + libproc instead.
+#ifndef IS_MACOS
+#    if defined(__APPLE__) && defined(__MACH__)
+#        define IS_MACOS (1)
+#    else
+#        define IS_MACOS (0)
+#    endif
+#endif
+
+// Linux (specifically: /proc-based stats path). Anything that is neither
+// Windows nor macOS is currently treated as Linux.
+#ifndef IS_LINUX
+#    if !IS_WINDOWS && !IS_MACOS
+#        define IS_LINUX (1)
+#    else
+#        define IS_LINUX (0)
+#    endif
+#endif
+
 #if IS_WINDOWS
 // Avoid <windows.h> dragging in winsock1, GDI, and the min/max macros that
 // would clobber std::min / std::max. These #defines must precede every
