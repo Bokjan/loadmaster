@@ -28,7 +28,8 @@ bool CpuResourceManagerDefault::Init() {
   return this->ConstructWorkerThreads(count);
 }
 
-void CpuResourceManagerDefault::AdjustWorkerLoad(TimePoint time_point, int system_load) {
+void CpuResourceManagerDefault::AdjustWorkerLoad([[maybe_unused]] TimePoint time_point,
+                                                 [[maybe_unused]] int system_load) {
   auto load_target = options_.GetCpuLoad();
   auto load_demand = this->CalculateLoadDemand(load_target);
   load_demand = std::clamp(load_demand, 0, load_target);

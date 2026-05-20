@@ -1,8 +1,10 @@
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
 
 #include "cli/cli.h"
+#include "core/constants.h"
 #include "core/runtime.h"
 #include "core/signal_flag.h"
 #include "util/log.h"

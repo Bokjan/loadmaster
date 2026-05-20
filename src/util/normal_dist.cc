@@ -29,7 +29,8 @@ double NormalDistribution::CDF(const double x) const {
   return 0.5 * (1 + erf(t));
 }
 
-double NormalDistribution::FindXAxisPosition(const double target, FnBinSearchCompare compare,
+double NormalDistribution::FindXAxisPosition([[maybe_unused]] const double target,
+                                             FnBinSearchCompare compare,
                                              const int max_iteration) const {
   constexpr double kMaxRange = 100'000;
   constexpr double kLeftRightEpsilon = 1e-7;

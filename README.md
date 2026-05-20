@@ -6,12 +6,40 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 - CMake >= 3.12
 
 # Build & Run
-- Typical CMake building routine (see `release_build.sh` for a one-shot helper).
+- Typical CMake building routine (see `release_build.sh` for a one-shot
+  local helper).
 - libstdc++/libgcc are linked statically by default so the binary is portable
   across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
   the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`.
 - It's recommended to rename the executable as you want.
+
+## Portable release builds
+Because we link glibc dynamically on Linux (to keep `dlopen` working for
+the GPU module), a binary compiled on a modern distro will refuse to
+start on machines with an older glibc. To produce binaries that run on
+virtually any distro from the last decade, use the helper scripts in
+`scripts/`:
+
+| Target | Script | Output |
+|--------|--------|--------|
+| Linux x86_64   | `scripts/build_x86_64.sh`  (run on any x86_64 Linux host)    | `dist/loadmaster-x86_64`             |
+| Linux aarch64  | `scripts/build_aarch64.sh` (run on an aarch64 Linux host)    | `dist/loadmaster-aarch64`            |
+| Windows x86_64 | `scripts\build_windows.ps1` (run on Windows w/ VS 2022)      | `dist/loadmaster-windows-x86_64.exe` |
+
+The Linux scripts only require Docker. They build inside the
+manylinux2014 image (CentOS 7 / glibc 2.17), strip the result, and drop
+it into `dist/`. Cross-architecture Linux builds (e.g. arm64 from
+x86_64) work via qemu-user-static binfmt but are much slower; running
+each script on its native host is recommended.
+
+The Windows script uses MSVC 2022 + CMake (both bundled with "Build
+Tools for Visual Studio 2022") and statically links the C/C++ runtime
+(`/MT`), so the resulting `.exe` does not need the Visual C++
+Redistributable on the target machine. The NVIDIA GPU path works out of
+the box with any standard NVIDIA driver install (`nvcuda.dll` lives in
+`C:\Windows\System32`); the AMD GPU path requires the AMD HIP SDK for
+Windows installed and on the `PATH` of the final user.
 
 # Workload
 ## CPU
@@ -76,8 +104,11 @@ itself; other modules (CPU/memory) still run normally.
 - WSL2 is **not** supported on AMD: ROCm's WSL story is preview-only and
   doesn't expose `/dev/kfd` for most cards (including RDNA4 like RX 9070 XT).
   On WSL2 the AMD path short-circuits with a clear diagnostic and the rest
-  of loadmaster (CPU/Memory/NVIDIA) keeps working. Run on native Linux for
-  full AMD support.
+  of loadmaster (CPU/Memory/NVIDIA) keeps working. Run on native Linux or
+  on Windows with the HIP SDK for full AMD support.
+- On Windows the runtime libraries we look for are `nvcuda.dll` (NVIDIA,
+  ships with the driver) and `amdhip64*.dll` + `hiprtc*.dll` (AMD, ships
+  with the HIP SDK).
 
 # Usage Sample
 ```bash

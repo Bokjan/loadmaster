@@ -1,15 +1,24 @@
 #pragma once
 
 #ifndef IS_WINDOWS
-#  if defined(_WIN32) || defined(_WIN64)
-#    define IS_WINDOWS (1)
-#  else
-#    define IS_WINDOWS (0)
-#  endif
+#    if defined(_WIN32) || defined(_WIN64)
+#        define IS_WINDOWS (1)
+#    else
+#        define IS_WINDOWS (0)
+#    endif
 #endif
 
 #if IS_WINDOWS
-#  include "Windows.h"
+// Avoid <windows.h> dragging in winsock1, GDI, and the min/max macros that
+// would clobber std::min / std::max. These #defines must precede every
+// inclusion of <windows.h> in the project.
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#    endif
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <windows.h>
 #endif
 
 #include <cstdint>

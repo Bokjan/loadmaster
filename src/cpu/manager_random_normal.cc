@@ -47,7 +47,8 @@ bool CpuResourceManagerRandomNormal::Init() {
   return this->ConstructWorkerThreads(count);
 }
 
-void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point, int system_load) {
+void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point,
+                                                      [[maybe_unused]] int system_load) {
   this->UpdateLoadTarget(time_point);
   auto load_demand = this->CalculateLoadDemand(load_target_);
   load_demand = std::clamp(load_demand, 0, load_target_);

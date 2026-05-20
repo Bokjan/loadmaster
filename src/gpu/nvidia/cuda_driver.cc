@@ -1,10 +1,10 @@
 #include "cuda_driver.h"
 
-#include <dlfcn.h>
-
 #include <cstring>
 #include <mutex>
 
+#include "core/constants.h"
+#include "util/dl.h"
 #include "util/log.h"
 
 namespace gpu::nvidia {
@@ -15,15 +15,13 @@ CudaApi g_api{};
 bool g_loaded = false;
 bool g_load_attempted = false;
 std::mutex g_load_mutex;
-void *g_handle = nullptr;
+util::DlHandle g_handle = nullptr;
 
 template <typename Fn>
-bool Resolve(void *handle, const char *name, Fn &slot) {
-  // dlsym returns void*; cast through size-equal integer to silence
-  // -Wpedantic on function-pointer conversions.
-  void *sym = ::dlsym(handle, name);
+bool Resolve(util::DlHandle handle, const char *name, Fn &slot) {
+  void *sym = util::Dlsym(handle, name);
   if (sym == nullptr) {
-    LOG_WARN("dlsym(libcuda, %s) failed: %s", name, dlerror());
+    LOG_WARN("Dlsym(libcuda, %s) failed: %s", name, util::Dlerror());
     return false;
   }
   slot = reinterpret_cast<Fn>(sym);
@@ -31,15 +29,25 @@ bool Resolve(void *handle, const char *name, Fn &slot) {
 }
 
 bool DoLoad() {
-  // The CUDA driver lib is published with the v2 ABI on every modern
-  // system; cuMemAlloc / cuMemFree / cuCtxCreate / cuMemsetD8 historically
-  // need the _v2 suffix for the stable 64-bit pointer ABI.
-  g_handle = ::dlopen("libcuda.so.1", RTLD_LAZY | RTLD_LOCAL);
+  // Library candidates by platform.
+  //   * Linux:   libcuda.so.1 ships with the NVIDIA driver; .so as a
+  //              fallback for unusual distributions.
+  //   * Windows: nvcuda.dll lives in C:\Windows\System32 and is in the
+  //              default DLL search path with a stock NVIDIA driver
+  //              install.
+  static const char *const kCandidates[] = {
+#if IS_WINDOWS
+      "nvcuda.dll",
+#else
+      "libcuda.so.1",
+      "libcuda.so",
+#endif
+      nullptr,
+  };
+
+  g_handle = util::DlopenAny(kCandidates);
   if (g_handle == nullptr) {
-    g_handle = ::dlopen("libcuda.so", RTLD_LAZY | RTLD_LOCAL);
-  }
-  if (g_handle == nullptr) {
-    LOG_INFO("libcuda.so.1 not available: %s", dlerror());
+    LOG_INFO("CUDA driver shared library not available: %s", util::Dlerror());
     return false;
   }
 
@@ -63,7 +71,7 @@ bool DoLoad() {
 
   if (!ok) {
     LOG_WARN("failed to resolve all CUDA driver symbols");
-    ::dlclose(g_handle);
+    util::Dlclose(g_handle);
     g_handle = nullptr;
     return false;
   }
@@ -71,7 +79,7 @@ bool DoLoad() {
   const CUresult init_rc = g_api.cuInit(0);
   if (init_rc != CUDA_SUCCESS) {
     LOG_INFO("cuInit failed (rc=%d), no usable NVIDIA GPU", init_rc);
-    ::dlclose(g_handle);
+    util::Dlclose(g_handle);
     g_handle = nullptr;
     std::memset(&g_api, 0, sizeof(g_api));
     return false;

@@ -1,13 +1,16 @@
 #include "hip_driver.h"
 
-#include <dlfcn.h>
-#include <sys/stat.h>
-
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 
+#include "core/constants.h"
+#include "util/dl.h"
 #include "util/log.h"
+
+#if !IS_WINDOWS
+#    include <sys/stat.h>
+#endif
 
 namespace gpu::amd {
 
@@ -17,9 +20,10 @@ HipApi g_api{};
 bool g_loaded = false;
 bool g_load_attempted = false;
 std::mutex g_load_mutex;
-void *g_hip_handle = nullptr;
-void *g_rtc_handle = nullptr;
+util::DlHandle g_hip_handle = nullptr;
+util::DlHandle g_rtc_handle = nullptr;
 
+#if !IS_WINDOWS
 // Detect WSL2. AMD's ROCm runtime currently has only narrow, preview-quality
 // support inside WSL2 (a few RDNA3 SKUs on ROCm >= 6.1) -- newer cards (e.g.
 // RDNA4 / RX 9070 XT) and most setups will load libamdhip64.so but fail at
@@ -28,13 +32,10 @@ void *g_rtc_handle = nullptr;
 // virtualization layer. Rather than letting the user chase that error, we
 // short-circuit with a clear diagnostic.
 bool IsRunningInsideWsl() {
-  // Marker created by WSL's binfmt setup. Present on virtually every WSL2
-  // distro, absent on real Linux.
   struct stat st {};
   if (::stat("/proc/sys/fs/binfmt_misc/WSLInterop", &st) == 0) {
     return true;
   }
-  // Fallback: kernel release string contains "microsoft" / "WSL" on WSL2.
   if (FILE *fp = std::fopen("/proc/version", "r"); fp != nullptr) {
     char buf[512] = {0};
     const size_t n = std::fread(buf, 1, sizeof(buf) - 1, fp);
@@ -47,13 +48,14 @@ bool IsRunningInsideWsl() {
   }
   return false;
 }
+#endif
 
 template <typename Fn>
-bool Resolve(void *handle, const char *name, Fn &slot, bool required = true) {
-  void *sym = ::dlsym(handle, name);
+bool Resolve(util::DlHandle handle, const char *name, Fn &slot, bool required = true) {
+  void *sym = util::Dlsym(handle, name);
   if (sym == nullptr) {
     if (required) {
-      LOG_WARN("dlsym(%s) failed: %s", name, dlerror());
+      LOG_WARN("Dlsym(%s) failed: %s", name, util::Dlerror());
     }
     return false;
   }
@@ -61,51 +63,65 @@ bool Resolve(void *handle, const char *name, Fn &slot, bool required = true) {
   return true;
 }
 
-void *DlopenAny(const char *const *names) {
-  for (int i = 0; names[i] != nullptr; ++i) {
-    void *h = ::dlopen(names[i], RTLD_LAZY | RTLD_LOCAL);
-    if (h != nullptr) {
-      return h;
-    }
-  }
-  return nullptr;
-}
-
 bool DoLoad() {
-  // WSL2 short-circuit. See IsRunningInsideWsl() for the rationale.
+#if !IS_WINDOWS
   if (IsRunningInsideWsl()) {
     LOG_INFO(
         "AMD GPU module disabled: ROCm/HIP is not usable under WSL2 for most "
         "configurations (especially RDNA4 cards). Run loadmaster on native "
-        "Linux (or build a Windows version with HIP SDK) to drive an AMD GPU.");
+        "Linux (or Windows with HIP SDK) to drive an AMD GPU.");
     return false;
   }
+#endif
 
-  // Try a few SONAME variants. ROCm currently ships libamdhip64.so.<ver>;
-  // we accept any without locking to a version.
-  static const char *const kHipCandidates[] = {"libamdhip64.so", "libamdhip64.so.6",
-                                               "libamdhip64.so.5", nullptr};
-  static const char *const kRtcCandidates[] = {"libhiprtc.so", "libhiprtc.so.6", "libhiprtc.so.5",
-                                               nullptr};
+  // Library candidates by platform.
+  //   * Linux:   ROCm ships libamdhip64.so.<ver> + libhiprtc.so.<ver>
+  //   * Windows: HIP SDK for Windows ships amdhip64_<ver>.dll + hiprtc<ver>.dll
+  //              and historically also plain amdhip64.dll. We try multiple
+  //              versioned names that have shipped in HIP SDK 5.x and 6.x.
+  static const char *const kHipCandidates[] = {
+#if IS_WINDOWS
+      "amdhip64_6.dll",
+      "amdhip64_5.dll",
+      "amdhip64.dll",
+#else
+      "libamdhip64.so",
+      "libamdhip64.so.6",
+      "libamdhip64.so.5",
+#endif
+      nullptr,
+  };
+  static const char *const kRtcCandidates[] = {
+#if IS_WINDOWS
+      "hiprtc0606.dll",
+      "hiprtc0605.dll",
+      "hiprtc0604.dll",
+      "hiprtc0507.dll",
+      "hiprtc.dll",
+#else
+      "libhiprtc.so",
+      "libhiprtc.so.6",
+      "libhiprtc.so.5",
+#endif
+      nullptr,
+  };
 
-  g_hip_handle = DlopenAny(kHipCandidates);
+  g_hip_handle = util::DlopenAny(kHipCandidates);
   if (g_hip_handle == nullptr) {
-    LOG_INFO("libamdhip64.so not available: %s", dlerror());
+    LOG_INFO("HIP runtime shared library not available: %s", util::Dlerror());
     return false;
   }
-  g_rtc_handle = DlopenAny(kRtcCandidates);
+  g_rtc_handle = util::DlopenAny(kRtcCandidates);
   if (g_rtc_handle == nullptr) {
-    LOG_INFO("libhiprtc.so not available: %s", dlerror());
-    ::dlclose(g_hip_handle);
+    LOG_INFO("hipRTC shared library not available: %s", util::Dlerror());
+    util::Dlclose(g_hip_handle);
     g_hip_handle = nullptr;
     return false;
   }
 
   bool ok = true;
   // hipInit is optional / deprecated in modern HIP runtimes -- the runtime
-  // initializes lazily on the first real API call. We still try to resolve
-  // it so callers can invoke it if present, but a missing or failing
-  // hipInit must NOT prevent us from using the runtime.
+  // initializes lazily on the first real API call.
   Resolve(g_hip_handle, "hipInit", g_api.hipInit, /*required=*/false);
   ok &= Resolve(g_hip_handle, "hipGetDeviceCount", g_api.hipGetDeviceCount);
   ok &= Resolve(g_hip_handle, "hipDeviceGet", g_api.hipDeviceGet);
@@ -134,8 +150,8 @@ bool DoLoad() {
 
   if (!ok) {
     LOG_WARN("failed to resolve all HIP/hipRTC symbols");
-    ::dlclose(g_rtc_handle);
-    ::dlclose(g_hip_handle);
+    util::Dlclose(g_rtc_handle);
+    util::Dlclose(g_hip_handle);
     g_rtc_handle = nullptr;
     g_hip_handle = nullptr;
     std::memset(&g_api, 0, sizeof(g_api));
@@ -143,13 +159,8 @@ bool DoLoad() {
   }
 
   // Probe the runtime by asking how many devices it sees. HIP initializes
-  // lazily on the first call, so this exercise replaces a deprecated
-  // hipInit() check. A non-zero count is the only thing we really require
-  // here; the per-device Init() will surface more detailed errors.
+  // lazily on the first call.
   if (g_api.hipInit != nullptr) {
-    // Best-effort: some HIP versions still expect this to be called, others
-    // turned it into a no-op or will return an error. Either way, ignore
-    // the return value and keep going.
     (void)g_api.hipInit(0);
   }
   int probe_count = 0;
@@ -160,9 +171,8 @@ bool DoLoad() {
     LOG_INFO("HIP runtime present but unusable (hipGetDeviceCount rc=%d: %s)", probe_rc,
              msg ? msg : "<unknown>");
     LOG_INFO(
-        "Hint: check that the user is in the 'render'/'video' group, that "
-        "/dev/kfd is accessible, and that the GPU's gfx arch is supported "
-        "by the installed ROCm version.");
+        "Hint: on Linux check /dev/kfd permissions and that the GPU's gfx "
+        "arch is supported; on Windows ensure HIP SDK is installed and on PATH.");
     return false;
   }
   if (probe_count <= 0) {

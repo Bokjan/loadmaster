@@ -36,7 +36,7 @@ bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
   }
   const char *int_str = argv[++idx];
   int target = 0;
-#if IS_WINDOWS
+#ifdef _MSC_VER
   int affected = sscanf_s(int_str, "%d", &target);
 #else
   int affected = std::sscanf(int_str, "%d", &target);
@@ -138,11 +138,13 @@ void PrintUsage(const char *path) {
     -gm <gpu_memory>        per-device GPU memory load (MiB), default: 0
     -gi <indices>           GPU device indices, e.g. "0", "0,2,3", or "all"; default: all
     -gv <vendor>            GPU vendor: auto/nvidia/amd, default: auto)deli");
-#if IS_WINDOWS
+#ifdef _MSC_VER
   std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n", _MSC_FULL_VER / 10000000,
               _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
-#else
+#elif defined(__VERSION__)
   std::puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
+#else
+  std::puts("Built: " __DATE__ " " __TIME__);
 #endif
 }
 

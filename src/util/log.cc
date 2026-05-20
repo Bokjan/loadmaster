@@ -8,13 +8,18 @@
 #include <algorithm>
 #include <string_view>
 
-#include "core/constants.h"
+#include "core/constants.h"  // brings in <windows.h> on MSVC
 
 #if IS_WINDOWS
-#  include <Windows.h>
-#  include <cstdint>
+#    include <cstdint>
+// `struct timeval` lives in <winsock2.h>, but we don't want to bring in the
+// rest of winsock; declare it locally.
+struct timeval {
+  long tv_sec;
+  long tv_usec;
+};
 #else
-#  include <sys/time.h>
+#    include <sys/time.h>
 #endif
 
 #if IS_WINDOWS

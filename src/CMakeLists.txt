@@ -30,6 +30,7 @@ target_sources(loadmaster PRIVATE
     gpu/nvidia/nvidia_device.cc
     gpu/amd/hip_driver.cc
     gpu/amd/amd_device.cc
+    util/dl.cc
     util/log.cc
     util/clock.cc
     util/normal_dist.cc
@@ -42,10 +43,18 @@ target_compile_features(loadmaster PRIVATE cxx_std_20)
 
 target_compile_definitions(loadmaster PRIVATE SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
 
-# Warnings: keep them strict, but don't error out on the few legacy bits the
-# project still produces (let CI/devs see them and decide).
 if(MSVC)
-    target_compile_options(loadmaster PRIVATE /W4 /permissive-)
+    target_compile_options(loadmaster PRIVATE
+        /W4
+        /permissive-
+        /Zc:__cplusplus      # report the actual C++ standard via __cplusplus
+        /Zc:preprocessor     # use the conforming preprocessor (needed for our macros)
+        /utf-8               # interpret source files as UTF-8
+    )
+    target_compile_definitions(loadmaster PRIVATE
+        _CRT_SECURE_NO_WARNINGS  # we use std::sscanf etc.; their MSVC-specific
+                                 # _s variants are guarded by _MSC_VER.
+    )
 else()
     target_compile_options(loadmaster PRIVATE
         -Wall -Wextra -Wpedantic
@@ -60,17 +69,28 @@ target_compile_definitions(loadmaster PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
 
-# Threading
+# Threading. CMAKE_DL_LIBS is empty on Windows (LoadLibrary lives in
+# kernel32, auto-linked), and resolves to -ldl on Linux.
 target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 
-# Linking strategy:
-#   The GPU module dynamically opens vendor libraries (libcuda.so.1 /
-#   libamdhip64.so) at runtime via dlopen(), which is incompatible with a
-#   fully-static (`-static`) executable on glibc. We therefore link
-#   libstdc++ and libgcc statically (so the binary remains portable across
-#   distros) while letting libc and libdl stay dynamic.
+# Linking strategy.
+#   * Linux/GCC/Clang:
+#     The GPU module dlopen()s vendor libraries at runtime, which is
+#     incompatible with a fully-static (-static) executable on glibc.
+#     Link libstdc++/libgcc statically so the binary is portable across
+#     distros while libc/libdl stay dynamic.
+#   * Windows/MSVC:
+#     Use the static C/C++ runtime (/MT, /MTd in Debug) so the binary
+#     does not require the Visual C++ Redistributable on the target
+#     machine.
 option(LOADMASTER_STATIC_LINK
-       "Statically link libstdc++/libgcc into the loadmaster executable" ON)
-if(LOADMASTER_STATIC_LINK AND NOT MSVC)
-    target_link_options(loadmaster PRIVATE -static-libstdc++ -static-libgcc)
+       "Statically link the C++/runtime into the loadmaster executable" ON)
+if(LOADMASTER_STATIC_LINK)
+    if(MSVC)
+        # CMake 3.15+: pick the static runtime via this property.
+        set_property(TARGET loadmaster PROPERTY
+                     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    else()
+        target_link_options(loadmaster PRIVATE -static-libstdc++ -static-libgcc)
+    endif()
 endif()
