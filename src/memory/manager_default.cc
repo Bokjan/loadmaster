@@ -2,7 +2,8 @@
 
 #include <new>
 
-#include "core/constants.h"
+#include "constants.h"
+
 #include "core/options.h"
 #include "util/log.h"
 
@@ -53,7 +54,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     AllocateAndFill(byte_count, seed);
   }
 
-  SetLastScheduling(time_point);
+  last_scheduling_ = time_point;
 }
 
 bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
@@ -62,7 +63,7 @@ bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
     return true;
   }
   const auto time_diff =
-      std::chrono::duration_cast<std::chrono::seconds>(time_point - GetLastScheduling());
+      std::chrono::duration_cast<std::chrono::seconds>(time_point - last_scheduling_);
   return time_diff.count() > kMemoryScheduleIntervalSecond;
 }
 

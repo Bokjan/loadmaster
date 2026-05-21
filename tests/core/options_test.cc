@@ -14,6 +14,7 @@
 #include "cli/cli_argument.h"
 #include "core/constants.h"
 #include "cpu/stat.h"
+#include "gpu/constants.h"
 #include "util/log.h"
 
 #include <gtest/gtest.h>
@@ -49,11 +50,9 @@ TEST_F(OptionsTest, DefaultsMatchConstants) {
   EXPECT_EQ(opts.GetCpuLoad(), kDefaultCpuLoad);
   EXPECT_EQ(opts.GetCpuCount(), 0);
   EXPECT_EQ(opts.GetCpuAlgorithm(), Options::CpuAlgorithm::kDefault);
-  EXPECT_EQ(opts.GetMemoryBytes(),
-            static_cast<int64_t>(kDefaultMemoryLoadMiB) * kMebiByte);
+  EXPECT_EQ(opts.GetMemoryBytes(), static_cast<int64_t>(kDefaultMemoryLoadMiB) * kMebiByte);
   EXPECT_EQ(opts.GetGpuLoad(), kDefaultGpuLoad);
-  EXPECT_EQ(opts.GetGpuMemoryBytes(),
-            static_cast<int64_t>(kDefaultGpuMemoryMiB) * kMebiByte);
+  EXPECT_EQ(opts.GetGpuMemoryBytes(), static_cast<int64_t>(kDefaultGpuMemoryMiB) * kMebiByte);
   EXPECT_TRUE(opts.GpuUseAllDevices());
   EXPECT_EQ(opts.GetGpuVendor(), Options::GpuVendor::kAuto);
 }
@@ -278,10 +277,10 @@ TEST_F(OptionsTest, GpuVendorAllAcceptedTokens) {
     Options::GpuVendor expected;
   };
   const Case cases[] = {
-      {"auto",   Options::GpuVendor::kAuto},
+      {"auto", Options::GpuVendor::kAuto},
       {"nvidia", Options::GpuVendor::kNvidia},
-      {"amd",    Options::GpuVendor::kAmd},
-      {"apple",  Options::GpuVendor::kApple},
+      {"amd", Options::GpuVendor::kAmd},
+      {"apple", Options::GpuVendor::kApple},
   };
   for (const auto &c : cases) {
     Options opts;
@@ -304,6 +303,38 @@ TEST_F(OptionsTest, GpuVendorIsCaseSensitive) {
   Options opts;
   CliArgument args;
   args.gpu_vendor = std::string_view("NVIDIA");
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+// ---- GPU algorithm -------------------------------------------------------
+
+TEST_F(OptionsTest, GpuAlgorithmDefaultsToDefault) {
+  Options opts;
+  EXPECT_EQ(opts.GetGpuAlgorithm(), Options::GpuAlgorithm::kDefault);
+}
+
+TEST_F(OptionsTest, GpuAlgorithmAllAcceptedTokens) {
+  struct Case {
+    std::string_view spec;
+    Options::GpuAlgorithm expected;
+  };
+  const Case cases[] = {
+      {"default", Options::GpuAlgorithm::kDefault},
+      {"rand_normal", Options::GpuAlgorithm::kRandomNormal},
+  };
+  for (const auto &c : cases) {
+    Options opts;
+    CliArgument args;
+    args.gpu_algorithm = c.spec;
+    EXPECT_TRUE(opts.ProcessCliArguments(args)) << "spec=" << c.spec;
+    EXPECT_EQ(opts.GetGpuAlgorithm(), c.expected) << "spec=" << c.spec;
+  }
+}
+
+TEST_F(OptionsTest, GpuAlgorithmUnknownRejected) {
+  Options opts;
+  CliArgument args;
+  args.gpu_algorithm = std::string_view("uniform");
   EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 

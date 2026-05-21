@@ -1,27 +1,15 @@
 #include "runtime.h"
 
 #include <thread>
+#include <utility>
 
 #include "constants.h"
 #include "options.h"
 
 #include "core/signal_flag.h"
-#include "cpu/factory.h"
-#include "gpu/factory.h"
-#include "memory/factory.h"
 #include "util/log.h"
 
 namespace core {
-
-namespace {
-
-const FnCreateResourceManager kResmgrCreators[] = {
-    cpu::CreateResourceManager,
-    memory::CreateResourceManager,
-    gpu::CreateResourceManager,
-};
-
-}  // namespace
 
 Runtime::PairMetaSignalHandler Runtime::meta_signal_handlers_[] = {
     {SIGINT, &Runtime::SigIntTerm},
@@ -32,13 +20,25 @@ Runtime::PairMetaSignalHandler Runtime::meta_signal_handlers_[] = {
 #endif
 };
 
-Runtime::Runtime(const Options &options) : running_flag_(true), options_(options) {
+Runtime::Runtime(const Options &options, std::vector<FnCreateResourceManager> creators)
+    : running_flag_(true), options_(options), creators_(std::move(creators)) {
   CreateSignalHandlerFunctors();
+}
+
+void Runtime::Run() {
+  Init();
+  CreateWorkers();
+  MainLoop();
+  StopWorkers();
+  JoinWorkers();
 }
 
 void Runtime::Init() {
   // Create
-  for (auto &&fn : kResmgrCreators) {
+  for (auto &fn : creators_) {
+    if (!fn) {
+      continue;
+    }
     auto mgr = fn(options_);
     if (mgr) {
       managers_.emplace_back(std::move(mgr));

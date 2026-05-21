@@ -19,7 +19,7 @@
 
 #include "metal_kernel.h"
 
-#include "core/constants.h"
+#include "gpu/constants.h"
 #include "util/log.h"
 
 namespace gpu::apple {

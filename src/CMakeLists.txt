@@ -25,6 +25,8 @@ target_sources(loadmaster PRIVATE
     memory/allocator.cc
     gpu/factory.cc
     gpu/manager.cc
+    gpu/manager_default.cc
+    gpu/manager_random_normal.cc
     gpu/worker.cc
     gpu/nvidia/cuda_driver.cc
     gpu/nvidia/nvidia_device.cc

@@ -21,6 +21,7 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   unsafe::Allocator allocator_;
   // Optional background thread used when block size >= kMemoryNoThreadSpawnThresholdMiB.
   std::jthread bg_alloc_thread_;
+  TimePoint last_scheduling_;
 
   bool WillSchedule(TimePoint time_point);
   // Perform allocate + fill. May be invoked inline or from `bg_alloc_thread_`.

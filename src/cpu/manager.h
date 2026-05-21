@@ -30,6 +30,9 @@ class CpuResourceManager : public core::ResourceManager {
   int GetSystemAverageLoad() const { return system_sampler_.GetMean(); }
   int GetProcessAverageLoad() const { return process_sampler_.GetMean(); }
 
+  TimePoint GetLastScheduling() const { return last_scheduling_; }
+  void SetLastScheduling(TimePoint tp) { last_scheduling_ = tp; }
+
  private:
   // unique_ptr because CpuWorkerContext owns non-movable members
   // (std::atomic, std::jthread).
@@ -39,6 +42,7 @@ class CpuResourceManager : public core::ResourceManager {
   util::RollingSampler<int> system_sampler_;
   util::ProcStat proc_stat_;
   util::RollingSampler<int> process_sampler_;
+  TimePoint last_scheduling_;
 
   int FindAccurateBaseLoopCount(int max_iteration);
   void UpdateProcStat(TimePoint time_point);

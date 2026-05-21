@@ -6,8 +6,8 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 - CMake >= 3.12
 
 # Build & Run
-- Typical CMake building routine (see `release_build.sh` for a one-shot
-  local helper).
+- Typical CMake building routine (see `scripts/build_local.sh` for a
+  one-shot local helper).
 - libstdc++/libgcc are linked statically by default so the binary is portable
   across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
   the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
@@ -94,6 +94,12 @@ Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 - `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, or `apple`. `auto`
                    prefers Apple Metal on macOS, otherwise NVIDIA, with
                    AMD as the final fallback.
+- `-ga <algo>`     `default` (default) or `rand_normal`. With `rand_normal`
+                   each device independently walks a shuffled
+                   normal-distribution-shaped load schedule, so the
+                   *5-minute average* matches `-g <load>` while the
+                   instantaneous load fluctuates and multi-GPU hosts
+                   don't all spike in lockstep.
 
 Each selected device gets its own worker thread that runs the same busy/sleep
 pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker

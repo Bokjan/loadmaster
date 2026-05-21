@@ -9,6 +9,7 @@
 
 #include "cli/cli_argument.h"
 #include "cpu/stat.h"
+#include "gpu/constants.h"
 #include "util/log.h"
 
 namespace core {
@@ -60,7 +61,8 @@ Options::Options()
       gpu_load_(kDefaultGpuLoad),
       gpu_memory_bytes_(static_cast<int64_t>(kDefaultGpuMemoryMiB) * kMebiByte),
       gpu_indices_(),
-      gpu_vendor_(GpuVendor::kAuto) {}
+      gpu_vendor_(GpuVendor::kAuto),
+      gpu_algorithm_(GpuAlgorithm::kDefault) {}
 
 bool Options::ProcessCliArguments(const cli::CliArgument &args) {
   // CPU load
@@ -148,6 +150,21 @@ bool Options::ProcessCliArguments(const cli::CliArgument &args) {
       return false;
     }
     gpu_vendor_ = find->second;
+  }
+  // GPU scheduling algorithm
+  if (args.gpu_algorithm) {
+    using SvAlgoPair = std::pair<std::string_view, Options::GpuAlgorithm>;
+    static const SvAlgoPair algorithm_pairs[] = {
+        {"default", Options::GpuAlgorithm::kDefault},
+        {"rand_normal", Options::GpuAlgorithm::kRandomNormal}};
+    auto find =
+        std::find_if(std::begin(algorithm_pairs), std::end(algorithm_pairs),
+                     [&args](const SvAlgoPair &pair) { return pair.first == args.gpu_algorithm; });
+    if (find == std::end(algorithm_pairs)) {
+      LOG_ERROR("invalid GPU algorithm [%s]", args.gpu_algorithm.value().data());
+      return false;
+    }
+    gpu_algorithm_ = find->second;
   }
   return true;
 }

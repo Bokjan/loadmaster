@@ -2,7 +2,8 @@
 
 #include <chrono>
 
-#include "core/constants.h"
+#include "constants.h"
+
 #include "util/log.h"
 
 namespace gpu {

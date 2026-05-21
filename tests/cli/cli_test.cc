@@ -43,9 +43,7 @@ Argv MakeArgv(std::initializer_list<const char *> args) {
 
 class CliTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    util::logger_internal::g_default_logger->SetLevel(util::Logger::kOff);
-  }
+  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kOff); }
   void TearDown() override {
     util::logger_internal::g_default_logger->SetLevel(util::Logger::kWarn);
   }
@@ -162,20 +160,36 @@ TEST_F(CliTest, GpuIndicesAllKeepsVectorEmpty) {
   EXPECT_TRUE(opts.GpuUseAllDevices());
 }
 
+TEST_F(CliTest, GpuAlgorithmFlagParsed) {
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-ga", "rand_normal"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
+  EXPECT_EQ(opts.GetGpuAlgorithm(), Options::GpuAlgorithm::kRandomNormal);
+}
+
 // ---- Cross-flag combinations --------------------------------------------
 
 TEST_F(CliTest, FullArgumentSet) {
   Options opts;
   auto a = MakeArgv({
       "loadmaster",
-      "-l", "150",
-      "-c", "1",
-      "-ca", "rand_normal",
-      "-m", "32",
-      "-g", "60",
-      "-gm", "256",
-      "-gi", "0",
-      "-gv", "nvidia",
+      "-l",
+      "150",
+      "-c",
+      "1",
+      "-ca",
+      "rand_normal",
+      "-m",
+      "32",
+      "-g",
+      "60",
+      "-gm",
+      "256",
+      "-gi",
+      "0",
+      "-gv",
+      "nvidia",
   });
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
   ASSERT_EQ(r.exit_code, EXIT_SUCCESS);

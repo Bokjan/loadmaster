@@ -1,5 +1,6 @@
 #include "factory.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -9,7 +10,8 @@
 
 #include "amd/amd_device.h"
 #include "amd/hip_driver.h"
-#include "manager.h"
+#include "manager_default.h"
+#include "manager_random_normal.h"
 #include "nvidia/cuda_driver.h"
 #include "nvidia/nvidia_device.h"
 
@@ -22,6 +24,18 @@ namespace gpu {
 namespace {
 
 using IndexedDevice = std::pair<int, std::unique_ptr<GpuDevice>>;
+
+// Does the user want device #idx? `-gi all` (or unset) selects everything;
+// otherwise only indices listed explicitly are kept. Centralised so the
+// three vendor-specific Enumerate functions don't each repeat the same
+// linear scan.
+bool DeviceWanted(const core::Options &options, int idx) {
+  if (options.GpuUseAllDevices()) {
+    return true;
+  }
+  const auto &wanted = options.GetGpuIndices();
+  return std::find(wanted.begin(), wanted.end(), idx) != wanted.end();
+}
 
 // Build the list of (index, device) pairs for a given vendor by enumerating
 // available devices and filtering against the user's `-gi` selection.
@@ -37,20 +51,8 @@ std::vector<IndexedDevice> EnumerateNvidia(const core::Options &options) {
     return out;
   }
   LOG_INFO("NVIDIA: %d device(s) detected", count);
-
-  auto wants = [&](int idx) -> bool {
-    if (options.GpuUseAllDevices()) {
-      return true;
-    }
-    for (int wanted : options.GetGpuIndices()) {
-      if (wanted == idx) {
-        return true;
-      }
-    }
-    return false;
-  };
   for (int i = 0; i < count; ++i) {
-    if (!wants(i)) {
+    if (!DeviceWanted(options, i)) {
       continue;
     }
     out.emplace_back(i, std::make_unique<nvidia::NvidiaDevice>());
@@ -70,20 +72,8 @@ std::vector<IndexedDevice> EnumerateAmd(const core::Options &options) {
     return out;
   }
   LOG_INFO("AMD: %d device(s) detected", count);
-
-  auto wants = [&](int idx) -> bool {
-    if (options.GpuUseAllDevices()) {
-      return true;
-    }
-    for (int wanted : options.GetGpuIndices()) {
-      if (wanted == idx) {
-        return true;
-      }
-    }
-    return false;
-  };
   for (int i = 0; i < count; ++i) {
-    if (!wants(i)) {
+    if (!DeviceWanted(options, i)) {
       continue;
     }
     out.emplace_back(i, std::make_unique<amd::AmdDevice>());
@@ -100,20 +90,8 @@ std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
     return out;
   }
   LOG_INFO("Apple: %d Metal device(s) detected", count);
-
-  auto wants = [&](int idx) -> bool {
-    if (options.GpuUseAllDevices()) {
-      return true;
-    }
-    for (int wanted : options.GetGpuIndices()) {
-      if (wanted == idx) {
-        return true;
-      }
-    }
-    return false;
-  };
   for (int i = 0; i < count; ++i) {
-    if (!wants(i)) {
+    if (!DeviceWanted(options, i)) {
       continue;
     }
     out.emplace_back(i, std::make_unique<apple::AppleMetalDevice>());
@@ -123,6 +101,21 @@ std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
   LOG_INFO("Apple GPU backend is only available on macOS builds");
 #endif
   return out;
+}
+
+// Pick the manager subclass that matches the user's `-ga` choice. Both
+// share the same Init/teardown plumbing (in the GpuResourceManager
+// base); they differ only in how Schedule() drives per-tick load.
+std::unique_ptr<core::ResourceManager> MakeManager(const core::Options &options,
+                                                   std::vector<IndexedDevice> devices) {
+  switch (options.GetGpuAlgorithm()) {
+    case core::Options::GpuAlgorithm::kDefault:
+      return std::make_unique<GpuResourceManagerDefault>(options, std::move(devices));
+    case core::Options::GpuAlgorithm::kRandomNormal:
+      return std::make_unique<GpuResourceManagerRandomNormal>(options, std::move(devices));
+  }
+  // Unreachable: Options validates the algorithm at parse time.
+  LOG_FATAL("invalid GPU algorithm type [%d]", static_cast<int>(options.GetGpuAlgorithm()));
 }
 
 }  // namespace
@@ -167,7 +160,7 @@ std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options
     LOG_WARN("GPU module: no matching device found, disabling");
     return nullptr;
   }
-  return std::make_unique<GpuResourceManager>(options, std::move(devices));
+  return MakeManager(options, std::move(devices));
 }
 
 }  // namespace gpu

@@ -2,7 +2,8 @@
 
 #include <algorithm>
 
-#include "core/constants.h"
+#include "constants.h"
+
 #include "core/options.h"
 #include "util/log.h"
 

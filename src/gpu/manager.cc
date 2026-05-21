@@ -1,6 +1,7 @@
 #include "manager.h"
 
-#include "core/constants.h"
+#include "constants.h"
+
 #include "core/options.h"
 #include "util/log.h"
 
@@ -40,9 +41,11 @@ bool GpuResourceManager::Init() {
     auto ctx = std::make_unique<GpuWorkerContext>(next_id++, std::move(dev));
     if (options_.GetGpuLoad() > 0) {
       ctx->CalibrateBaseLoopCount();
-      // Convert load (0..100) -> busy-ms within one tick.
-      const int load_ms = options_.GetGpuLoad() * kScheduleIntervalMS / kGpuMaxLoadPerDevice;
-      ctx->SetLoadSet(load_ms);
+      // Initial load: subclasses are free to override on the first
+      // Schedule() tick. We seed with the user-requested per-device
+      // load so a worker that never sees Schedule() (e.g. the Default
+      // algorithm) still runs at the intended rate.
+      ctx->SetLoadSet(LoadPercentToBusyMs(options_.GetGpuLoad()));
     }
     workers_.emplace_back(std::move(ctx));
   }
@@ -78,9 +81,9 @@ void GpuResourceManager::JoinWorkerThreads() {
   workers_.clear();
 }
 
-void GpuResourceManager::Schedule(TimePoint /*time_point*/) {
-  // GPU load is constant for now; future schedulers (mirroring CPU's
-  // rand_normal) can rebalance per-worker load here.
+int GpuResourceManager::LoadPercentToBusyMs(int load_percent) {
+  // Mirror the CPU mapping: load% of one full scheduling period.
+  return load_percent * kScheduleIntervalMS / kGpuMaxLoadPerDevice;
 }
 
 }  // namespace gpu

@@ -18,7 +18,7 @@ std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options
   }
   // Unreachable: Options validates the algorithm at parse time. If we ever
   // see this, it's a bug.
-  LOG_FATAL("invalid CPU algorithm type [%d]", core::Options::EnumToInt(options.GetCpuAlgorithm()));
+  LOG_FATAL("invalid CPU algorithm type [%d]", static_cast<int>(options.GetCpuAlgorithm()));
 }
 
 }  // namespace cpu

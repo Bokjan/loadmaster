@@ -7,18 +7,12 @@
 #include "core/constants.h"
 #include "core/runtime.h"
 #include "core/signal_flag.h"
+#include "cpu/factory.h"
+#include "gpu/factory.h"
+#include "memory/factory.h"
 #include "util/log.h"
 
 namespace {
-
-void Work(const core::Options &options) {
-  core::Runtime runtime(options);
-  runtime.Init();
-  runtime.CreateWorkers();
-  runtime.MainLoop();
-  runtime.StopWorkers();
-  runtime.JoinWorkers();
-}
 
 void HandleSignal(int signal) {
   // Async-signal-safe path: write to atomic bitmap only. Don't log here.
@@ -61,7 +55,19 @@ int main(int argc, const char *argv[]) {
     return parse.exit_code;
   }
   RegisterSignalHandlers();
-  Work(options);
+
+  // Resource-manager factories, in the order they should be created and
+  // scheduled. Each factory may return nullptr to mean "this module is
+  // not applicable for the current options"; Runtime tolerates that.
+  std::vector<core::FnCreateResourceManager> creators = {
+      cpu::CreateResourceManager,
+      memory::CreateResourceManager,
+      gpu::CreateResourceManager,
+  };
+
+  core::Runtime runtime(options, std::move(creators));
+  runtime.Run();
+
   LOG_INFO("main() finished");
   return EXIT_SUCCESS;
 }

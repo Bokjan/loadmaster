@@ -39,3 +39,4 @@ build_release_*
 build_tests
 dist
 .vscode
+.vs/
