@@ -1,6 +1,22 @@
-# Length of the absolute source-root prefix; used by the logger to print
-# short file paths ("src/foo/bar.cc" instead of "/abs/path/src/foo/bar.cc").
-string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
+# __FILE__ sanitization. By default the C/C++ preprocessor expands
+# __FILE__ to the absolute source path the compiler was invoked with --
+# which embeds the builder's home directory / username into the binary
+# (visible via `strings`). We strip that out at compile time on
+# Clang/GCC via -ffile-prefix-map, mapping "<repo>/" to the empty
+# string so __FILE__ becomes a project-relative path like
+# "src/util/proc_stat.cc".
+#
+# MSVC has no equivalent flag but already defaults __FILE__ to a path
+# relative to the build's working directory (the build_release_windows
+# directory used by build_windows.ps1), which does not contain the
+# builder's username.
+#
+# Once __FILE__ is already a short relative path we no longer need the
+# logger's runtime SOURCE_PATH_SIZE offset trick. We keep the macro for
+# compatibility (so older builds that don't pass the flag still print
+# tidy paths) but set it to 0 here; the logger's FILE_NAME() macro then
+# becomes an identity op.
+set(SOURCE_PATH_SIZE 0)
 
 find_package(Threads REQUIRED)
 
@@ -74,6 +90,15 @@ else()
         -Wshadow
         -Wno-unused-parameter
         -fPIC
+        # Rewrite the source-path prefix baked into __FILE__ (and any
+        # other compiler-emitted path strings) so the resulting binary
+        # does not leak the absolute build path -- which on developer
+        # machines exposes the user's home directory / username. The
+        # trailing slash matters: we want "src/foo.cc" not "/foo.cc".
+        # Supported by Clang 10+ and GCC 8+ (the project's C++20
+        # requirement already implies newer than that on the
+        # non-MSVC paths).
+        "-ffile-prefix-map=${CMAKE_SOURCE_DIR}/="
     )
 endif()
 

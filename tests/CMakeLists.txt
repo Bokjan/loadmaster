@@ -28,6 +28,22 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
 
+# GoogleTest's own .o files bake __FILE__ paths starting with
+# <build>/_deps/googletest-src/... into the test binaries. The
+# per-test compile_options we apply in loadmaster_add_test() do not
+# reach those targets, so we sanitize them directly here. Same
+# CMAKE_BINARY_DIR-prefix map as below; only applied on non-MSVC
+# (MSVC defaults to relative __FILE__).
+if(NOT MSVC)
+    foreach(_gtest_tgt gtest gtest_main gmock gmock_main)
+        if(TARGET ${_gtest_tgt})
+            target_compile_options(${_gtest_tgt} PRIVATE
+                "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
+            )
+        endif()
+    endforeach()
+endif()
+
 include(GoogleTest)
 
 # Helper: declare a test binary that compiles `sources`, links gtest_main,
@@ -40,12 +56,16 @@ function(loadmaster_add_test name)
     target_compile_features(${name} PRIVATE cxx_std_20)
     target_link_libraries(${name} PRIVATE GTest::gtest_main)
 
-    # util/log.h prints file paths trimmed by this length so log output
-    # shows "src/foo/bar.cc" instead of an absolute path. The main
-    # target sets this in src/CMakeLists.txt; mirror it here so any .cc
-    # that pulls in log.h compiles cleanly under tests too.
-    string(LENGTH "${CMAKE_SOURCE_DIR}/" LM_SOURCE_PATH_SIZE)
-    target_compile_definitions(${name} PRIVATE SOURCE_PATH_SIZE=${LM_SOURCE_PATH_SIZE})
+    # __FILE__ sanitization. Mirror src/CMakeLists.txt so test binaries
+    # don't leak the absolute build path either. We map two prefixes:
+    #   * CMAKE_SOURCE_DIR : project sources (both src/* and tests/*).
+    #   * CMAKE_BINARY_DIR : FetchContent extracts GoogleTest under
+    #     <build>/_deps/googletest-src/, so its own __FILE__ strings
+    #     also pick up the builder's home dir unless we rewrite them.
+    # SOURCE_PATH_SIZE is kept at 0 (matching src/CMakeLists.txt) so
+    # the logger's FILE_NAME() macro is an identity op now that
+    # __FILE__ is already a project-relative path.
+    target_compile_definitions(${name} PRIVATE SOURCE_PATH_SIZE=0)
 
     # Mirror the warning flags from src/CMakeLists.txt so tests catch the
     # same things, but stay tolerant of gtest's own quirks where needed.
@@ -57,6 +77,8 @@ function(loadmaster_add_test name)
     else()
         target_compile_options(${name} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter
+            "-ffile-prefix-map=${CMAKE_SOURCE_DIR}/="
+            "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
         )
     endif()
 
