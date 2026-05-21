@@ -36,5 +36,6 @@ test
 build
 rel_build
 build_release_*
+build_tests
 dist
 .vscode

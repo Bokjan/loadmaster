@@ -18,6 +18,7 @@
 #include "core/constants.h"
 #include "util/clock.h"
 #include "util/log.h"
+#include "util/proc_stat_internal.h"
 #include "util/win_util.h"
 
 #define LMPU64 "%" PRIu64
@@ -47,39 +48,10 @@ using UniqueFile = std::unique_ptr<FILE, FileCloser>;
 constexpr int kProcStatIntervalMS = 500;
 
 #if IS_LINUX
-// /proc/<pid>/stat and /proc/<pid>/statm parsing helpers. These types and
-// constants are Linux-specific (Windows uses GetProcessTimes / macOS uses
-// proc_pid_rusage) so we keep them inside the IS_LINUX guard to avoid
-// "unused" diagnostics on the other platforms.
-constexpr int kTaskCommLen = 16;
-constexpr int kStatFieldsCount = 22;
+// /proc/<pid>/statm parsing helper. The /proc/<pid>/stat layout lives in
+// proc_stat_internal.h so it can be exercised by unit tests; statm is
+// trivial enough that we keep it inline.
 constexpr int kStatmFieldsCount = 7;
-
-struct StatFields final {
-  int pid;
-  char comm[kTaskCommLen];
-  char state;
-  int ppid;
-  int pgrp;
-  int session;
-  int tty_nr;
-  int tpgid;
-  uint32_t flags;
-  uint64_t minflt;
-  uint64_t cminflt;
-  uint64_t majflt;
-  uint64_t cmajflt;
-  uint64_t utime;
-  uint64_t stime;
-  int64_t cutime;
-  int64_t cstime;
-  int64_t priority;
-  int64_t nice;
-  int64_t num_threads;
-  int64_t iteralvalue;
-  uint64_t starttime;
-  // ...
-};
 
 struct StatmFields final {
   uint64_t size;
@@ -106,12 +78,12 @@ ProcStat::ProcStat() {
 }
 
 #if IS_LINUX
-// Parse /proc/<pid>/stat into `stat`. Robust against process names that
-// contain spaces or parentheses (the `comm` field is wrapped in parens).
-//
-// Layout: "<pid> (<comm>) <state> <ppid> ..."
-// We locate the last ')' to delimit `comm`, then scanf the rest.
-static bool ParseProcPidStat(FILE *fp, StatFields &stat) {
+namespace internal {
+
+// Definition declared in proc_stat_internal.h. Lives here so unit tests
+// can link against it directly without having to drag in any platform-
+// gated code.
+bool ParseProcPidStat(FILE *fp, StatFields &stat) {
   char raw[kSmallBufferLength * 4];
   if (std::fgets(raw, sizeof(raw), fp) == nullptr) {
     return false;
@@ -145,13 +117,15 @@ static bool ParseProcPidStat(FILE *fp, StatFields &stat) {
   return count == kStatFieldsCount - 2;
 }
 
+}  // namespace internal
+
 void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
   auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
   if (force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
     return;
   }
-  StatFields stat{};
+  internal::StatFields stat{};
   char file_path[kSmallBufferLength];
   std::snprintf(file_path, sizeof(file_path), "/proc/%d/stat", pid_);
   UniqueFile fp(std::fopen(file_path, "r"));
@@ -159,7 +133,7 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
     LOG_ERROR("failed to open %s", file_path);
     return;
   }
-  if (!ParseProcPidStat(fp.get(), stat)) {
+  if (!internal::ParseProcPidStat(fp.get(), stat)) {
     LOG_ERROR("failed to parse %s", file_path);
     return;
   }
