@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "critical_loop.h"
 
+#include "core/constants.h"
 #include "util/log.h"
 
 namespace cpu {

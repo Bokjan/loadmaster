@@ -120,11 +120,11 @@ loadmaster_add_test(core_options_test
 
 # ---- cli ----
 # End-to-end argv -> Options pipeline. Pulls in the cli parser plus its
-# transitive deps (options + version_string + logger).
+# transitive deps (options + logger). VersionString() lives entirely in
+# its header now, so no extra .cc is needed.
 loadmaster_add_test(cli_cli_test
     cli/cli_test.cc
     ${CMAKE_SOURCE_DIR}/src/cli/cli.cc
-    ${CMAKE_SOURCE_DIR}/src/cli/version_string.cc
     ${CMAKE_SOURCE_DIR}/src/core/options.cc
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )

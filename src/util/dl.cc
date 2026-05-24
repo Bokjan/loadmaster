@@ -1,6 +1,6 @@
 #include "dl.h"
 
-#include "core/constants.h"
+#include "core/platform.h"
 
 #if IS_WINDOWS
 #    include <windows.h>

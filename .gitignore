@@ -40,3 +40,14 @@ build_tests
 dist
 .vscode
 .vs/
+
+# IDE / clangd helpers
+# compile_commands.json is mirrored at the project root by the top-level
+# CMakeLists.txt after every build so clangd / IDEs can find it without
+# configuration. The canonical copy lives in the build dir and travels
+# with `cmake -B ...`, so the project-root mirror is purely a
+# per-machine convenience.
+compile_commands.json
+# clangd writes its on-disk index here when it consumes the
+# compile_commands.json above. Per-checkout, never committed.
+.cache/

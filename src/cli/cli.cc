@@ -11,7 +11,6 @@
 #include "cli_argument.h"
 #include "version_string.h"
 
-#include "cpu/stat.h"
 #include "util/log.h"
 
 namespace cli {

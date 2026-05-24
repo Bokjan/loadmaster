@@ -4,7 +4,7 @@
 
 #include <thread>
 
-#include "core/constants.h"
+#include "core/platform.h"
 
 namespace cpu {
 

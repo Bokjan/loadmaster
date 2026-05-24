@@ -27,7 +27,6 @@ target_sources(loadmaster PRIVATE
     core/runtime.cc
     core/options.cc
     cli/cli.cc
-    cli/version_string.cc
     cpu/stat.cc
     cpu/worker.cc
     cpu/manager.cc

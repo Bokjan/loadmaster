@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/constants.h"
-
 // GPU module tunables.
 //
 // Per-device load is in the range [0, 100], expressed as the fraction of

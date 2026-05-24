@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "cli/cli.h"
-#include "core/constants.h"
+#include "core/platform.h"
 #include "core/runtime.h"
 #include "core/signal_flag.h"
 #include "cpu/factory.h"

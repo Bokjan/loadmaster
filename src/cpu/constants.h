@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/constants.h"
-
 // CPU module tunables.
 constexpr int kCpuSchedulingGranularityNS = 1 * 1000 * 1000;  // 1 ms
 constexpr int kCpuMaxLoadPerCore = 100;

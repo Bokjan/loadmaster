@@ -5,7 +5,6 @@
 // installed.
 
 #include <cstddef>
-#include <cstdint>
 
 namespace gpu::amd {
 

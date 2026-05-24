@@ -6,8 +6,6 @@
 
 #include <cstdint>
 
-#include "platform.h"
-
 // Default load values for CLI options. Module-specific tunables (limits,
 // kernel sizes, sampling counts, ...) belong in their module's
 // constants header.

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 #include "core/resource_manager.h"
 
 namespace memory {

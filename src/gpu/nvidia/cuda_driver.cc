@@ -3,7 +3,7 @@
 #include <cstring>
 #include <mutex>
 
-#include "core/constants.h"
+#include "core/platform.h"
 #include "util/dl.h"
 #include "util/log.h"
 

@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <string_view>
 
-#include "core/constants.h"  // brings in <windows.h> on MSVC
+#include "core/platform.h"  // brings in <windows.h> on MSVC
 
 #if IS_WINDOWS
 #    include <cstdint>

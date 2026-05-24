@@ -4,8 +4,8 @@
 #include <utility>
 #include <vector>
 
-#include "core/constants.h"
 #include "core/options.h"
+#include "core/platform.h"
 #include "util/log.h"
 
 #include "amd/amd_device.h"

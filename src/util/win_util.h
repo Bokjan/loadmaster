@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/constants.h"
+#include "core/platform.h"
 
 #if IS_WINDOWS
 
