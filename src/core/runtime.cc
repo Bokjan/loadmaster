@@ -5,6 +5,7 @@
 
 #include "constants.h"
 #include "options.h"
+#include "platform.h"
 
 #include "core/signal_flag.h"
 #include "util/log.h"
