@@ -91,9 +91,12 @@ Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 - `-gm <mib>`      per-device device-memory load in MiB. 0 means no extra memory.
 - `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all`
                    (default).
-- `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, or `apple`. `auto`
-                   prefers Apple Metal on macOS, otherwise NVIDIA, with
-                   AMD as the final fallback.
+- `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, `intel`, `opencl`,
+                   or `apple`. `auto` prefers Apple Metal on macOS,
+                   otherwise tries NVIDIA -> AMD (HIP) -> Intel
+                   (Level Zero) -> OpenCL. The OpenCL fallback is what
+                   covers Intel iGPUs without Level Zero and AMD APU
+                   iGPUs (which ROCm/HIP can't drive).
 - `-ga <algo>`     `default` (default) or `rand_normal`. With `rand_normal`
                    each device independently walks a shuffled
                    normal-distribution-shaped load schedule, so the
@@ -117,6 +120,8 @@ regardless of which (if any) GPU vendor stack is installed:
 |--------|----------------------------------|-----------------------|
 | NVIDIA | `libcuda.so.1` (NVIDIA driver) | embedded PTX, JITed by the driver |
 | AMD    | `libamdhip64.so` + `libhiprtc.so` (ROCm runtime) | embedded HIP C++ source, compiled at startup by hipRTC |
+| Intel  | `libze_loader.so.1` / `ze_loader.dll` (Intel Graphics Driver / oneAPI Level Zero) | embedded SPIR-V, JITed by the driver |
+| OpenCL | `libOpenCL.so.1` / `OpenCL.dll` (Khronos ICD loader; OS-shipped on Windows) | embedded OpenCL C source, compiled at startup by the ICD |
 | Apple  | `Metal.framework` (linked at build time on macOS) | embedded MSL source, compiled at startup by `MTLDevice newLibraryWithSource:` |
 
 If the requested vendor's libraries aren't found, the module logs and disables
@@ -125,21 +130,27 @@ itself; other modules (CPU/memory) still run normally.
 ### Notes
 - Mixed-vendor hosts (e.g., NVIDIA + AMD installed at the same time) are
   intentionally out of scope: with `-gv auto` only one vendor is used.
-- WSL2 is supported on NVIDIA via the `/usr/lib/wsl/lib/libcuda.so.1` shim.
-- WSL2 is **not** supported on AMD: ROCm's WSL story is preview-only and
-  doesn't expose `/dev/kfd` for most cards (including RDNA4 like RX 9070 XT).
-  On WSL2 the AMD path short-circuits with a clear diagnostic and the rest
-  of loadmaster (CPU/Memory/NVIDIA) keeps working. Run on native Linux or
-  on Windows with the HIP SDK for full AMD support.
-- On Windows the runtime libraries we look for are `nvcuda.dll` (NVIDIA,
-  ships with the driver) and `amdhip64*.dll` + `hiprtc*.dll` (AMD, ships
-  with the HIP SDK).
+- Integrated-GPU support: Intel iGPUs (Iris Xe / UHD / Arc Graphics) go
+  through the Intel Level Zero backend, which needs a precompiled
+  SPIR-V kernel (`src/gpu/intel/busy_kernel.spv`, generated offline from
+  `busy_kernel.cl`; see that file for `ocloc` / `clang+llvm-spirv`
+  commands). Without that .spv the Intel path disables itself and
+  `-gv auto` falls through to OpenCL, which also covers AMD APU iGPUs
+  (e.g. Ryzen 7000G/8000G, Steam Deck) without ROCm.
+- WSL2: NVIDIA works via the `/usr/lib/wsl/lib/libcuda.so.1` shim. AMD
+  is **not** supported (ROCm doesn't expose `/dev/kfd` in WSL2); the
+  AMD path short-circuits with a clear diagnostic and the rest of
+  loadmaster keeps working. Intel L0 / OpenCL inside WSL2 requires
+  Microsoft's Intel compute-runtime WSL package and is not exhaustively
+  tested by us.
+- On Windows, vendor-specific DLLs ship with the corresponding driver
+  install (`nvcuda.dll`, `amdhip64*.dll` + `hiprtc*.dll`,
+  `ze_loader.dll`); `OpenCL.dll` is part of the OS itself.
 - On macOS the only supported GPU backend is Apple Metal (`-gv apple`,
   also picked by `-gv auto`). NVIDIA / AMD compute stacks have never
-  been or are no longer available on Darwin: Apple dropped the NVIDIA
-  Web Driver after 10.13, and ROCm/HIP has never targeted macOS. The
-  Metal backend works on every Apple Silicon Mac and on Intel Macs with
-  Metal-capable GPUs (any model from ~2012 onwards).
+  been or are no longer available on Darwin. The Metal backend works on
+  every Apple Silicon Mac and on Intel Macs with Metal-capable GPUs
+  (any model from ~2012 onwards).
 - On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>`
   reserves that many MiB of physical memory rather than dedicated VRAM.
   Plan accordingly when running with `-gm` and a large `-m`.

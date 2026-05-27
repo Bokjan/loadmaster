@@ -105,11 +105,20 @@ TEST(GetBusyTicksTest, WindowsZeroSnapshotReturnsZero) {
 //
 // On Linux/macOS this multiplies ticks by GetJiffyMillisecond() (a
 // process-wide cached value derived from sysconf(_SC_CLK_TCK), typically
-// 10 ms with HZ=100). On Windows it converts 100ns ticks to ms.
+// 10 ms with HZ=100). On Windows it converts 100ns ticks to ms via an
+// integer divide-by-10000.
 //
 // We don't hardcode the jiffy length -- it's a platform property -- but
 // we lock in the structural properties: monotonicity, zero maps to
-// zero, and the conversion is linear.
+// zero, and the conversion is linear on the chosen sample points.
+//
+// The Windows path is an integer divide (100ns -> ms, /10000), so for
+// the linearity / scaling tests below we deliberately choose tick
+// counts that are exact multiples of 10000 -- otherwise the
+// floor-division truncation breaks `f(k*x) == k*f(x)` mathematically
+// and would make the property check meaningless. On Linux/macOS the
+// conversion is a multiplication so any value works; we pick the same
+// operands on both platforms for simplicity.
 
 TEST(TicksToMillisecondsTest, ZeroMapsToZero) {
   EXPECT_EQ(TicksToMilliseconds(0), 0u);
@@ -126,10 +135,12 @@ TEST(TicksToMillisecondsTest, IsMonotonicallyNonDecreasing) {
 }
 
 TEST(TicksToMillisecondsTest, IsLinear) {
-  // f(a + b) == f(a) + f(b) for any pure multiplication by a constant.
-  // Pick values that comfortably avoid 64-bit overflow on any platform.
-  const uint64_t a = 137;
-  const uint64_t b = 4096;
+  // f(a + b) == f(a) + f(b). Pick operands that are exact multiples of
+  // the Windows 100ns-tick divisor (10000) so the property holds on the
+  // integer-divide path too; on Linux/macOS the conversion is a pure
+  // multiplication and any operands would work.
+  const uint64_t a = 130'000;
+  const uint64_t b = 4'090'000;
   EXPECT_EQ(TicksToMilliseconds(a + b),
             TicksToMilliseconds(a) + TicksToMilliseconds(b));
 }
@@ -137,7 +148,9 @@ TEST(TicksToMillisecondsTest, IsLinear) {
 TEST(TicksToMillisecondsTest, ScalesByConstantFactor) {
   // f(k * x) == k * f(x). Implies the conversion factor is constant
   // across calls (i.e. cached, not re-read from sysconf every time).
-  const uint64_t x = 13;
+  // As in IsLinear, x is chosen as a multiple of 10000 so the property
+  // holds under Windows' integer-divide truncation.
+  const uint64_t x = 130'000;
   const uint64_t k = 1000;
   EXPECT_EQ(TicksToMilliseconds(k * x), k * TicksToMilliseconds(x));
 }

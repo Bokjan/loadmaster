@@ -142,6 +142,24 @@ TEST_F(CliTest, GpuVendorFlagParsed) {
   EXPECT_EQ(opts.GetGpuVendor(), Options::GpuVendor::kAmd);
 }
 
+TEST_F(CliTest, GpuVendorIntelFlagParsed) {
+  // Intel went from "rejected" to a first-class backend; pin the lex+parse
+  // chain so a future regression in either layer is loud.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-gv", "intel"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
+  EXPECT_EQ(opts.GetGpuVendor(), Options::GpuVendor::kIntel);
+}
+
+TEST_F(CliTest, GpuVendorOpenClFlagParsed) {
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-gv", "opencl"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
+  EXPECT_EQ(opts.GetGpuVendor(), Options::GpuVendor::kOpenCL);
+}
+
 TEST_F(CliTest, GpuIndicesFlagParsed) {
   Options opts;
   auto a = MakeArgv({"loadmaster", "-gi", "0,2"});

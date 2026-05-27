@@ -281,6 +281,8 @@ TEST_F(OptionsTest, GpuVendorAllAcceptedTokens) {
       {"nvidia", Options::GpuVendor::kNvidia},
       {"amd", Options::GpuVendor::kAmd},
       {"apple", Options::GpuVendor::kApple},
+      {"intel", Options::GpuVendor::kIntel},
+      {"opencl", Options::GpuVendor::kOpenCL},
   };
   for (const auto &c : cases) {
     Options opts;
@@ -294,7 +296,7 @@ TEST_F(OptionsTest, GpuVendorAllAcceptedTokens) {
 TEST_F(OptionsTest, GpuVendorUnknownRejected) {
   Options opts;
   CliArgument args;
-  args.gpu_vendor = std::string_view("intel");  // someday, maybe.
+  args.gpu_vendor = std::string_view("vulkan");  // not a recognized backend
   EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 

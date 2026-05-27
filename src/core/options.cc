@@ -140,12 +140,14 @@ bool Options::ProcessCliArguments(const cli::CliArgument &args) {
     static const SvVendorPair vendor_pairs[] = {{"auto", GpuVendor::kAuto},
                                                 {"nvidia", GpuVendor::kNvidia},
                                                 {"amd", GpuVendor::kAmd},
-                                                {"apple", GpuVendor::kApple}};
+                                                {"apple", GpuVendor::kApple},
+                                                {"intel", GpuVendor::kIntel},
+                                                {"opencl", GpuVendor::kOpenCL}};
     auto find =
         std::find_if(std::begin(vendor_pairs), std::end(vendor_pairs),
                      [&args](const SvVendorPair &pair) { return pair.first == args.gpu_vendor; });
     if (find == std::end(vendor_pairs)) {
-      LOG_ERROR("invalid GPU vendor [%s] (expected: auto/nvidia/amd/apple)",
+      LOG_ERROR("invalid GPU vendor [%s] (expected: auto/nvidia/amd/apple/intel/opencl)",
                 args.gpu_vendor.value().data());
       return false;
     }

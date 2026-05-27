@@ -10,11 +10,21 @@ packaging scripts under `scripts/` are not affected.
 The fastest way is the wrapper script:
 
 ```bash
+# POSIX (Linux / macOS):
 scripts/run_tests.sh                  # Debug build, all tests
 scripts/run_tests.sh --filter 'Cli.*' # narrow to a subset
 scripts/run_tests.sh --release        # Release build
 scripts/run_tests.sh --clean          # wipe build_tests/ first
 scripts/run_tests.sh --help           # full option list
+```
+
+```powershell
+# Windows (PowerShell, mirror of the .sh wrapper):
+scripts\run_tests.ps1                 # Debug build, all tests
+scripts\run_tests.ps1 -Filter 'Cli.*' # narrow to a subset
+scripts\run_tests.ps1 -Release        # Release build
+scripts\run_tests.ps1 -Clean          # wipe build_tests\ first
+scripts\run_tests.ps1 -?              # full option list
 ```
 
 Or, if you prefer driving CMake directly:

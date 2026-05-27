@@ -13,11 +13,20 @@ class Options final {
  public:
   enum class CpuAlgorithm : int { kDefault, kRandomNormal };
   enum class GpuAlgorithm : int { kDefault, kRandomNormal };
-  // GPU vendor selection. `kApple` drives the Apple Silicon / Intel Mac
-  // GPU through Metal and is only meaningful on macOS builds; on other
-  // platforms it is accepted by the parser but the corresponding factory
-  // path is compiled out and immediately yields "no device".
-  enum class GpuVendor : int { kAuto, kNvidia, kAmd, kApple };
+  // GPU vendor selection.
+  //   * kApple   drives the Apple Silicon / Intel Mac GPU through Metal
+  //              and is only meaningful on macOS builds; on other
+  //              platforms it is accepted by the parser but the
+  //              corresponding factory path is compiled out and
+  //              immediately yields "no device".
+  //   * kIntel   drives Intel iGPU (Iris Xe / UHD / Arc Graphics) and
+  //              Arc discrete GPUs through the Level Zero (oneAPI)
+  //              driver. Linux/Windows only.
+  //   * kOpenCL  drives any GPU exposed by the system's OpenCL ICD
+  //              (typically Intel iGPU, AMD APU iGPU, AMD/NVIDIA dGPU).
+  //              Used as the generic fallback for the integrated-GPU
+  //              story on Linux/Windows.
+  enum class GpuVendor : int { kAuto, kNvidia, kAmd, kApple, kIntel, kOpenCL };
 
   Options();
 
