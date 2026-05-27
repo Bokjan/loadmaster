@@ -96,23 +96,63 @@ consteval auto Encode(const std::array<char, N> &literal, std::uint32_t key) {
 // Reverse the encoding into a caller-supplied buffer. `dst` must hold
 // at least `src.size() + 1` bytes; we NUL-terminate so the result is
 // usable as a plain `const char *`. Runtime is O(N) byte XORs.
+//
+// The `volatile` reads on `src` and `key` below are deliberate and load-
+// bearing for the obfuscation: without them, Clang/LLVM's constant
+// propagation is strong enough to recognize that
+//
+//     encoded[i] ^ key_byte(i) ^ (i & 0xff)
+//
+// is the inverse of Encode() applied at compile time, and to fold the
+// whole Decode loop back to the plaintext at the call site -- which is
+// then emitted as plain ASCII into __TEXT,__const. Empirically this
+// happened on AppleClang 15+ for both the CLI version string and any
+// short kernel source: `kVersionStringEncoded` and `kBusyKernel*Encoded`
+// were never even materialized as symbols in the object files; only the
+// folded plaintext survived. MSVC's optimizer didn't perform this fold,
+// which is why the original commit looked fine on Windows.
+//
+// Reading `src[i]` through a `volatile` pointer forces the compiler to
+// treat each byte load as a side-effecting access -- it can no longer
+// substitute the compile-time value of the array element. We do the
+// same for `key` so the fold can't sneak back in via the key side.
 template <std::size_t N>
 inline void Decode(const std::array<std::uint8_t, N> &src, std::uint32_t key, char *dst) {
+#if LOADMASTER_OBFUSCATE
+  const volatile std::uint8_t *vsrc = src.data();
+  const volatile std::uint32_t vkey_storage = key;
+  const std::uint32_t vkey = vkey_storage;
   for (std::size_t i = 0; i < N; ++i) {
-    dst[i] = static_cast<char>(MixByte(src[i], key, i));
+    const std::uint8_t k = static_cast<std::uint8_t>((vkey >> (8 * (i & 3u))) & 0xffu);
+    const std::uint8_t idx = static_cast<std::uint8_t>(i & 0xffu);
+    dst[i] = static_cast<char>(vsrc[i] ^ k ^ idx);
   }
+#else
+  (void)key;
+  for (std::size_t i = 0; i < N; ++i) {
+    dst[i] = static_cast<char>(src[i]);
+  }
+#endif
   dst[N] = '\0';
 }
 
 // Same as Decode<>, but for a runtime-sized byte array (used by the
 // SPIR-V path: the .spv length isn't known to the .h, only to CMake).
+//
+// Same `volatile` rationale as Decode<> above; see that comment for the
+// full story. The SPIR-V blob is large enough that LLVM probably
+// wouldn't have folded it through anyway, but we keep the two decoders
+// symmetric so the obfuscation guarantee is uniform across all clients.
 inline void DecodeBytes(const std::uint8_t *src, std::size_t size, std::uint32_t key,
                         std::uint8_t *dst) {
 #if LOADMASTER_OBFUSCATE
+  const volatile std::uint8_t *vsrc = src;
+  const volatile std::uint32_t vkey_storage = key;
+  const std::uint32_t vkey = vkey_storage;
   for (std::size_t i = 0; i < size; ++i) {
-    const std::uint8_t k = static_cast<std::uint8_t>((key >> (8 * (i & 3u))) & 0xffu);
+    const std::uint8_t k = static_cast<std::uint8_t>((vkey >> (8 * (i & 3u))) & 0xffu);
     const std::uint8_t idx = static_cast<std::uint8_t>(i & 0xffu);
-    dst[i] = static_cast<std::uint8_t>(src[i] ^ k ^ idx);
+    dst[i] = static_cast<std::uint8_t>(vsrc[i] ^ k ^ idx);
   }
 #else
   (void)key;

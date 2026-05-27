@@ -68,7 +68,7 @@ bool DoLoad() {
   if (IsRunningInsideWsl()) {
     LOG_INFO(
         "AMD GPU module disabled: ROCm/HIP is not usable under WSL2 for most "
-        "configurations (especially RDNA4 cards). Run loadmaster on native "
+        "configurations (especially RDNA4 cards). Run this on native "
         "Linux (or Windows with HIP SDK) to drive an AMD GPU.");
     return false;
   }
