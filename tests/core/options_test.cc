@@ -32,12 +32,12 @@ class OptionsTest : public ::testing::Test {
   void SetUp() override {
     saved_level_ = util::logger_internal::g_default_logger;  // pointer is enough
     // Drop the level to "off" without touching the logger object itself.
-    util::logger_internal::g_default_logger->SetLevel(util::Logger::kOff);
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff);
   }
   void TearDown() override {
     // Restore the project's default level so subsequent tests / binaries
     // are unaffected. The default Logger constructor uses kWarn.
-    util::logger_internal::g_default_logger->SetLevel(util::Logger::kWarn);
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelWarn);
     (void)saved_level_;
   }
 

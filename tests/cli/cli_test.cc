@@ -43,9 +43,9 @@ Argv MakeArgv(std::initializer_list<const char *> args) {
 
 class CliTest : public ::testing::Test {
  protected:
-  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kOff); }
+  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff); }
   void TearDown() override {
-    util::logger_internal::g_default_logger->SetLevel(util::Logger::kWarn);
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelWarn);
   }
 };
 

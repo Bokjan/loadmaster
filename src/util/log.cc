@@ -98,9 +98,9 @@ const char *Logger::GetTimeCString(LogLevel level) {
 
 bool Logger::SetLevel(const char *target) {
   using SvLevelPair = std::pair<std::string_view, LogLevel>;
-  static const SvLevelPair level_pairs[] = {{"trace", kTrace}, {"debug", kDebug}, {"info", kInfo},
-                                            {"warn", kWarn},   {"error", kError}, {"fatal", kFatal},
-                                            {"all", kAll},     {"off", kOff}};
+  static const SvLevelPair level_pairs[] = {{"trace", kLevelTrace}, {"debug", kLevelDebug}, {"info", kLevelInfo},
+                                            {"warn", kLevelWarn},   {"error", kLevelError}, {"fatal", kLevelFatal},
+                                            {"all", kLevelAll},     {"off", kLevelOff}};
   const std::string_view sv(target);
   auto find = std::find_if(std::begin(level_pairs), std::end(level_pairs),
                            [&sv](const SvLevelPair &pair) { return pair.first == sv; });
