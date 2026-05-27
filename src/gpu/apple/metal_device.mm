@@ -133,10 +133,19 @@ bool AppleMetalDevice::Init(int device_index) {
 
     // Compile the embedded MSL source into a MTLLibrary. This is the
     // host-side equivalent of NVIDIA's cuModuleLoadData(PTX) and AMD's
-    // hiprtcCompileProgram() -- it is run once at startup.
+    // hiprtcCompileProgram() -- it is run once at startup. The MSL is
+    // stored XOR-obfuscated in .rodata; decode into a stack-local
+    // buffer, hand it to the Metal library compiler (which keeps its
+    // own internal copy), then drop out of scope so the plaintext is
+    // wiped.
     NSError *err = nil;
-    NSString *src = [NSString stringWithUTF8String:kBusyKernelMsl];
-    id<MTLLibrary> library = [device newLibraryWithSource:src options:nil error:&err];
+    id<MTLLibrary> library = nil;
+    {
+      util::obfuscate::Scoped<kBusyKernelMslEncoded.size()> msl(kBusyKernelMslEncoded,
+                                                                 kBusyKernelMslKey);
+      NSString *src = [NSString stringWithUTF8String:msl.c_str()];
+      library = [device newLibraryWithSource:src options:nil error:&err];
+    }
     if (library == nil) {
       LOG_WARN("Apple Metal: newLibraryWithSource failed: %s",
                NsStringToStd([err localizedDescription]).c_str());

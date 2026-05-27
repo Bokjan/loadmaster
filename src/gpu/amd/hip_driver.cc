@@ -9,7 +9,7 @@
 #include "util/log.h"
 
 #if !IS_WINDOWS
-#    include <sys/stat.h>
+#  include <sys/stat.h>
 #endif
 
 namespace gpu::amd {
@@ -32,7 +32,7 @@ util::DlHandle g_rtc_handle = nullptr;
 // virtualization layer. Rather than letting the user chase that error, we
 // short-circuit with a clear diagnostic.
 bool IsRunningInsideWsl() {
-  struct stat st {};
+  struct stat st{};
   if (::stat("/proc/sys/fs/binfmt_misc/WSLInterop", &st) == 0) {
     return true;
   }
@@ -93,11 +93,7 @@ bool DoLoad() {
   };
   static const char *const kRtcCandidates[] = {
 #if IS_WINDOWS
-      "hiprtc0606.dll",
-      "hiprtc0605.dll",
-      "hiprtc0604.dll",
-      "hiprtc0507.dll",
-      "hiprtc.dll",
+      "hiprtc0606.dll", "hiprtc0605.dll", "hiprtc0604.dll", "hiprtc0507.dll", "hiprtc.dll",
 #else
       "libhiprtc.so",
       "libhiprtc.so.6",

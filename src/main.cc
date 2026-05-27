@@ -30,7 +30,7 @@ void RegisterSignalHandlers() {
   };
 #if !IS_WINDOWS
   // Use sigaction for well-defined POSIX behavior (signal() semantics vary).
-  struct sigaction sa {};
+  struct sigaction sa{};
   sa.sa_handler = HandleSignal;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;  // do NOT set SA_RESTART; we want syscalls to be interruptible

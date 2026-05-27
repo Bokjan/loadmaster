@@ -37,7 +37,7 @@ class IntelDevice final : public GpuDevice {
   ze_command_list_handle_t cmd_list_;
   ze_module_handle_t module_;
   ze_kernel_handle_t kernel_;
-  void *out_ptr_;       // grid-sized scratch buffer
+  void *out_ptr_;  // grid-sized scratch buffer
   std::size_t out_bytes_;
   void *mem_load_ptr_;  // optional `-gm` block
   std::size_t mem_load_bytes_;

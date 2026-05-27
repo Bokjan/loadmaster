@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util/obfuscate.h"
+
 namespace gpu::nvidia {
 
 // A minimal PTX kernel that performs `loop_count` 32-bit integer
@@ -13,7 +15,13 @@ namespace gpu::nvidia {
 // Compatibility: PTX is forward-compatible thanks to the driver-side JIT;
 // targeting sm_30 covers virtually every supported GPU. The driver will
 // transparently re-compile the PTX for newer architectures.
-inline constexpr const char *kBusyKernelPtx = R"PTX(
+//
+// The plaintext source below is encoded at compile time via
+// util::obfuscate::Encode; only the obfuscated byte array hits the
+// .rodata segment. NvidiaDevice::Init() decodes it into a stack-local
+// buffer just before handing it to cuModuleLoadData. See
+// util/obfuscate.h for the rationale and the build-time toggle.
+inline constexpr const char kBusyKernelPtxSource[] = R"PTX(
 //
 // Generated for loadmaster: integer busy-loop with stable side effect.
 //
@@ -69,5 +77,12 @@ loop_end:
     ret;
 }
 )PTX";
+
+// Per-backend XOR key. Picked at random; uniqueness across backends
+// means a single recovered key doesn't decode the others.
+inline constexpr std::uint32_t kBusyKernelPtxKey = 0x7A3F91C5u;
+
+inline constexpr auto kBusyKernelPtxEncoded =
+    util::obfuscate::Encode(kBusyKernelPtxSource, kBusyKernelPtxKey);
 
 }  // namespace gpu::nvidia

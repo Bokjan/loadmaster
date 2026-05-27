@@ -167,8 +167,7 @@ void ProcStat::UpdateCpuStat(ProcStat::TimePoint now, ForceUpdate force) {
     return;
   }
   rusage_info_current rusage{};
-  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2,
-                        reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
+  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2, reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
     LOG_ERROR("proc_pid_rusage failed for pid %d", pid_);
     return;
   }
@@ -240,8 +239,7 @@ uint64_t ProcStat::GetMemory() const {
 #elif IS_MACOS
 uint64_t ProcStat::GetMemory() const {
   rusage_info_current rusage{};
-  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2,
-                        reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
+  if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2, reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
     LOG_ERROR("proc_pid_rusage failed for pid %d", pid_);
     return 0;
   }

@@ -67,9 +67,8 @@ struct ClApi {
 
   cl_context (*clCreateContext)(const intptr_t *properties, cl_uint num_devices,
                                 const cl_device_id *devices,
-                                void(LOADMASTER_CL_CALLBACK *pfn_notify)(const char *,
-                                                                          const void *, size_t,
-                                                                          void *),
+                                void(LOADMASTER_CL_CALLBACK *pfn_notify)(const char *, const void *,
+                                                                         size_t, void *),
                                 void *user_data, cl_int *errcode_ret);
   cl_int (*clReleaseContext)(cl_context context);
 
@@ -106,8 +105,8 @@ struct ClApi {
                                    const std::size_t *global_work_offset,
                                    const std::size_t *global_work_size,
                                    const std::size_t *local_work_size,
-                                   cl_uint num_events_in_wait_list,
-                                   const cl_event *event_wait_list, cl_event *event);
+                                   cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
+                                   cl_event *event);
 };
 
 // Returns a singleton API table; first call dlopens the OpenCL loader and

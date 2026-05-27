@@ -85,22 +85,20 @@ bool GetCpuProcStat(CpuStatInfo &info) {
     LOG_ERROR("host_statistics64(HOST_CPU_LOAD_INFO) failed: kr=%d", kr);
     throw std::runtime_error("host_statistics64 failed");
   }
-  info.user       = load.cpu_ticks[CPU_STATE_USER];
-  info.nice       = load.cpu_ticks[CPU_STATE_NICE];
-  info.system     = load.cpu_ticks[CPU_STATE_SYSTEM];
-  info.idle       = load.cpu_ticks[CPU_STATE_IDLE];
-  info.iowait     = 0;  // not reported by Mach
-  info.irq        = 0;
-  info.softirq    = 0;
-  info.steal      = 0;
-  info.guest      = 0;
+  info.user = load.cpu_ticks[CPU_STATE_USER];
+  info.nice = load.cpu_ticks[CPU_STATE_NICE];
+  info.system = load.cpu_ticks[CPU_STATE_SYSTEM];
+  info.idle = load.cpu_ticks[CPU_STATE_IDLE];
+  info.iowait = 0;  // not reported by Mach
+  info.irq = 0;
+  info.softirq = 0;
+  info.steal = 0;
+  info.guest = 0;
   info.guest_nice = 0;
   return true;
 }
 
-uint64_t GetBusyTicks(const CpuStatInfo &info) {
-  return info.user + info.nice + info.system;
-}
+uint64_t GetBusyTicks(const CpuStatInfo &info) { return info.user + info.nice + info.system; }
 
 uint64_t TicksToMilliseconds(uint64_t ticks) {
   return ticks * static_cast<uint64_t>(util::GetJiffyMillisecond());

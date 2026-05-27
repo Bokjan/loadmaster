@@ -71,13 +71,93 @@ endif()
 
 target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# ---- String / payload obfuscation ----------------------------------------
+# Several .rodata blobs (the four GPU kernel sources, the SPIR-V module,
+# and the CLI version / help text) are XOR-obfuscated before being baked
+# into the loadmaster binary. Compile-time C++ encoding happens via
+# util::obfuscate::Encode (consteval) inside the .h files; this option
+# only needs to flow through to the SPIR-V CMake-side encoder below and
+# to the LOADMASTER_OBFUSCATE preprocessor define that util/obfuscate.h
+# reads at compile time.
+#
+# Default ON. Turn OFF only when bisecting a kernel build/JIT failure
+# or trying to read the help text out of a debug build: with
+# obfuscation off the embedded byte arrays match the .h sources
+# verbatim, so cuobjdump / spirv-dis / Metal compiler errors line up
+# with what you read in the .h files.
+#
+# The historical option name `LOADMASTER_OBFUSCATE_KERNELS` is kept as
+# an alias for backwards compatibility with older invocations.
+option(LOADMASTER_OBFUSCATE
+       "XOR-obfuscate embedded kernel + CLI strings before baking them into the binary" ON)
+# Honor the legacy name if the user passed it explicitly.
+if(DEFINED LOADMASTER_OBFUSCATE_KERNELS AND NOT DEFINED CACHE{LOADMASTER_OBFUSCATE_OVERRIDDEN})
+    set(LOADMASTER_OBFUSCATE "${LOADMASTER_OBFUSCATE_KERNELS}" CACHE BOOL "" FORCE)
+    set(LOADMASTER_OBFUSCATE_OVERRIDDEN ON CACHE INTERNAL "")
+endif()
+if(LOADMASTER_OBFUSCATE)
+    target_compile_definitions(loadmaster PRIVATE LOADMASTER_OBFUSCATE=1)
+else()
+    target_compile_definitions(loadmaster PRIVATE LOADMASTER_OBFUSCATE=0)
+endif()
+
+# ---- Compile-time log threshold ------------------------------------------
+# Strips LOG_* sites whose level is below this threshold at preprocessor
+# time, so the format strings, the __FILE__ paths, and the per-call
+# helper code never enter the binary. This both shrinks the executable
+# and removes a sizeable source of identifying strings (module names,
+# vendor literals like "NVIDIA: %d device(s) detected", etc.) that
+# `strings` would otherwise pick up.
+#
+# The default `trace` keeps every site compiled in, so behavior matches
+# the historical build exactly -- runtime `-L <level>` then narrows
+# among them. Bump to `info` / `warn` for a quieter, leaner release
+# binary; `LOG_FATAL` is never compiled out.
+set(LOADMASTER_LOG_MIN_LEVEL "trace" CACHE STRING
+    "Lowest log level kept in the binary (trace/debug/info/warn/error/fatal). \
+Sites below this threshold expand to ((void)0).")
+set_property(CACHE LOADMASTER_LOG_MIN_LEVEL PROPERTY STRINGS
+             trace debug info warn error fatal)
+# Translate to the numeric value matching LOADMASTER_LOG_LEVEL_*
+# in src/util/log.h.
+set(_lm_log_level_num 0)
+string(TOLOWER "${LOADMASTER_LOG_MIN_LEVEL}" _lm_log_level_lc)
+if(_lm_log_level_lc STREQUAL "trace")
+    set(_lm_log_level_num 1)
+elseif(_lm_log_level_lc STREQUAL "debug")
+    set(_lm_log_level_num 2)
+elseif(_lm_log_level_lc STREQUAL "info")
+    set(_lm_log_level_num 3)
+elseif(_lm_log_level_lc STREQUAL "warn")
+    set(_lm_log_level_num 4)
+elseif(_lm_log_level_lc STREQUAL "error")
+    set(_lm_log_level_num 5)
+elseif(_lm_log_level_lc STREQUAL "fatal")
+    set(_lm_log_level_num 6)
+else()
+    message(FATAL_ERROR
+        "LOADMASTER_LOG_MIN_LEVEL must be one of trace/debug/info/warn/error/fatal, "
+        "got '${LOADMASTER_LOG_MIN_LEVEL}'")
+endif()
+target_compile_definitions(loadmaster PRIVATE
+    LOADMASTER_LOG_MIN_LEVEL=${_lm_log_level_num})
+message(STATUS
+    "Log threshold: keeping LOG_${_lm_log_level_lc}+ sites compiled in (level ${_lm_log_level_num})")
+
 # ---- Intel Level Zero busy kernel: SPIR-V embedding -----------------------
 # The Intel backend needs a precompiled SPIR-V binary. We bake it into
 # the binary at compile time by generating a tiny header (intel_spirv_data.h)
 # in the build directory. If the .spv file exists in the source tree the
-# header contains the byte array; otherwise the header still compiles but
-# defines a zero-length placeholder, and the Intel backend disables
-# itself at runtime (the OpenCL backend covers Intel iGPU in that case).
+# header contains the (optionally XOR-obfuscated) byte array; otherwise
+# the header still compiles but defines a zero-length placeholder, and
+# the Intel backend disables itself at runtime (the OpenCL backend
+# covers Intel iGPU in that case).
+#
+# Obfuscation: when LOADMASTER_OBFUSCATE=ON we XOR each byte by
+# (key_byte_at(i) ^ (i & 0xff)) where the rolling key is the 32-bit
+# kBusyKernelSpirvKey. This MUST match util::obfuscate::MixByte exactly
+# so IntelDevice::Init() can decode it back. The .spv file on disk
+# stays plaintext so spirv-dis / git diff still work.
 #
 # To regenerate the .spv (one-shot, on any Linux box with Intel
 # compute-runtime tooling installed -- see src/gpu/intel/busy_kernel.cl
@@ -86,16 +166,58 @@ target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 set(INTEL_SPIRV_FILE "${CMAKE_CURRENT_SOURCE_DIR}/gpu/intel/busy_kernel.spv")
 set(INTEL_SPIRV_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/gpu/intel")
 set(INTEL_SPIRV_GEN_HEADER "${INTEL_SPIRV_GEN_DIR}/intel_spirv_data.h")
+# Per-backend XOR key. Must stay in sync with the constant of the same
+# name in src/gpu/intel/spirv_kernel.h.
+set(INTEL_SPIRV_KEY "0xB52E4C8D")
 file(MAKE_DIRECTORY "${INTEL_SPIRV_GEN_DIR}")
 if(EXISTS "${INTEL_SPIRV_FILE}")
     file(READ "${INTEL_SPIRV_FILE}" INTEL_SPIRV_HEX HEX)
     string(LENGTH "${INTEL_SPIRV_HEX}" INTEL_SPIRV_HEX_LEN)
     math(EXPR INTEL_SPIRV_BYTE_COUNT "${INTEL_SPIRV_HEX_LEN} / 2")
-    # Convert "deadbeef..." to "0xde,0xad,0xbe,0xef,..." with a newline
-    # every 16 bytes for readability.
-    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," INTEL_SPIRV_C_ARRAY "${INTEL_SPIRV_HEX}")
-    string(REGEX REPLACE "((0x[0-9a-f][0-9a-f],){16})" "\\1\n    "
-           INTEL_SPIRV_C_ARRAY "${INTEL_SPIRV_C_ARRAY}")
+
+    if(LOADMASTER_OBFUSCATE)
+        # Walk the hex string two characters at a time, XOR each byte
+        # with the rolling key + index mask, and accumulate a "0xNN,"
+        # comma-separated list. CMake's math(EXPR) supports bitwise
+        # operators since 3.13; we rely on that.
+        set(INTEL_SPIRV_C_ARRAY "")
+        set(_byte_count_dec 0)
+        # Pre-extract the four key bytes once.
+        math(EXPR _k0 "(${INTEL_SPIRV_KEY}      ) & 0xff" OUTPUT_FORMAT HEXADECIMAL)
+        math(EXPR _k1 "(${INTEL_SPIRV_KEY} >> 8 ) & 0xff" OUTPUT_FORMAT HEXADECIMAL)
+        math(EXPR _k2 "(${INTEL_SPIRV_KEY} >> 16) & 0xff" OUTPUT_FORMAT HEXADECIMAL)
+        math(EXPR _k3 "(${INTEL_SPIRV_KEY} >> 24) & 0xff" OUTPUT_FORMAT HEXADECIMAL)
+        set(_keys "${_k0}" "${_k1}" "${_k2}" "${_k3}")
+        # Iterate the hex pairs.
+        math(EXPR _hex_last "${INTEL_SPIRV_HEX_LEN} - 1")
+        foreach(_pos RANGE 0 ${_hex_last} 2)
+            string(SUBSTRING "${INTEL_SPIRV_HEX}" ${_pos} 2 _byte_hex)
+            math(EXPR _key_idx "${_byte_count_dec} % 4")
+            list(GET _keys ${_key_idx} _k)
+            math(EXPR _idx_mask "${_byte_count_dec} % 256")
+            math(EXPR _enc "(0x${_byte_hex}) ^ (${_k}) ^ (${_idx_mask})"
+                 OUTPUT_FORMAT HEXADECIMAL)
+            string(APPEND INTEL_SPIRV_C_ARRAY "${_enc},")
+            math(EXPR _byte_count_dec "${_byte_count_dec} + 1")
+            # Cosmetic: line break every 16 bytes so the generated
+            # header isn't a single 8 KB-long line.
+            math(EXPR _wrap "${_byte_count_dec} % 16")
+            if(_wrap EQUAL 0)
+                string(APPEND INTEL_SPIRV_C_ARRAY "\n    ")
+            endif()
+        endforeach()
+        message(STATUS "Intel backend: embedding ${INTEL_SPIRV_BYTE_COUNT} bytes of SPIR-V "
+                       "(XOR-obfuscated) from ${INTEL_SPIRV_FILE}")
+    else()
+        # Plain "deadbeef" -> "0xde,0xad,0xbe,0xef,..." path, used only
+        # when obfuscation is disabled at configure time.
+        string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," INTEL_SPIRV_C_ARRAY "${INTEL_SPIRV_HEX}")
+        string(REGEX REPLACE "((0x[0-9a-f][0-9a-f],){16})" "\\1\n    "
+               INTEL_SPIRV_C_ARRAY "${INTEL_SPIRV_C_ARRAY}")
+        message(STATUS "Intel backend: embedding ${INTEL_SPIRV_BYTE_COUNT} bytes of SPIR-V "
+                       "from ${INTEL_SPIRV_FILE} (obfuscation disabled)")
+    endif()
+
     set(INTEL_SPIRV_HEADER_CONTENT
 "// Auto-generated by CMake from src/gpu/intel/busy_kernel.spv. Do not edit.
 #pragma once
@@ -108,8 +230,6 @@ inline constexpr std::uint8_t kBusyKernelSpirv[] = {
 inline constexpr std::size_t kBusyKernelSpirvSize = ${INTEL_SPIRV_BYTE_COUNT};
 }  // namespace gpu::intel
 ")
-    message(STATUS "Intel backend: embedding ${INTEL_SPIRV_BYTE_COUNT} bytes of SPIR-V "
-                   "from ${INTEL_SPIRV_FILE}")
 else()
     set(INTEL_SPIRV_HEADER_CONTENT
 "// Auto-generated by CMake. Placeholder: no busy_kernel.spv was found in the

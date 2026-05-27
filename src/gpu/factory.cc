@@ -137,8 +137,7 @@ std::vector<IndexedDevice> EnumerateIntel(const core::Options &options) {
   int gpu_count = 0;
   for (auto drv : drivers) {
     uint32_t dev_count = 0;
-    if (api->zeDeviceGet(drv, &dev_count, nullptr) != intel::ZE_RESULT_SUCCESS ||
-        dev_count == 0) {
+    if (api->zeDeviceGet(drv, &dev_count, nullptr) != intel::ZE_RESULT_SUCCESS || dev_count == 0) {
       continue;
     }
     std::vector<intel::ze_device_handle_t> devs(dev_count);

@@ -199,9 +199,8 @@ struct ZeApi {
                                           std::size_t argSize, const void *pArgValue);
 
   ze_result_t (*zeMemAllocDevice)(ze_context_handle_t hContext,
-                                  const ze_device_mem_alloc_desc_t *device_desc,
-                                  std::size_t size, std::size_t alignment,
-                                  ze_device_handle_t hDevice, void **pptr);
+                                  const ze_device_mem_alloc_desc_t *device_desc, std::size_t size,
+                                  std::size_t alignment, ze_device_handle_t hDevice, void **pptr);
   ze_result_t (*zeMemFree)(ze_context_handle_t hContext, void *ptr);
 };
 

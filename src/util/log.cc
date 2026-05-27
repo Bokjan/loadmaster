@@ -11,7 +11,7 @@
 #include "core/platform.h"  // brings in <windows.h> on MSVC
 
 #if IS_WINDOWS
-#    include <cstdint>
+#  include <cstdint>
 // `struct timeval` lives in <winsock2.h>, but we don't want to bring in the
 // rest of winsock; declare it locally.
 struct timeval {
@@ -19,7 +19,7 @@ struct timeval {
   long tv_usec;
 };
 #else
-#    include <sys/time.h>
+#  include <sys/time.h>
 #endif
 
 #if IS_WINDOWS
@@ -79,7 +79,7 @@ const char *Logger::GetTimeCString(LogLevel level) {
   }
   struct timeval time_val;
   gettimeofday(&time_val, nullptr);
-  struct tm time_struct {};
+  struct tm time_struct{};
 #if IS_WINDOWS
   time_t tsec = time_val.tv_sec;
   (void)localtime_s(&time_struct, &tsec);
@@ -98,9 +98,9 @@ const char *Logger::GetTimeCString(LogLevel level) {
 
 bool Logger::SetLevel(const char *target) {
   using SvLevelPair = std::pair<std::string_view, LogLevel>;
-  static const SvLevelPair level_pairs[] = {{"trace", kLevelTrace}, {"debug", kLevelDebug}, {"info", kLevelInfo},
-                                            {"warn", kLevelWarn},   {"error", kLevelError}, {"fatal", kLevelFatal},
-                                            {"all", kLevelAll},     {"off", kLevelOff}};
+  static const SvLevelPair level_pairs[] = {
+      {"trace", kLevelTrace}, {"debug", kLevelDebug}, {"info", kLevelInfo}, {"warn", kLevelWarn},
+      {"error", kLevelError}, {"fatal", kLevelFatal}, {"all", kLevelAll},   {"off", kLevelOff}};
   const std::string_view sv(target);
   auto find = std::find_if(std::begin(level_pairs), std::end(level_pairs),
                            [&sv](const SvLevelPair &pair) { return pair.first == sv; });

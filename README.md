@@ -14,6 +14,14 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`.
 - It's recommended to rename the executable as you want.
 
+## Build options
+| CMake variable | Default | Effect |
+|----------------|---------|--------|
+| `LOADMASTER_STATIC_LINK` | `ON` | Statically link the C++ / runtime into the executable so it has no `vcredist` / `libstdc++`-version dependency. On Linux this is **semi-static** (`-static-libstdc++ -static-libgcc`): `libc` / `libdl` / `libpthread` stay dynamic because the GPU module needs `dlopen` to load the vendor drivers, which is incompatible with a fully-`-static` glibc binary. Cross-distro portability there is achieved by building inside the manylinux2014 container (see `scripts/build_linux.sh`) rather than by full static linking. |
+| `LOADMASTER_OBFUSCATE` | `ON` | XOR-mask embedded GPU kernel sources, the SPIR-V module, and the CLI version / help text in `.rodata` so `strings` and AV heuristics don't trip on them. Runtime output is unchanged. Turn off when bisecting a kernel build / JIT failure. |
+| `LOADMASTER_LOG_MIN_LEVEL` | `trace` | Strips `LOG_*` sites below this level at preprocessor time. Lower-priority sites expand to `((void)0)`, so their format strings, `__FILE__` paths, and helper code never enter the binary. Bump to `info` / `warn` for a quieter, leaner release; `LOG_FATAL` is never compiled out. |
+
+
 ## Portable release builds
 Because we link glibc dynamically on Linux (to keep `dlopen` working for
 the GPU module), a binary compiled on a modern distro will refuse to

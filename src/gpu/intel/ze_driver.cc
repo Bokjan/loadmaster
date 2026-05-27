@@ -69,10 +69,8 @@ bool DoLoad() {
   ok &= Resolve(g_handle, "zeCommandListDestroy", g_api.zeCommandListDestroy);
   ok &= Resolve(g_handle, "zeCommandListClose", g_api.zeCommandListClose);
   ok &= Resolve(g_handle, "zeCommandListReset", g_api.zeCommandListReset);
-  ok &= Resolve(g_handle, "zeCommandListAppendLaunchKernel",
-                g_api.zeCommandListAppendLaunchKernel);
-  ok &= Resolve(g_handle, "zeCommandListAppendMemoryFill",
-                g_api.zeCommandListAppendMemoryFill);
+  ok &= Resolve(g_handle, "zeCommandListAppendLaunchKernel", g_api.zeCommandListAppendLaunchKernel);
+  ok &= Resolve(g_handle, "zeCommandListAppendMemoryFill", g_api.zeCommandListAppendMemoryFill);
   ok &= Resolve(g_handle, "zeModuleCreate", g_api.zeModuleCreate);
   ok &= Resolve(g_handle, "zeModuleDestroy", g_api.zeModuleDestroy);
   ok &= Resolve(g_handle, "zeModuleBuildLogDestroy", g_api.zeModuleBuildLogDestroy);

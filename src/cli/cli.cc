@@ -12,10 +12,49 @@
 #include "version_string.h"
 
 #include "util/log.h"
+#include "util/obfuscate.h"
 
 namespace cli {
 
 namespace {
+
+// Obfuscated payloads for the human-facing strings printed by `-h`.
+// Bundling them here keeps the plaintext out of .rodata: each blob is
+// XOR-encoded at compile time and decoded into a stack-local Scoped
+// buffer the moment we need to write it out.
+//
+// We deliberately glue the USAGE header to the OPTIONS body so the
+// short "USAGE: ...\n" literal does not survive MSVC's string pool
+// pass: very short string literals tend to be retained in .rodata
+// even when the only consteval consumer is util::obfuscate::Make.
+// The combined long raw string is reliably elided.
+constexpr auto kUsage = util::obfuscate::Make(
+    R"deli(USAGE: %s [options]
+OPTIONS:
+    -v                      print version info and quit
+    -h                      print this message and quit
+    -l  <load>              target CPU usage (100 each core), default: 200
+    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
+    -c  <thread_count>      worker thread (CPU) count, default: based on required load
+    -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
+    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0
+    -g  <gpu_load>          per-device GPU compute load (0..100), default: 0 (disabled)
+    -gm <gpu_memory>        per-device GPU memory load (MiB), default: 0
+    -gi <indices>           GPU device indices, e.g. "0", "0,2,3", or "all"; default: all
+    -gv <vendor>            GPU vendor: auto/nvidia/amd/apple/intel/opencl, default: auto
+    -ga <algorithm>         GPU schedule algorithm (default/rand_normal), default: default
+)deli",
+    0xC2374A91u);
+#ifdef _MSC_VER
+constexpr auto kBuiltLineMsvc =
+    util::obfuscate::Make("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n", 0x5BD49E03u);
+#elif defined(__VERSION__)
+constexpr auto kBuiltLineVersioned = util::obfuscate::Make(
+    "Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__, 0x5BD49E03u);
+#else
+constexpr auto kBuiltLinePlain =
+    util::obfuscate::Make("Built: " __DATE__ " " __TIME__, 0x5BD49E03u);
+#endif
 
 void PrintUsage(const char *path);
 
@@ -129,27 +168,26 @@ StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[])
 
 void PrintUsage(const char *path) {
   std::puts(VersionString());
-  std::printf("USAGE: %s [options] \n", path);
-  std::puts(R"deli(OPTIONS:
-    -v                      print version info and quit
-    -h                      print this message and quit
-    -l  <load>              target CPU usage (100 each core), default: 200
-    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
-    -c  <thread_count>      worker thread (CPU) count, default: based on required load
-    -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
-    -m  <max_memory>        maximum memory (MiB) for wasting, default: 0
-    -g  <gpu_load>          per-device GPU compute load (0..100), default: 0 (disabled)
-    -gm <gpu_memory>        per-device GPU memory load (MiB), default: 0
-    -gi <indices>           GPU device indices, e.g. "0", "0,2,3", or "all"; default: all
-    -gv <vendor>            GPU vendor: auto/nvidia/amd/apple/intel/opencl, default: auto
-    -ga <algorithm>         GPU schedule algorithm (default/rand_normal), default: default)deli");
+  {
+    util::obfuscate::ScopedHolder s(kUsage);
+    std::printf(s.c_str(), path);
+  }
 #ifdef _MSC_VER
-  std::printf("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n", _MSC_FULL_VER / 10000000,
-              _MSC_FULL_VER / 100000 % 100, _MSC_FULL_VER % 100000);
+  {
+    util::obfuscate::ScopedHolder s(kBuiltLineMsvc);
+    std::printf(s.c_str(), _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100,
+                _MSC_FULL_VER % 100000);
+  }
 #elif defined(__VERSION__)
-  std::puts("Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__);
+  {
+    util::obfuscate::ScopedHolder s(kBuiltLineVersioned);
+    std::puts(s.c_str());
+  }
 #else
-  std::puts("Built: " __DATE__ " " __TIME__);
+  {
+    util::obfuscate::ScopedHolder s(kBuiltLinePlain);
+    std::puts(s.c_str());
+  }
 #endif
 }
 

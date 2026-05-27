@@ -179,14 +179,28 @@ bool IntelDevice::Init(int device_index) {
     return false;
   }
 
-  // Build the SPIR-V module.
+  // Build the SPIR-V module. The embedded bytes are XOR-obfuscated (see
+  // src/CMakeLists.txt and gpu/kernel_obfuscate.h); decode them into a
+  // local buffer before handing them to the driver, then wipe the
+  // buffer once zeModuleCreate has consumed it (the driver keeps an
+  // internal copy in `module_`).
+  std::vector<std::uint8_t> spirv_plain(kBusyKernelSpirvSize);
+  util::obfuscate::DecodeBytes(kBusyKernelSpirv, kBusyKernelSpirvSize, kBusyKernelSpirvKey,
+                               spirv_plain.data());
   ze_module_desc_t mod_desc{};
   mod_desc.stype = ZE_STRUCTURE_TYPE_MODULE_DESC;
   mod_desc.format = ZE_MODULE_FORMAT_IL_SPIRV;
-  mod_desc.inputSize = kBusyKernelSpirvSize;
-  mod_desc.pInputModule = kBusyKernelSpirv;
+  mod_desc.inputSize = spirv_plain.size();
+  mod_desc.pInputModule = spirv_plain.data();
   ze_module_build_log_handle_t build_log = nullptr;
   rc = api_->zeModuleCreate(context_, device_, &mod_desc, &module_, &build_log);
+  // Wipe plaintext SPIR-V from our buffer ASAP; driver has its own copy.
+  if (!spirv_plain.empty()) {
+    volatile std::uint8_t *p = spirv_plain.data();
+    for (std::size_t i = 0; i < spirv_plain.size(); ++i) {
+      p[i] = 0;
+    }
+  }
   if (rc != ZE_RESULT_SUCCESS) {
     if (build_log != nullptr) {
       size_t log_size = 0;
@@ -235,8 +249,8 @@ bool IntelDevice::Init(int device_index) {
   mem_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
   rc = api_->zeMemAllocDevice(context_, &mem_desc, out_bytes_, 64, device_, &out_ptr_);
   if (rc != ZE_RESULT_SUCCESS) {
-    LOG_WARN("zeMemAllocDevice(scratch %zu) failed: %s (rc=0x%x)", out_bytes_,
-             ZeResultString(rc), rc);
+    LOG_WARN("zeMemAllocDevice(scratch %zu) failed: %s (rc=0x%x)", out_bytes_, ZeResultString(rc),
+             rc);
     Destroy();
     return false;
   }
@@ -268,8 +282,7 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   }
   ze_device_mem_alloc_desc_t mem_desc{};
   mem_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
-  ze_result_t rc =
-      api_->zeMemAllocDevice(context_, &mem_desc, bytes, 64, device_, &mem_load_ptr_);
+  ze_result_t rc = api_->zeMemAllocDevice(context_, &mem_desc, bytes, 64, device_, &mem_load_ptr_);
   if (rc != ZE_RESULT_SUCCESS) {
     LOG_WARN("zeMemAllocDevice(%zu) failed: %s (rc=0x%x)", bytes, ZeResultString(rc), rc);
     mem_load_ptr_ = nullptr;

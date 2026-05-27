@@ -143,9 +143,16 @@ bool OpenClDevice::Init(int device_index) {
     return false;
   }
 
-  // Build the embedded kernel source.
-  const char *src = kBusyKernelClSrc;
-  program_ = api_->clCreateProgramWithSource(context_, 1, &src, nullptr, &rc);
+  // Build the embedded kernel source. Decode out of the obfuscated
+  // .rodata array into a stack-local buffer; the ICD copies the source
+  // internally during clCreateProgramWithSource, so the plaintext is
+  // wiped as soon as we leave this block.
+  {
+    util::obfuscate::Scoped<kBusyKernelClEncoded.size()> cl_src(kBusyKernelClEncoded,
+                                                                kBusyKernelClKey);
+    const char *src = cl_src.c_str();
+    program_ = api_->clCreateProgramWithSource(context_, 1, &src, nullptr, &rc);
+  }
   if (rc != CL_SUCCESS || program_ == nullptr) {
     LOG_WARN("clCreateProgramWithSource failed: %s (rc=%d)", ClErrorString(rc), rc);
     Destroy();
@@ -251,8 +258,8 @@ bool OpenClDevice::RunKernel(int loop_count) {
     LOG_WARN("clSetKernelArg(loop) failed: %s (rc=%d)", ClErrorString(rc), rc);
     return false;
   }
-  const size_t global_size = static_cast<size_t>(kGpuKernelGridSize) *
-                             static_cast<size_t>(kGpuKernelBlockSize);
+  const size_t global_size =
+      static_cast<size_t>(kGpuKernelGridSize) * static_cast<size_t>(kGpuKernelBlockSize);
   const size_t local_size = static_cast<size_t>(kGpuKernelBlockSize);
   rc = api_->clEnqueueNDRangeKernel(queue_, kernel_, 1, nullptr, &global_size, &local_size, 0,
                                     nullptr, nullptr);

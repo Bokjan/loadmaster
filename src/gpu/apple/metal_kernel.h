@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util/obfuscate.h"
+
 namespace gpu::apple {
 
 // Metal Shading Language (MSL) source for the busy kernel. Same shape as
@@ -15,7 +17,12 @@ namespace gpu::apple {
 // Threadgroup geometry is set by the host to match
 // kGpuKernelGridSize x kGpuKernelBlockSize threads, mirroring the CUDA /
 // HIP launch.
-inline constexpr const char *kBusyKernelMsl = R"MSL(
+//
+// The plaintext source below is XOR-encoded at compile time; only the
+// obfuscated bytes hit .rodata. AppleMetalDevice::Init() decodes into
+// a stack-local buffer just before passing it to
+// `MTLDevice newLibraryWithSource:`.
+inline constexpr const char kBusyKernelMslSource[] = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -34,5 +41,10 @@ kernel void busy_kernel(
     out[tid] = val;
 }
 )MSL";
+
+inline constexpr std::uint32_t kBusyKernelMslKey = 0xC1593E62u;
+
+inline constexpr auto kBusyKernelMslEncoded =
+    util::obfuscate::Encode(kBusyKernelMslSource, kBusyKernelMslKey);
 
 }  // namespace gpu::apple

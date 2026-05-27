@@ -3,11 +3,11 @@
 #include "core/platform.h"
 
 #if IS_WINDOWS
-#    include <windows.h>
-#    include <cstdio>
-#    include <cstring>
+#  include <windows.h>
+#  include <cstdio>
+#  include <cstring>
 #else
-#    include <dlfcn.h>
+#  include <dlfcn.h>
 #endif
 
 namespace util {
@@ -24,16 +24,14 @@ const char *FormatLastError() {
   }
   // FormatMessage may write a trailing CRLF; we'll trim it.
   char msg_buf[192] = {};
-  DWORD len = ::FormatMessageA(
-      FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, err,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg_buf,
-      static_cast<DWORD>(sizeof(msg_buf)), nullptr);
+  DWORD len = ::FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr,
+                               err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg_buf,
+                               static_cast<DWORD>(sizeof(msg_buf)), nullptr);
   if (len == 0) {
-    std::snprintf(g_err_buf, sizeof(g_err_buf), "Win32 error %lu",
-                  static_cast<unsigned long>(err));
+    std::snprintf(g_err_buf, sizeof(g_err_buf), "Win32 error %lu", static_cast<unsigned long>(err));
   } else {
-    while (len > 0 && (msg_buf[len - 1] == '\r' || msg_buf[len - 1] == '\n' ||
-                       msg_buf[len - 1] == ' ')) {
+    while (len > 0 &&
+           (msg_buf[len - 1] == '\r' || msg_buf[len - 1] == '\n' || msg_buf[len - 1] == ' ')) {
       msg_buf[--len] = '\0';
     }
     std::snprintf(g_err_buf, sizeof(g_err_buf), "%s (Win32 error %lu)", msg_buf,
@@ -48,10 +46,8 @@ DlHandle DlopenAny(const char *const *names) {
   // directory (where vendor GPU drivers live, e.g. nvcuda.dll) is always
   // considered, regardless of any process-wide default search-path
   // restrictions inherited from the launcher.
-  constexpr DWORD kFlags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
-                           LOAD_LIBRARY_SEARCH_SYSTEM32 |
-                           LOAD_LIBRARY_SEARCH_USER_DIRS |
-                           LOAD_LIBRARY_SEARCH_APPLICATION_DIR;
+  constexpr DWORD kFlags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                           LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_APPLICATION_DIR;
   for (int i = 0; names[i] != nullptr; ++i) {
     const char *name = names[i];
     HMODULE h = ::LoadLibraryExA(name, nullptr, kFlags);
@@ -70,8 +66,8 @@ DlHandle DlopenAny(const char *const *names) {
     // process default DLL search path has been hardened so much that
     // even System32 is excluded, or where some intermediary has
     // redirected the System32 search to a non-existent location.
-    const bool has_sep = (std::strchr(name, '\\') != nullptr) ||
-                         (std::strchr(name, '/') != nullptr);
+    const bool has_sep =
+        (std::strchr(name, '\\') != nullptr) || (std::strchr(name, '/') != nullptr);
     if (!has_sep) {
       char abs_path[MAX_PATH];
       const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));

@@ -64,9 +64,15 @@ bool AmdDevice::MakeCurrent() {
 }
 
 bool AmdDevice::CompileKernel(std::vector<char> &code_out) {
+  // Decode the obfuscated HIP source into a stack-local buffer; hipRTC
+  // copies it internally, so the buffer is wiped on scope exit.
   hiprtcProgram prog = nullptr;
-  hiprtcResult rc =
-      api_->hiprtcCreateProgram(&prog, kBusyKernelHipSrc, "busy.hip", 0, nullptr, nullptr);
+  hiprtcResult rc = HIPRTC_SUCCESS;
+  {
+    util::obfuscate::Scoped<kBusyKernelHipEncoded.size()> hip(kBusyKernelHipEncoded,
+                                                              kBusyKernelHipKey);
+    rc = api_->hiprtcCreateProgram(&prog, hip.c_str(), "busy.hip", 0, nullptr, nullptr);
+  }
   if (rc != HIPRTC_SUCCESS) {
     LOG_WARN("hiprtcCreateProgram failed: %s", HiprtcErrorString(rc));
     return false;

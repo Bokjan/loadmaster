@@ -97,7 +97,15 @@ bool NvidiaDevice::Init(int device_index) {
     return false;
   }
 
-  rc = api_->cuModuleLoadData(&module_, kBusyKernelPtx);
+  // Decode the obfuscated PTX into a stack-local buffer, hand it to the
+  // driver, then drop out of scope so the plaintext is wiped. The
+  // driver itself keeps an internal copy in `module_`, but our
+  // .rodata never sees the unmasked source.
+  {
+    util::obfuscate::Scoped<kBusyKernelPtxEncoded.size()> ptx(kBusyKernelPtxEncoded,
+                                                              kBusyKernelPtxKey);
+    rc = api_->cuModuleLoadData(&module_, ptx.c_str());
+  }
   if (rc != CUDA_SUCCESS) {
     LOG_WARN("cuModuleLoadData failed: %s", CudaErrorString(rc));
     Destroy();
