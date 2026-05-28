@@ -1,15 +1,16 @@
 # __FILE__ sanitization. By default the C/C++ preprocessor expands
-# __FILE__ to the absolute source path the compiler was invoked with --
-# which embeds the builder's home directory / username into the binary
-# (visible via `strings`). We strip that out at compile time on
-# Clang/GCC via -ffile-prefix-map, mapping "<repo>/" to the empty
-# string so __FILE__ becomes a project-relative path like
-# "src/util/proc_stat.cc".
+# __FILE__ to the source path the compiler was invoked with -- which
+# may be the absolute path on disk, embedding the builder's home
+# directory / username into the binary (visible via `strings`).
 #
-# MSVC has no equivalent flag but already defaults __FILE__ to a path
-# relative to the build's working directory (the build_release_windows
-# directory used by build_windows.ps1), which does not contain the
-# builder's username.
+# We strip that out at compile time on a per-toolchain basis:
+#   * Clang/GCC: -ffile-prefix-map=<repo>/= rewrites the prefix.
+#   * MSVC: /d1trimfile:<repo>\ does the equivalent (undocumented but
+#     stable since VS 2019 16.7 / 19.27, used by Chromium et al.).
+#     Necessary because the Visual Studio CMake generator passes
+#     absolute paths in <ClCompile Include="..."> regardless of how
+#     target_sources() spelled them, so __FILE__ would otherwise carry
+#     the full "D:\...\src\..." path on the build host.
 #
 # Once __FILE__ is already a short relative path we no longer need the
 # logger's runtime SOURCE_PATH_SIZE offset trick. We keep the macro for
@@ -262,6 +263,20 @@ if(MSVC)
         /Zc:preprocessor     # use the conforming preprocessor (needed for our macros)
         /utf-8               # interpret source files as UTF-8
     )
+    # /d1trimfile:<prefix> -- strip <prefix> from __FILE__ at compile
+    # time, the MSVC equivalent of -ffile-prefix-map. Undocumented but
+    # stable since VS 2019 16.7 (MSVC 19.27); guarded by version check
+    # so older toolchains don't fail with an "unknown option" error.
+    # Without this the Visual Studio CMake generator's absolute-path
+    # <ClCompile> entries leak the full builder path (D:\Users\...\src
+    # \...) into every LOG_* call site's __FILE__ string.
+    if(MSVC_VERSION GREATER_EQUAL 1927)
+        # Convert CMake's forward-slash path to the backslash form cl.exe
+        # expects, and append a trailing backslash so the trimmed result
+        # starts cleanly at "src\...".
+        file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/" _lm_repo_native)
+        target_compile_options(loadmaster PRIVATE "/d1trimfile:${_lm_repo_native}")
+    endif()
     target_compile_definitions(loadmaster PRIVATE
         _CRT_SECURE_NO_WARNINGS  # we use std::sscanf etc.; their MSVC-specific
                                  # _s variants are guarded by _MSC_VER.
