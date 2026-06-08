@@ -9,6 +9,7 @@
 #  include <sys/types.h>
 #  include <sys/user.h>
 
+#  include <cstddef>
 #  include <cstdint>
 #  include <cstring>
 

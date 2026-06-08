@@ -34,7 +34,17 @@ cd "${REPO_ROOT}"
 
 mkdir -p "$build_dir" && cd "$build_dir"
 cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j
+# Compute an explicit jobs count and pass it to `cmake --build`. We
+# cannot use `cmake --build . -j` (without a number): CMake 3.x simply
+# forwards a bare `-j` to the underlying build tool, which works for
+# GNU make ("unlimited parallelism") but fails for FreeBSD's base
+# bmake ("option requires an argument -- j"). Using `nproc` would be
+# Linux-only; instead we use `getconf` which is POSIX and present on
+# Linux/macOS/FreeBSD alike, with a hard-coded "2" fallback that is
+# safe (slow but correct) on the off chance _NPROCESSORS_ONLN is
+# unavailable.
+jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+cmake --build . -j "$jobs"
 cd ..
 cp "$build_dir/src/loadmaster" "./$binary_name"
 strip "$binary_name"

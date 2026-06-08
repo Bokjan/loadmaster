@@ -328,6 +328,26 @@ else()
     )
 endif()
 
+# FreeBSD libc++ ships <stop_token> / std::jthread (LLVM 18+ implements
+# them fully) but the base system's libc++ build defines
+# _LIBCPP_HAS_NO_EXPERIMENTAL_STOP_TOKEN, which gates the entire header
+# out at the preprocessor level. As a result, even on FreeBSD 15 with
+# Clang 19, an unflagged compile sees "no type named 'jthread' in
+# namespace 'std'". LLVM provides -fexperimental-library specifically to
+# turn that gate off; on libc++ 19 the remaining "experimental" surface
+# is essentially just stop_token, so the flag is effectively scoped to
+# the feature we need.
+#
+# We don't apply this on Linux (libstdc++ has jthread in mainline since
+# GCC 10; Linux clang+libc++ ships it without the gate too) or on macOS
+# (Apple libc++ 17+ on macOS 14+ ships it directly; older Xcodes are
+# already below the project's tested baseline). Both would also reject
+# or no-op the flag in less than ideal ways.
+if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+    target_compile_options(loadmaster PRIVATE -fexperimental-library)
+    target_link_options(loadmaster PRIVATE -fexperimental-library)
+endif()
+
 # Debug-only macro
 target_compile_definitions(loadmaster PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
