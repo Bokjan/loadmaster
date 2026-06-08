@@ -67,8 +67,19 @@ constexpr std::uint8_t MixByte(std::uint8_t plain, std::uint32_t key, std::size_
 // returned array does NOT include a trailing NUL -- payloads are
 // often passed to APIs as (pointer, size) pairs, and we want to avoid
 // the implicit '\0' showing up as a known-plaintext anchor.
+//
+// `constexpr` (not consteval): every current caller already forces
+// constant evaluation -- `constexpr auto kUsage = Make(...)`,
+// `inline constexpr ... kVersionStringEncoded`, and the consteval
+// BuildVersionStringEncoded -- so the encoding still happens entirely
+// at compile time. We avoid consteval here specifically to dodge a
+// GCC 13 bug (fixed in GCC 14): calling a consteval function with a
+// *reference parameter* of the enclosing consteval function (which is
+// what Make does: `Encode(literal, key)`) is wrongly rejected as
+// "taking address of an immediate function". Demoting Encode to
+// constexpr sidesteps that while keeping the compile-time guarantee.
 template <std::size_t N>
-consteval auto Encode(const char (&literal)[N], std::uint32_t key) {
+constexpr auto Encode(const char (&literal)[N], std::uint32_t key) {
   // N includes the NUL terminator; we strip it.
   constexpr std::size_t kSize = N - 1;
   std::array<std::uint8_t, kSize> out{};
@@ -83,7 +94,7 @@ consteval auto Encode(const char (&literal)[N], std::uint32_t key) {
 // array form. The caller must pass a NUL-terminated array; we drop
 // that NUL exactly like the C-array overload does.
 template <std::size_t N>
-consteval auto Encode(const std::array<char, N> &literal, std::uint32_t key) {
+constexpr auto Encode(const std::array<char, N> &literal, std::uint32_t key) {
   static_assert(N >= 1, "Encode() needs at least the NUL terminator");
   constexpr std::size_t kSize = N - 1;
   std::array<std::uint8_t, kSize> out{};
