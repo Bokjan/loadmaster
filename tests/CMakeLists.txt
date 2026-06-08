@@ -106,7 +106,7 @@ loadmaster_add_test(util_normal_dist_test
 # will simply find zero tests on non-Linux hosts.
 loadmaster_add_test(util_proc_stat_internal_test
     util/proc_stat_internal_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/proc_stat.cc
+    ${CMAKE_SOURCE_DIR}/src/util/proc_stat_linux.cc
     ${CMAKE_SOURCE_DIR}/src/util/clock.cc
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
@@ -130,12 +130,24 @@ loadmaster_add_test(cli_cli_test
 )
 
 # ---- cpu ----
-# Pure helpers from cpu/stat: the GetBusyTicks summation and the
-# TicksToMilliseconds linear conversion. We deliberately do NOT pull in
-# GetCpuProcStat (would touch /proc, GetSystemTimes, or host_statistics64).
-loadmaster_add_test(cpu_stat_test
-    cpu/stat_test.cc
-    ${CMAKE_SOURCE_DIR}/src/cpu/stat.cc
-    ${CMAKE_SOURCE_DIR}/src/util/clock.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
-)
+# Pure helpers from the Linux cpu/stat backend, exposed via
+# cpu/stat_internal.h: the BusyJiffies aggregation ("everything not idle")
+# and the JiffiesToNs conversion. The test TU is guarded by IS_LINUX, and we
+# only pull in stat_linux.cc on Linux -- the Windows/macOS backends
+# reference platform-only APIs (GetSystemTimes / host_statistics64) and must
+# never be compiled into this test. The target is still registered
+# everywhere so the build doesn't bit-rot; off Linux it compiles to zero
+# tests. We deliberately do NOT exercise ReadSystemBusyNs() (it touches
+# /proc, GetSystemTimes, or host_statistics64).
+if(UNIX AND NOT APPLE)
+    loadmaster_add_test(cpu_stat_test
+        cpu/stat_test.cc
+        ${CMAKE_SOURCE_DIR}/src/cpu/stat_linux.cc
+        ${CMAKE_SOURCE_DIR}/src/util/clock.cc
+        ${CMAKE_SOURCE_DIR}/src/util/log.cc
+    )
+else()
+    loadmaster_add_test(cpu_stat_test
+        cpu/stat_test.cc
+    )
+endif()

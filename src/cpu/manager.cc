@@ -40,23 +40,19 @@ void CpuResourceManager::JoinWorkerThreads() {
 }
 
 void CpuResourceManager::Schedule(TimePoint time_point) {
-  const auto last_busy_ticks = GetBusyTicks(cpu_stat_);
-
-  // Refresh system CPU snapshot.
-  try {
-    if (!GetCpuProcStat(cpu_stat_)) {
-      LOG_ERROR("failed to GetCpuProcStat");
-      SetLastScheduling(time_point);
-      return;
-    }
-  } catch (const std::exception &e) {
-    LOG_ERROR("GetCpuProcStat threw: %s", e.what());
+  // Refresh system CPU snapshot (cumulative busy nanoseconds).
+  const std::optional<uint64_t> current_busy_ns = ReadSystemBusyNs();
+  if (!current_busy_ns) {
+    LOG_ERROR("failed to ReadSystemBusyNs");
     SetLastScheduling(time_point);
     return;
   }
 
-  // First call: nothing to diff against yet.
-  if (last_busy_ticks == 0) {
+  // First call: record the baseline and bail -- nothing to diff against yet.
+  // Unlike the old snapshot-member approach this MUST be stored explicitly,
+  // otherwise the next tick would diff against 0 and spike once.
+  if (prev_system_busy_ns_ == 0) {
+    prev_system_busy_ns_ = *current_busy_ns;
     SetLastScheduling(time_point);
     return;
   }
@@ -64,25 +60,29 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   // Update process snapshot/average.
   UpdateProcStat(time_point);
 
-  // Compute current system-wide CPU load (platform-agnostic).
-  const auto current_busy_ticks = GetBusyTicks(cpu_stat_);
-  const auto diff = current_busy_ticks - last_busy_ticks;
-  const auto cpu_ms = TicksToMilliseconds(diff);
-  const auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(time_point - GetLastScheduling())
+  // Compute current system-wide CPU load (platform-agnostic, ns-based).
+  // Guard against a non-monotonic reading so a counter glitch can't
+  // underflow the unsigned diff.
+  const uint64_t busy_ns_diff =
+      (*current_busy_ns >= prev_system_busy_ns_) ? (*current_busy_ns - prev_system_busy_ns_) : 0;
+  const auto elapsed_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(time_point - GetLastScheduling())
           .count();
-  if (elapsed_ms <= 0) {
+  if (elapsed_ns <= 0) {
+    prev_system_busy_ns_ = *current_busy_ns;
     SetLastScheduling(time_point);
     return;
   }
-  const int system_load =
-      static_cast<int>(static_cast<double>(cpu_ms) / elapsed_ms * kCpuMaxLoadPerCore);
+  // load = busy_ns / elapsed_ns * 100 (per-core units, summed across cores).
+  const int system_load = static_cast<int>(static_cast<double>(busy_ns_diff) /
+                                           static_cast<double>(elapsed_ns) * kCpuMaxLoadPerCore);
   system_sampler_.InsertValue(system_load);
   LOG_TRACE("cur_sys_load=%d, avg_sys_load=%d", system_load, system_sampler_.GetMean());
 
   // Invoke specified scheduler.
   AdjustWorkerLoad(time_point, system_load);
 
+  prev_system_busy_ns_ = *current_busy_ns;
   SetLastScheduling(time_point);
 }
 

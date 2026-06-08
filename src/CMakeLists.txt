@@ -28,7 +28,6 @@ target_sources(loadmaster PRIVATE
     core/runtime.cc
     core/options.cc
     cli/cli.cc
-    cpu/stat.cc
     cpu/worker.cc
     cpu/manager.cc
     cpu/manager_default.cc
@@ -68,6 +67,27 @@ if(APPLE)
     )
     set_source_files_properties(gpu/apple/metal_device.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+endif()
+
+# Per-platform CPU + process-stat backends. Exactly one of each is
+# compiled, mirroring the gpu/apple/metal_device.mm precedent above. The
+# Linux branch is the UNIX-but-not-Apple else(). util/proc_stat.cc (the
+# shared throttle/diff body) is always compiled and stays in the main list.
+if(WIN32)
+    target_sources(loadmaster PRIVATE
+        cpu/stat_windows.cc
+        util/proc_stat_windows.cc
+    )
+elseif(APPLE)
+    target_sources(loadmaster PRIVATE
+        cpu/stat_macos.cc
+        util/proc_stat_macos.cc
+    )
+else()  # Linux (UNIX AND NOT APPLE)
+    target_sources(loadmaster PRIVATE
+        cpu/stat_linux.cc
+        util/proc_stat_linux.cc
+    )
 endif()
 
 target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

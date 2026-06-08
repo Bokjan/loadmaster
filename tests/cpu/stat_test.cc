@@ -1,158 +1,147 @@
-// Unit tests for cpu::GetBusyTicks and cpu::TicksToMilliseconds.
+// Unit tests for the pure helpers behind cpu::ReadSystemBusyNs() on Linux:
+//   * internal::BusyJiffies  -- aggregates the /proc/stat cpu-line fields
+//     into a single "busy" (i.e. not-idle) jiffy count.
+//   * internal::JiffiesToNs  -- linear jiffy -> nanosecond conversion.
 //
-// These two helpers turn a raw CpuStatInfo snapshot into platform-
-// agnostic quantities consumed by the CPU scheduler. The platform
-// dispatch lives in `stat.cc`; the math we care about here is
-// deliberately tiny but easy to break (e.g. someone "fixes" the
-// busy-ticks formula by adding `iowait` and silently shifts every
-// load measurement). These tests pin the current semantics.
+// The platform read (opening /proc/stat, GetSystemTimes, host_statistics64)
+// is deliberately NOT exercised: it pokes at real system state that is
+// neither deterministic nor portable across CI workers. We only pin the
+// math, which is tiny but easy to break -- e.g. someone "fixes" the busy
+// formula by folding iowait back in and silently shifts every load reading.
 //
-// We do NOT exercise GetCpuProcStat() because it pokes at real system
-// state (/proc/stat, GetSystemTimes, host_statistics64) which is
-// neither deterministic nor portable across CI workers.
+// Linux-only: the busy aggregation is defined in stat_linux.cc and exposed
+// through cpu/stat_internal.h, both of which compile out elsewhere. The
+// whole TU is guarded by IS_LINUX so it builds to zero tests on macOS /
+// Windows (matching util_proc_stat_internal_test).
 
-#include "cpu/stat.h"
+#include "core/platform.h"
 
-#include <cstdint>
+#if IS_LINUX
 
-#include <gtest/gtest.h>
+#  include "cpu/stat_internal.h"
+
+#  include <cstdint>
+
+#  include "util/clock.h"
+
+#  include <gtest/gtest.h>
 
 namespace {
 
-using cpu::CpuStatInfo;
-using cpu::GetBusyTicks;
-using cpu::TicksToMilliseconds;
+using cpu::internal::BusyJiffies;
+using cpu::internal::JiffiesToNs;
+using cpu::internal::ProcStatFields;
 
-#if !IS_WINDOWS
-
-// Build a snapshot with explicit named fields so it's obvious which
-// component the test is exercising.
-CpuStatInfo MakeStat(uint64_t user, uint64_t nice, uint64_t system,
-                     uint64_t idle, uint64_t iowait, uint64_t irq,
-                     uint64_t softirq, uint64_t steal,
-                     uint64_t guest, uint64_t guest_nice) {
-  CpuStatInfo s;
-  s.user = user;
-  s.nice = nice;
-  s.system = system;
-  s.idle = idle;
-  s.iowait = iowait;
-  s.irq = irq;
-  s.softirq = softirq;
-  s.steal = steal;
-  s.guest = guest;
-  s.guest_nice = guest_nice;
-  return s;
+// Build a fields snapshot with explicit named members so it's obvious which
+// component each test exercises.
+ProcStatFields MakeFields(uint64_t user, uint64_t nice, uint64_t system, uint64_t idle,
+                          uint64_t iowait, uint64_t irq, uint64_t softirq, uint64_t steal,
+                          uint64_t guest, uint64_t guest_nice) {
+  ProcStatFields f;
+  f.user = user;
+  f.nice = nice;
+  f.system = system;
+  f.idle = idle;
+  f.iowait = iowait;
+  f.irq = irq;
+  f.softirq = softirq;
+  f.steal = steal;
+  f.guest = guest;
+  f.guest_nice = guest_nice;
+  return f;
 }
 
-TEST(GetBusyTicksTest, ZeroSnapshotReturnsZero) {
-  CpuStatInfo s{};
-  EXPECT_EQ(GetBusyTicks(s), 0u);
+// ---- BusyJiffies ----------------------------------------------------------
+
+TEST(BusyJiffiesTest, ZeroSnapshotReturnsZero) {
+  ProcStatFields f{};
+  EXPECT_EQ(BusyJiffies(f), 0u);
 }
 
-TEST(GetBusyTicksTest, SumsOnlyUserNiceSystem) {
-  // The "concerned busy" definition is user + nice + system.
-  // Idle / iowait / irq / softirq / steal / guest / guest_nice must
-  // NOT contribute -- pin this so a refactor doesn't silently broaden
-  // the formula.
-  const CpuStatInfo s = MakeStat(/*user*/ 100, /*nice*/ 20, /*system*/ 30,
-                                 /*idle*/ 1'000'000, /*iowait*/ 1'000'000,
-                                 /*irq*/ 1'000'000, /*softirq*/ 1'000'000,
-                                 /*steal*/ 1'000'000,
-                                 /*guest*/ 1'000'000, /*guest_nice*/ 1'000'000);
-  EXPECT_EQ(GetBusyTicks(s), 100u + 20u + 30u);
+TEST(BusyJiffiesTest, SumsUserNiceSystemIrqSoftirqSteal) {
+  // The "not idle" definition: user + nice + system + irq + softirq + steal.
+  const ProcStatFields f = MakeFields(/*user*/ 100, /*nice*/ 20, /*system*/ 30,
+                                      /*idle*/ 0, /*iowait*/ 0, /*irq*/ 1,
+                                      /*softirq*/ 2, /*steal*/ 4,
+                                      /*guest*/ 0, /*guest_nice*/ 0);
+  EXPECT_EQ(BusyJiffies(f), 100u + 20u + 30u + 1u + 2u + 4u);
 }
 
-TEST(GetBusyTicksTest, OnlyUser) {
-  const CpuStatInfo s = MakeStat(42, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  EXPECT_EQ(GetBusyTicks(s), 42u);
+TEST(BusyJiffiesTest, ExcludesIdleAndIowait) {
+  // idle and iowait are NOT busy -- both represent the CPU not doing work.
+  // Pin this so a refactor doesn't silently fold them back in.
+  const ProcStatFields f = MakeFields(/*user*/ 5, /*nice*/ 0, /*system*/ 0,
+                                      /*idle*/ 1'000'000, /*iowait*/ 1'000'000,
+                                      /*irq*/ 0, /*softirq*/ 0, /*steal*/ 0,
+                                      /*guest*/ 0, /*guest_nice*/ 0);
+  EXPECT_EQ(BusyJiffies(f), 5u);
 }
 
-TEST(GetBusyTicksTest, OnlyNice) {
-  const CpuStatInfo s = MakeStat(0, 7, 0, 0, 0, 0, 0, 0, 0, 0);
-  EXPECT_EQ(GetBusyTicks(s), 7u);
+TEST(BusyJiffiesTest, ExcludesGuestAndGuestNice) {
+  // guest / guest_nice are already folded into user / nice by the kernel,
+  // so adding them again would double-count. They must not contribute.
+  const ProcStatFields f = MakeFields(/*user*/ 5, /*nice*/ 0, /*system*/ 0,
+                                      /*idle*/ 0, /*iowait*/ 0, /*irq*/ 0,
+                                      /*softirq*/ 0, /*steal*/ 0,
+                                      /*guest*/ 1'000'000, /*guest_nice*/ 1'000'000);
+  EXPECT_EQ(BusyJiffies(f), 5u);
 }
 
-TEST(GetBusyTicksTest, OnlySystem) {
-  const CpuStatInfo s = MakeStat(0, 0, 99, 0, 0, 0, 0, 0, 0, 0);
-  EXPECT_EQ(GetBusyTicks(s), 99u);
+TEST(BusyJiffiesTest, IrqSoftirqStealEachContribute) {
+  EXPECT_EQ(BusyJiffies(MakeFields(0, 0, 0, 0, 0, 7, 0, 0, 0, 0)), 7u);  // irq
+  EXPECT_EQ(BusyJiffies(MakeFields(0, 0, 0, 0, 0, 0, 9, 0, 0, 0)), 9u);  // softirq
+  EXPECT_EQ(BusyJiffies(MakeFields(0, 0, 0, 0, 0, 0, 0, 3, 0, 0)), 3u);  // steal
 }
 
-TEST(GetBusyTicksTest, HandlesLargeUnsignedValues) {
-  // Long-running systems can have huge jiffy counters; make sure the
-  // sum doesn't accidentally overflow into a narrower type.
+TEST(BusyJiffiesTest, HandlesLargeUnsignedValues) {
+  // Long-running systems can have huge jiffy counters; make sure the sum
+  // doesn't accidentally overflow into a narrower type.
   constexpr uint64_t kBig = uint64_t{1} << 50;
-  const CpuStatInfo s = MakeStat(kBig, kBig, kBig, 0, 0, 0, 0, 0, 0, 0);
-  EXPECT_EQ(GetBusyTicks(s), kBig * 3u);
+  const ProcStatFields f = MakeFields(kBig, kBig, kBig, 0, 0, kBig, kBig, kBig, 0, 0);
+  EXPECT_EQ(BusyJiffies(f), kBig * 6u);
 }
 
-#else  // IS_WINDOWS
-
-TEST(GetBusyTicksTest, WindowsReturnsConcernedFieldDirectly) {
-  CpuStatInfo s{};
-  s.windows_concerned_100ns = 1'234'567;
-  EXPECT_EQ(GetBusyTicks(s), 1'234'567u);
-}
-
-TEST(GetBusyTicksTest, WindowsZeroSnapshotReturnsZero) {
-  CpuStatInfo s{};
-  EXPECT_EQ(GetBusyTicks(s), 0u);
-}
-
-#endif  // !IS_WINDOWS
-
-// ---- TicksToMilliseconds -------------------------------------------------
+// ---- JiffiesToNs ----------------------------------------------------------
 //
-// On Linux/macOS this multiplies ticks by GetJiffyMillisecond() (a
-// process-wide cached value derived from sysconf(_SC_CLK_TCK), typically
-// 10 ms with HZ=100). On Windows it converts 100ns ticks to ms via an
-// integer divide-by-10000.
-//
-// We don't hardcode the jiffy length -- it's a platform property -- but
-// we lock in the structural properties: monotonicity, zero maps to
-// zero, and the conversion is linear on the chosen sample points.
-//
-// The Windows path is an integer divide (100ns -> ms, /10000), so for
-// the linearity / scaling tests below we deliberately choose tick
-// counts that are exact multiples of 10000 -- otherwise the
-// floor-division truncation breaks `f(k*x) == k*f(x)` mathematically
-// and would make the property check meaningless. On Linux/macOS the
-// conversion is a multiplication so any value works; we pick the same
-// operands on both platforms for simplicity.
+// jiffies -> nanoseconds is a pure multiplication by
+// GetJiffyMillisecond() * 1e6. We don't hardcode the jiffy length (it's a
+// platform property) but lock in the structural properties: zero maps to
+// zero, monotonicity, linearity, constant scaling, and the exact factor.
 
-TEST(TicksToMillisecondsTest, ZeroMapsToZero) {
-  EXPECT_EQ(TicksToMilliseconds(0), 0u);
+TEST(JiffiesToNsTest, ZeroMapsToZero) {
+  EXPECT_EQ(JiffiesToNs(0), 0u);
 }
 
-TEST(TicksToMillisecondsTest, IsMonotonicallyNonDecreasing) {
-  uint64_t prev = TicksToMilliseconds(0);
-  for (uint64_t ticks : {uint64_t{1}, uint64_t{10}, uint64_t{100},
-                         uint64_t{1000}, uint64_t{100'000}}) {
-    const uint64_t cur = TicksToMilliseconds(ticks);
-    EXPECT_GE(cur, prev) << "ticks=" << ticks;
+TEST(JiffiesToNsTest, MatchesExpectedFactor) {
+  const uint64_t factor = static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  EXPECT_EQ(JiffiesToNs(1), factor);
+  EXPECT_EQ(JiffiesToNs(123), 123u * factor);
+}
+
+TEST(JiffiesToNsTest, IsMonotonicallyNonDecreasing) {
+  uint64_t prev = JiffiesToNs(0);
+  for (uint64_t j : {uint64_t{1}, uint64_t{10}, uint64_t{100}, uint64_t{1000}, uint64_t{100'000}}) {
+    const uint64_t cur = JiffiesToNs(j);
+    EXPECT_GE(cur, prev) << "jiffies=" << j;
     prev = cur;
   }
 }
 
-TEST(TicksToMillisecondsTest, IsLinear) {
-  // f(a + b) == f(a) + f(b). Pick operands that are exact multiples of
-  // the Windows 100ns-tick divisor (10000) so the property holds on the
-  // integer-divide path too; on Linux/macOS the conversion is a pure
-  // multiplication and any operands would work.
-  const uint64_t a = 130'000;
-  const uint64_t b = 4'090'000;
-  EXPECT_EQ(TicksToMilliseconds(a + b),
-            TicksToMilliseconds(a) + TicksToMilliseconds(b));
+TEST(JiffiesToNsTest, IsLinear) {
+  // f(a + b) == f(a) + f(b). Pure multiplication, so any operands work.
+  const uint64_t a = 13;
+  const uint64_t b = 409;
+  EXPECT_EQ(JiffiesToNs(a + b), JiffiesToNs(a) + JiffiesToNs(b));
 }
 
-TEST(TicksToMillisecondsTest, ScalesByConstantFactor) {
-  // f(k * x) == k * f(x). Implies the conversion factor is constant
-  // across calls (i.e. cached, not re-read from sysconf every time).
-  // As in IsLinear, x is chosen as a multiple of 10000 so the property
-  // holds under Windows' integer-divide truncation.
-  const uint64_t x = 130'000;
+TEST(JiffiesToNsTest, ScalesByConstantFactor) {
+  // f(k * x) == k * f(x): implies the factor is constant (cached, not
+  // re-read from sysconf every call).
+  const uint64_t x = 137;
   const uint64_t k = 1000;
-  EXPECT_EQ(TicksToMilliseconds(k * x), k * TicksToMilliseconds(x));
+  EXPECT_EQ(JiffiesToNs(k * x), k * JiffiesToNs(x));
 }
 
 }  // namespace
+
+#endif  // IS_LINUX

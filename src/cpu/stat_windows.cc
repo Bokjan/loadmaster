@@ -1,0 +1,36 @@
+#include "core/platform.h"
+
+#if IS_WINDOWS
+
+#  include "stat.h"
+
+#  include "util/log.h"
+#  include "util/win_util.h"
+
+namespace cpu {
+
+// Windows reports cumulative idle / kernel / user time as FILETIMEs (100ns
+// ticks). Crucially the kernel bucket INCLUDES idle, so the busy time is
+// user + (kernel - idle): everything the system was not idle for.
+std::optional<uint64_t> ReadSystemBusyNs() {
+  FILETIME idle, kernel, user;
+  if (!GetSystemTimes(&idle, &kernel, &user)) {
+    LOG_ERROR("failed to invoke GetSystemTimes");
+    return std::nullopt;
+  }
+  const uint64_t idle_100ns = util::FiletimeTo100Ns(&idle);
+  const uint64_t kernel_100ns = util::FiletimeTo100Ns(&kernel);
+  const uint64_t user_100ns = util::FiletimeTo100Ns(&user);
+
+  // kernel >= idle always holds (idle is a subset of kernel time), but guard
+  // anyway so a transient counter glitch can't underflow the unsigned diff.
+  const uint64_t busy_kernel_100ns = (kernel_100ns >= idle_100ns) ? (kernel_100ns - idle_100ns) : 0;
+  const uint64_t busy_100ns = user_100ns + busy_kernel_100ns;
+
+  // 100ns ticks -> ns.
+  return busy_100ns * 100ULL;
+}
+
+}  // namespace cpu
+
+#endif  // IS_WINDOWS
