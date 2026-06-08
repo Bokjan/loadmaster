@@ -65,6 +65,24 @@ module is supported on macOS via a built-in Metal backend (see the
 [Runtime dependencies](#runtime-dependencies) section below); CPU and
 memory modules behave the same as on Linux/Windows.
 
+## FreeBSD / DragonFly
+Source builds work out of the box: install `cmake` from `pkg`
+(`pkg install cmake`; the base system already ships `clang` + `libc++`)
+and run the standard `cmake -S . -B build && cmake --build build -j`,
+or use `scripts/build_local.sh`. The CPU + memory modules work
+identically to Linux; the GPU module's `dlopen`-based backends will
+all self-disable (no ROCm / Level Zero / CUDA on BSD), with OpenCL the
+only one that may light up if you've installed an OpenCL ICD (e.g.
+`pocl`).
+
+There is intentionally **no** "build once, run anywhere" script for
+BSD: unlike Linux's manylinux story, BSDs don't promise ABI
+compatibility across major releases, so the recommended distribution
+model is "build on the target host's OS major version, ship per-major
+binaries". OpenBSD / NetBSD are not yet wired up -- they share the
+same MIBs but their `kinfo_proc` layout differs; see comments in
+`src/cpu/stat_bsd.cc` for the small remaining work.
+
 # Workload
 ## CPU
 - Load range is [0, 100] (each core)

@@ -70,9 +70,9 @@ if(APPLE)
 endif()
 
 # Per-platform CPU + process-stat backends. Exactly one of each is
-# compiled, mirroring the gpu/apple/metal_device.mm precedent above. The
-# Linux branch is the UNIX-but-not-Apple else(). util/proc_stat.cc (the
-# shared throttle/diff body) is always compiled and stays in the main list.
+# compiled, mirroring the gpu/apple/metal_device.mm precedent above.
+# util/proc_stat.cc (the shared throttle/diff body) is always compiled
+# and stays in the main list.
 if(WIN32)
     target_sources(loadmaster PRIVATE
         cpu/stat_windows.cc
@@ -83,7 +83,16 @@ elseif(APPLE)
         cpu/stat_macos.cc
         util/proc_stat_macos.cc
     )
-else()  # Linux (UNIX AND NOT APPLE)
+elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+    # FreeBSD / DragonFly use sysctl(KERN_CP_TIME) for system CPU and
+    # sysctl(KERN_PROC_PID) for per-process CPU. OpenBSD / NetBSD share
+    # the same MIBs but kinfo_proc layout differs enough that the BSD
+    # backend files #error out on them for now -- see those files.
+    target_sources(loadmaster PRIVATE
+        cpu/stat_bsd.cc
+        util/proc_stat_bsd.cc
+    )
+else()  # Linux (__linux__)
     target_sources(loadmaster PRIVATE
         cpu/stat_linux.cc
         util/proc_stat_linux.cc
@@ -340,6 +349,14 @@ target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 #     that AppleClang silently accepts but ld64 then rejects. We rely on
 #     the system-provided libc++.dylib + libSystem.dylib, which are
 #     guaranteed-present on every supported macOS version.
+#   * BSD (FreeBSD / DragonFly / Open / Net):
+#     Same story as macOS: the base system ships libc++ (FreeBSD 13+) /
+#     libcxxrt / libthr as dynamic libraries and ports tooling expects
+#     binaries to link against them dynamically so security updates land
+#     via `pkg upgrade`. The portability story here is "build on the
+#     lowest-supported OS-major release and ship per-major binaries",
+#     not "statically embed the runtime" -- see README's portable
+#     release builds section.
 #   * Windows/MSVC:
 #     Use the static C/C++ runtime (/MT, /MTd in Debug) so the binary
 #     does not require the Visual C++ Redistributable on the target
@@ -355,6 +372,11 @@ if(LOADMASTER_STATIC_LINK)
         # No-op: see comment above. Honoring the option here would just
         # produce a broken link line. We keep the option ON by default for
         # cross-platform parity in build scripts.
+    elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+        # No-op for the same reason as APPLE: BSDs ship libc++ /
+        # libcxxrt / libthr only as shared objects in the base system,
+        # and a fully -static binary would break the runtime dlopen of
+        # vendor GPU libraries anyway.
     else()
         target_link_options(loadmaster PRIVATE -static-libstdc++ -static-libgcc)
     endif()

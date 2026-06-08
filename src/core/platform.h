@@ -22,10 +22,27 @@
 #  endif
 #endif
 
-// Linux (specifically: /proc-based stats path). Anything that is neither
-// Windows nor macOS is currently treated as Linux.
+// BSD family (FreeBSD, DragonFly, OpenBSD, NetBSD). Like macOS these are
+// POSIX (dlopen/sigaction/sysconf available) but they have no /proc-based
+// stats path either: CPU / per-process counters come from sysctl(3).
+// Note: __APPLE__ also #defines __MACH__ but never any of the *BSD macros
+// below, so IS_MACOS and IS_BSD are mutually exclusive without further
+// gating.
+#ifndef IS_BSD
+#  if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || \
+      defined(__NetBSD__)
+#    define IS_BSD (1)
+#  else
+#    define IS_BSD (0)
+#  endif
+#endif
+
+// Linux (specifically: /proc-based stats path). Now matched explicitly
+// against __linux__ -- previously this was a catch-all for "not Windows,
+// not macOS", which silently lumped any new POSIX target (BSDs) into the
+// Linux branch and made them try to read /proc files that may not exist.
 #ifndef IS_LINUX
-#  if !IS_WINDOWS && !IS_MACOS
+#  if defined(__linux__)
 #    define IS_LINUX (1)
 #  else
 #    define IS_LINUX (0)

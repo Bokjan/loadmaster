@@ -31,6 +31,12 @@ util::DlHandle g_rtc_handle = nullptr;
 // kernel-side bits (/dev/kfd, /dev/dri/render*) aren't exposed by the WSL
 // virtualization layer. Rather than letting the user chase that error, we
 // short-circuit with a clear diagnostic.
+//
+// Note: on macOS and BSD this function always returns false (the two
+// /proc lookups will simply fail to open), which is the correct answer
+// there -- those platforms can't be a WSL host. We don't gate on
+// IS_LINUX because the cost of two failed fopen()s is negligible and
+// keeping a single POSIX code path is simpler.
 bool IsRunningInsideWsl() {
   struct stat st{};
   if (::stat("/proc/sys/fs/binfmt_misc/WSLInterop", &st) == 0) {
