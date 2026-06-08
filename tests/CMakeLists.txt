@@ -99,6 +99,41 @@ loadmaster_add_test(util_normal_dist_test
     ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
 )
 
+# Compile-time XOR obfuscation layer. Pure header-only: no extra .cc
+# is needed. The test exercises Encode/Decode round-trips, MixByte
+# self-inverse, and the Holder/Scoped wrappers used by version_string
+# and the GPU kernel sources.
+loadmaster_add_test(util_obfuscate_test
+    util/obfuscate_test.cc
+)
+
+# POSIX-only: util::GetJiffyMillisecond. The TU is guarded by
+# !IS_WINDOWS and compiles to zero tests on Windows (matching the
+# guard inside clock.cc itself); the target is still registered
+# everywhere so the build doesn't bit-rot.
+loadmaster_add_test(util_clock_test
+    util/clock_test.cc
+    ${CMAKE_SOURCE_DIR}/src/util/clock.cc
+)
+
+# Windows-only: util::FiletimeTo100Ns is a one-line inline helper but
+# it's the load-bearing arithmetic for the Windows CPU/proc-stat
+# backends, so we lock the high/low orientation and overflow
+# behaviour. TU guarded by IS_WINDOWS; zero tests elsewhere.
+loadmaster_add_test(util_win_util_test
+    util/win_util_test.cc
+)
+
+# Cross-platform shared-library loader. We can't rely on any
+# particular system library existing on every CI worker, so the
+# test focuses on the failure path (unknown names -> nullptr,
+# null-handle safety, Dlerror() always non-null) which holds on
+# every host.
+loadmaster_add_test(util_dl_test
+    util/dl_test.cc
+    ${CMAKE_SOURCE_DIR}/src/util/dl.cc
+)
+
 # Linux-only: parse-side of util::ProcStat (the comm-field disambiguation
 # logic). The test source itself is fully guarded by IS_LINUX so it
 # compiles to an empty TU on other platforms; we still register the
@@ -118,6 +153,15 @@ loadmaster_add_test(core_options_test
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
+# SignalFlag is a header-only singleton wrapper around AtomicBitmap.
+# AtomicBitmap's bit-level semantics are covered separately; this test
+# pins the singleton contract and that Set/Has/Reset forward the
+# signal *number* as a mask (not a bit index) -- the invariant the
+# main loop relies on when polling for SIGINT / SIGTERM.
+loadmaster_add_test(core_signal_flag_test
+    core/signal_flag_test.cc
+)
+
 # ---- cli ----
 # End-to-end argv -> Options pipeline. Pulls in the cli parser plus its
 # transitive deps (options + logger). VersionString() lives entirely in
@@ -127,6 +171,13 @@ loadmaster_add_test(cli_cli_test
     ${CMAKE_SOURCE_DIR}/src/cli/cli.cc
     ${CMAKE_SOURCE_DIR}/src/core/options.cc
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
+)
+
+# Header-only VersionString(): the compile-time-assembled, optionally
+# XOR-obfuscated "loadmaster X.Y.Z[-suffix]" entry point. No .cc deps
+# are needed; we only pull in core/version.h transitively.
+loadmaster_add_test(cli_version_string_test
+    cli/version_string_test.cc
 )
 
 # ---- cpu ----
@@ -151,3 +202,24 @@ else()
         cpu/stat_test.cc
     )
 endif()
+
+# CriticalLoop is the inner busy-multiply routine each CPU worker
+# burns cycles in. We pin only the call-contract (count<=0 -> 0) and
+# that the multiply chain is not optimised away by the compiler --
+# the returned value is intentionally non-deterministic (seeded
+# thread_local PRNG) so we don't test it directly.
+loadmaster_add_test(cpu_critical_loop_test
+    cpu/critical_loop_test.cc
+    ${CMAKE_SOURCE_DIR}/src/cpu/critical_loop.cc
+)
+
+# ---- memory ----
+# Allocator is the RAII block holder used by the memory subsystem.
+# We pin the externally observable contract (empty / non-empty
+# transitions, move semantics, FillXor guard); byte-level FillXor
+# correctness is left to ASAN/UBSAN runs of the suite since the
+# class exposes no buffer getter to peek at.
+loadmaster_add_test(memory_allocator_test
+    memory/allocator_test.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
+)

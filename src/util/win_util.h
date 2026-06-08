@@ -4,6 +4,8 @@
 
 #if IS_WINDOWS
 
+#  include <cstdint>
+
 namespace util {
 
 inline uint64_t FiletimeTo100Ns(LPFILETIME filetime) {
