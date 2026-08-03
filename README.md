@@ -6,13 +6,24 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 - CMake >= 3.12
 
 # Build & Run
-- Typical CMake building routine (see `scripts/build_local.sh` for a
-  one-shot local helper).
-- libstdc++/libgcc are linked statically by default so the binary is portable
-  across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
-  the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
+- Typical CMake building routine (see `scripts/build_local.sh` for a one-shot local helper).
+- libstdc++/libgcc are linked statically by default so the binary is portable across distros; libc and libdl remain dynamic so the GPU module can `dlopen` the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`.
 - It's recommended to rename the executable as you want.
+
+## Development hooks
+Local git hooks enforce two things before a commit:
+
+- **`pre-commit`** — rejects the commit if any staged `.h` / `.cc` file is not clang-format clean (repo-root `.clang-format`, Google base, ColumnLimit 100). Run `clang-format -i` on the offending files, `git add` them, and commit again.
+- **`commit-msg`** — rejects the commit if the message hard-wraps a paragraph (each paragraph must stay on one logical line; the renderer soft-wraps).
+
+The hooks live in `tools/hooks/` and delegate to `tools/check_clang_format.py` and `tools/check_commit_messages.py` (both check-only; they never rewrite anything). Activate them with:
+
+```bash
+git config core.hooksPath tools/hooks
+```
+
+This is a **local** setting (per clone), so each contributor runs it once after cloning. `clang-format` must be on `PATH` for the `pre-commit` hook to run (otherwise the commit is blocked with an install hint).
 
 ## Build options
 | CMake variable | Default | Effect |
@@ -23,11 +34,7 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 
 
 ## Portable release builds
-Because we link glibc dynamically on Linux (to keep `dlopen` working for
-the GPU module), a binary compiled on a modern distro will refuse to
-start on machines with an older glibc. To produce binaries that run on
-virtually any distro from the last decade, use the helper scripts in
-`scripts/`:
+Because we link glibc dynamically on Linux (to keep `dlopen` working for the GPU module), a binary compiled on a modern distro will refuse to start on machines with an older glibc. To produce binaries that run on virtually any distro from the last decade, use the helper scripts in `scripts/`:
 
 | Target | Script | Output |
 |--------|--------|--------|
@@ -37,58 +44,22 @@ virtually any distro from the last decade, use the helper scripts in
 | macOS arm64    | `scripts/build_macos.sh`               (Apple Silicon host)  | `dist/loadmaster-macos-arm64`        |
 | macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (Apple Silicon or Intel host) | `dist/loadmaster-macos-x86_64`       |
 
-The Linux script only requires Docker. It builds inside the
-manylinux2014 image (CentOS 7 / glibc 2.17), strips the result, and
-drops it into `dist/`. By default it targets the host's architecture
-(`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture
-builds (e.g. arm64 from x86_64) work via qemu-user-static binfmt but
-are much slower; running on a native host of the target arch is
-recommended.
+The Linux script only requires Docker. It builds inside the manylinux2014 image (CentOS 7 / glibc 2.17), strips the result, and drops it into `dist/`. By default it targets the host's architecture (`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture builds (e.g. arm64 from x86_64) work via qemu-user-static binfmt but are much slower; running on a native host of the target arch is recommended.
 
-The Windows script uses MSVC 2022 + CMake (both bundled with "Build
-Tools for Visual Studio 2022") and statically links the C/C++ runtime
-(`/MT`), so the resulting `.exe` does not need the Visual C++
-Redistributable on the target machine. The NVIDIA GPU path works out of
-the box with any standard NVIDIA driver install (`nvcuda.dll` lives in
-`C:\Windows\System32`); the AMD GPU path requires the AMD HIP SDK for
-Windows installed and on the `PATH` of the final user.
+The Windows script uses MSVC 2022 + CMake (both bundled with "Build Tools for Visual Studio 2022") and statically links the C/C++ runtime (`/MT`), so the resulting `.exe` does not need the Visual C++ Redistributable on the target machine. The NVIDIA GPU path works out of the box with any standard NVIDIA driver install (`nvcuda.dll` lives in `C:\Windows\System32`); the AMD GPU path requires the AMD HIP SDK for Windows installed and on the `PATH` of the final user.
 
-The macOS script uses the Xcode Command Line Tools (`AppleClang` +
-`libc++` + `ld64`) and CMake; install the former with
-`xcode-select --install` and the latter via Homebrew (`brew install
-cmake`) if needed. Unlike Linux/Windows the binary is *not* statically
-linked: Apple does not ship static archives for `libc++`/`libSystem`,
-so `loadmaster` links against the OS-provided dylibs (which are part of
-the macOS ABI guarantee). Pick the deployment target via
-`CMAKE_OSX_DEPLOYMENT_TARGET` (the script defaults to 11.0). The GPU
-module is supported on macOS via a built-in Metal backend (see the
-[Runtime dependencies](#runtime-dependencies) section below); CPU and
-memory modules behave the same as on Linux/Windows.
+The macOS script uses the Xcode Command Line Tools (`AppleClang` + `libc++` + `ld64`) and CMake; install the former with `xcode-select --install` and the latter via Homebrew (`brew install cmake`) if needed. Unlike Linux/Windows the binary is *not* statically linked: Apple does not ship static archives for `libc++`/`libSystem`, so `loadmaster` links against the OS-provided dylibs (which are part of the macOS ABI guarantee). Pick the deployment target via `CMAKE_OSX_DEPLOYMENT_TARGET` (the script defaults to 11.0). The GPU module is supported on macOS via a built-in Metal backend (see the [Runtime dependencies](#runtime-dependencies) section below); CPU and memory modules behave the same as on Linux/Windows.
 
 ## FreeBSD / DragonFly
-Source builds work out of the box: install `cmake` from `pkg`
-(`pkg install cmake`; the base system already ships `clang` + `libc++`)
-and run the standard `cmake -S . -B build && cmake --build build -j`,
-or use `scripts/build_local.sh`. The CPU + memory modules work
-identically to Linux; the GPU module's `dlopen`-based backends will
-all self-disable (no ROCm / Level Zero / CUDA on BSD), with OpenCL the
-only one that may light up if you've installed an OpenCL ICD (e.g.
-`pocl`).
+Source builds work out of the box: install `cmake` from `pkg` (`pkg install cmake`; the base system already ships `clang` + `libc++`) and run the standard `cmake -S . -B build && cmake --build build -j`, or use `scripts/build_local.sh`. The CPU + memory modules work identically to Linux; the GPU module's `dlopen`-based backends will all self-disable (no ROCm / Level Zero / CUDA on BSD), with OpenCL the only one that may light up if you've installed an OpenCL ICD (e.g. `pocl`).
 
-There is intentionally **no** "build once, run anywhere" script for
-BSD: unlike Linux's manylinux story, BSDs don't promise ABI
-compatibility across major releases, so the recommended distribution
-model is "build on the target host's OS major version, ship per-major
-binaries". OpenBSD / NetBSD are not yet wired up -- they share the
-same MIBs but their `kinfo_proc` layout differs; see comments in
-`src/cpu/stat_bsd.cc` for the small remaining work.
+There is intentionally **no** "build once, run anywhere" script for BSD: unlike Linux's manylinux story, BSDs don't promise ABI compatibility across major releases, so the recommended distribution model is "build on the target host's OS major version, ship per-major binaries". OpenBSD / NetBSD are not yet wired up -- they share the same MIBs but their `kinfo_proc` layout differs; see comments in `src/cpu/stat_bsd.cc` for the small remaining work.
 
 # Workload
 ## CPU
 - Load range is [0, 100] (each core)
 - Scheduling interval is 100 milliseconds (`kScheduleIntervalMS`)
-- Each scheduling tick estimates the load contributed by *other* processes and
-  adjusts our target so the *total* system load tends toward the requested value.
+- Each scheduling tick estimates the load contributed by *other* processes and adjusts our target so the *total* system load tends toward the requested value.
 - Specify target load by `-l <load>`; default: 200 (`kDefaultCpuLoad`)
 - Specify target worker thread number by `-c <count>`; default: minimum required by load
 - Specify target scheduling algorithm (described below) by `-ca <algorithm>`
@@ -100,47 +71,26 @@ same MIBs but their `kinfo_proc` layout differs; see comments in
 - Normal distribution is used in load calculation
 
 ## Memory
-This module is disabled by default. Use `-m <memory_mib>` to specify an extra
-memory usage, then this process won't look so weird.
+This module is disabled by default. Use `-m <memory_mib>` to specify an extra memory usage, then this process won't look so weird.
 ### Default Scheduler
 - Memory usage changes every 45 seconds (`kMemoryScheduleIntervalSecond`)
 - Range: `memory_mib` * `rand(kMemoryMinimumRatio, 1.0)`, 4 KiB aligned
 - Each new block is overwritten (XOR-fill) to force physical commit.
-- When the new block size is >= 32 MiB (`kMemoryNoThreadSpawnThresholdMiB`), the
-  allocate-and-fill work is done in a one-shot background thread so the main
-  scheduling loop never blocks on a large `memset`/page-fault storm.
+- When the new block size is >= 32 MiB (`kMemoryNoThreadSpawnThresholdMiB`), the allocate-and-fill work is done in a one-shot background thread so the main scheduling loop never blocks on a large `memset`/page-fault storm.
 
 ## GPU
 Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 
 - `-g  <load>`     per-device compute load in `[0, 100]`. 0 means disabled.
 - `-gm <mib>`      per-device device-memory load in MiB. 0 means no extra memory.
-- `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all`
-                   (default).
-- `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, `intel`, `opencl`,
-                   or `apple`. `auto` prefers Apple Metal on macOS,
-                   otherwise tries NVIDIA -> AMD (HIP) -> Intel
-                   (Level Zero) -> OpenCL. The OpenCL fallback is what
-                   covers Intel iGPUs without Level Zero and AMD APU
-                   iGPUs (which ROCm/HIP can't drive).
-- `-ga <algo>`     `default` (default) or `rand_normal`. With `rand_normal`
-                   each device independently walks a shuffled
-                   normal-distribution-shaped load schedule, so the
-                   *5-minute average* matches `-g <load>` while the
-                   instantaneous load fluctuates and multi-GPU hosts
-                   don't all spike in lockstep.
+- `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all` (default).
+- `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, `intel`, `opencl`, or `apple`. `auto` prefers Apple Metal on macOS, otherwise tries NVIDIA -> AMD (HIP) -> Intel (Level Zero) -> OpenCL. The OpenCL fallback is what covers Intel iGPUs without Level Zero and AMD APU iGPUs (which ROCm/HIP can't drive).
+- `-ga <algo>`     `default` (default) or `rand_normal`. With `rand_normal` each device independently walks a shuffled normal-distribution-shaped load schedule, so the *5-minute average* matches `-g <load>` while the instantaneous load fluctuates and multi-GPU hosts don't all spike in lockstep.
 
-Each selected device gets its own worker thread that runs the same busy/sleep
-pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker
-launches a busy kernel sized to occupy `load%` of the period, then sleeps for
-the remainder. A one-time calibration probe at startup tunes the per-thread
-loop count to the actual device.
+Each selected device gets its own worker thread that runs the same busy/sleep pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker launches a busy kernel sized to occupy `load%` of the period, then sleeps for the remainder. A one-time calibration probe at startup tunes the per-thread loop count to the actual device.
 
 ### Runtime dependencies
-On Linux and Windows the GPU module is fully **runtime-loaded** via
-`dlopen` / `LoadLibrary`. The loadmaster binary itself does not link
-against any vendor GPU library, so a build runs on any machine
-regardless of which (if any) GPU vendor stack is installed:
+On Linux and Windows the GPU module is fully **runtime-loaded** via `dlopen` / `LoadLibrary`. The loadmaster binary itself does not link against any vendor GPU library, so a build runs on any machine regardless of which (if any) GPU vendor stack is installed:
 
 | Vendor | Dependencies (loaded at runtime) | Source of kernel code |
 |--------|----------------------------------|-----------------------|
@@ -150,36 +100,15 @@ regardless of which (if any) GPU vendor stack is installed:
 | OpenCL | `libOpenCL.so.1` / `OpenCL.dll` (Khronos ICD loader; OS-shipped on Windows) | embedded OpenCL C source, compiled at startup by the ICD |
 | Apple  | `Metal.framework` (linked at build time on macOS) | embedded MSL source, compiled at startup by `MTLDevice newLibraryWithSource:` |
 
-If the requested vendor's libraries aren't found, the module logs and disables
-itself; other modules (CPU/memory) still run normally.
+If the requested vendor's libraries aren't found, the module logs and disables itself; other modules (CPU/memory) still run normally.
 
 ### Notes
-- Mixed-vendor hosts (e.g., NVIDIA + AMD installed at the same time) are
-  intentionally out of scope: with `-gv auto` only one vendor is used.
-- Integrated-GPU support: Intel iGPUs (Iris Xe / UHD / Arc Graphics) go
-  through the Intel Level Zero backend, which needs a precompiled
-  SPIR-V kernel (`src/gpu/intel/busy_kernel.spv`, generated offline from
-  `busy_kernel.cl`; see that file for `ocloc` / `clang+llvm-spirv`
-  commands). Without that .spv the Intel path disables itself and
-  `-gv auto` falls through to OpenCL, which also covers AMD APU iGPUs
-  (e.g. Ryzen 7000G/8000G, Steam Deck) without ROCm.
-- WSL2: NVIDIA works via the `/usr/lib/wsl/lib/libcuda.so.1` shim. AMD
-  is **not** supported (ROCm doesn't expose `/dev/kfd` in WSL2); the
-  AMD path short-circuits with a clear diagnostic and the rest of
-  loadmaster keeps working. Intel L0 / OpenCL inside WSL2 requires
-  Microsoft's Intel compute-runtime WSL package and is not exhaustively
-  tested by us.
-- On Windows, vendor-specific DLLs ship with the corresponding driver
-  install (`nvcuda.dll`, `amdhip64*.dll` + `hiprtc*.dll`,
-  `ze_loader.dll`); `OpenCL.dll` is part of the OS itself.
-- On macOS the only supported GPU backend is Apple Metal (`-gv apple`,
-  also picked by `-gv auto`). NVIDIA / AMD compute stacks have never
-  been or are no longer available on Darwin. The Metal backend works on
-  every Apple Silicon Mac and on Intel Macs with Metal-capable GPUs
-  (any model from ~2012 onwards).
-- On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>`
-  reserves that many MiB of physical memory rather than dedicated VRAM.
-  Plan accordingly when running with `-gm` and a large `-m`.
+- Mixed-vendor hosts (e.g., NVIDIA + AMD installed at the same time) are intentionally out of scope: with `-gv auto` only one vendor is used.
+- Integrated-GPU support: Intel iGPUs (Iris Xe / UHD / Arc Graphics) go through the Intel Level Zero backend, which needs a precompiled SPIR-V kernel (`src/gpu/intel/busy_kernel.spv`, generated offline from `busy_kernel.cl`; see that file for `ocloc` / `clang+llvm-spirv` commands). Without that .spv the Intel path disables itself and `-gv auto` falls through to OpenCL, which also covers AMD APU iGPUs (e.g. Ryzen 7000G/8000G, Steam Deck) without ROCm.
+- WSL2: NVIDIA works via the `/usr/lib/wsl/lib/libcuda.so.1` shim. AMD is **not** supported (ROCm doesn't expose `/dev/kfd` in WSL2); the AMD path short-circuits with a clear diagnostic and the rest of loadmaster keeps working. Intel L0 / OpenCL inside WSL2 requires Microsoft's Intel compute-runtime WSL package and is not exhaustively tested by us.
+- On Windows, vendor-specific DLLs ship with the corresponding driver install (`nvcuda.dll`, `amdhip64*.dll` + `hiprtc*.dll`, `ze_loader.dll`); `OpenCL.dll` is part of the OS itself.
+- On macOS the only supported GPU backend is Apple Metal (`-gv apple`, also picked by `-gv auto`). NVIDIA / AMD compute stacks have never been or are no longer available on Darwin. The Metal backend works on every Apple Silicon Mac and on Intel Macs with Metal-capable GPUs (any model from ~2012 onwards).
+- On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>` reserves that many MiB of physical memory rather than dedicated VRAM. Plan accordingly when running with `-gm` and a large `-m`.
 
 # Usage Sample
 ```bash
