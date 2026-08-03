@@ -74,10 +74,12 @@ jobs:
   # ----- macOS: one Apple Silicon runner builds both arm64 and x86_64 ------
   # Cross-arch compile via CMAKE_OSX_ARCHITECTURES; deployment target 11.0
   # (set in the preset). Not statically linked (Apple ships no static
-  # libc++/libSystem), so it relies on the OS-provided dylibs.
+  # libc++/libSystem), so it relies on the OS-provided dylibs. macos-15 gives
+  # Xcode 16, whose libc++ actually exposes std::jthread (macos-14's Xcode 15.4
+  # still gates it behind -fexperimental-library and fails to compile).
   macos:
     name: macOS (arm64 + x86_64)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Install ccache + CMake
@@ -113,9 +115,11 @@ jobs:
           if-no-files-found: error
 
   # ----- Windows x86_64: VS 2022 (static /MT runtime via CMake) ------------
+  # Pin windows-2022: this org's windows-latest no longer exposes a VS
+  # instance to vswhere, so the "Visual Studio 17 2022" generator errors out.
   windows:
     name: Windows x86_64
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Configure + build

@@ -29,15 +29,16 @@ jobs:
           - { os: ubuntu-24.04-arm, preset: debug }
           - { os: ubuntu-24.04-arm, preset: release }
           - { os: ubuntu-24.04-arm, preset: tsan }
-          # macOS arm64 (Apple Silicon)
-          - { os: macos-14,         preset: macos-arm64-debug }
-          - { os: macos-14,         preset: macos-arm64-release }
-          # macOS x86_64 (Intel)
-          - { os: macos-13,         preset: macos-x86_64-debug }
-          - { os: macos-13,         preset: macos-x86_64-release }
-          # Windows x64 (MSVC does not support -fsanitize, so no tsan leg)
-          - { os: windows-latest,   preset: windows-debug }
-          - { os: windows-latest,   preset: windows-release }
+          # macOS arm64 (Apple Silicon; macos-15 = Xcode 16, libc++ exposes std::jthread)
+          - { os: macos-15,         preset: macos-arm64-debug }
+          - { os: macos-15,         preset: macos-arm64-release }
+          # macOS x86_64 (cross-compiled on Apple Silicon, runs under Rosetta 2)
+          - { os: macos-15,         preset: macos-x86_64-debug }
+          - { os: macos-15,         preset: macos-x86_64-release }
+          # Windows x64 (pin windows-2022: it ships VS 2022; windows-latest here
+          # no longer exposes a VS instance to vswhere, so the VS generator fails)
+          - { os: windows-2022,     preset: windows-debug }
+          - { os: windows-2022,     preset: windows-release }
     steps:
       - uses: actions/checkout@v4
 
