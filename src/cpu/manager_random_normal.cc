@@ -68,8 +68,7 @@ void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
   // [lower, upper] interval -- 2*CDF_target - 1 (0.90 for 0.95) -- not
   // CDF_target, which would make the average ~0.947 * load (~5% low).
   double covered_mass = 2.0 * kCpuRandNormalCdfTarget - 1.0;
-  double factor =
-      options_.GetCpuLoad() * kCpuRandNormalSchedulePointCount / covered_mass;
+  double factor = options_.GetCpuLoad() * kCpuRandNormalSchedulePointCount / covered_mass;
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   for (int i = 0; i < kCpuRandNormalSchedulePointCount; ++i) {
     double integral = dist_.CDF(get_x(i + 1)) - dist_.CDF(get_x(i));

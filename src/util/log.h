@@ -67,7 +67,9 @@ class Logger {
     current_level_.store(target, std::memory_order_relaxed);
     return true;
   }
-  bool WillPrint(LogLevel level) const { return level >= current_level_.load(std::memory_order_relaxed); }
+  bool WillPrint(LogLevel level) const {
+    return level >= current_level_.load(std::memory_order_relaxed);
+  }
 
  private:
   // Atomic: SetLevel (e.g. from a `-L` parse on the main thread) and

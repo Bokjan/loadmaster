@@ -305,11 +305,10 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
              ZeResultString(cl_rc), cl_rc);
   } else {
     const uint8_t pattern = 0xA5;
-    const ze_result_t fill_rc =
-        api_->zeCommandListAppendMemoryFill(tmp, mem_load_ptr_, &pattern, sizeof(pattern), bytes,
-                                            nullptr, 0, nullptr);
-    const bool filled = fill_rc == ZE_RESULT_SUCCESS &&
-                        api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS;
+    const ze_result_t fill_rc = api_->zeCommandListAppendMemoryFill(
+        tmp, mem_load_ptr_, &pattern, sizeof(pattern), bytes, nullptr, 0, nullptr);
+    const bool filled =
+        fill_rc == ZE_RESULT_SUCCESS && api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS;
     if (filled) {
       const ze_result_t exec_rc = api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
       ze_result_t sync_rc = ZE_RESULT_SUCCESS;
@@ -317,8 +316,9 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
         sync_rc = api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
       }
       if (exec_rc != ZE_RESULT_SUCCESS || sync_rc != ZE_RESULT_SUCCESS) {
-        LOG_WARN("memory commit execute/sync failed, %zu bytes left uncommitted: exec=0x%x sync=0x%x",
-                 bytes, exec_rc, sync_rc);
+        LOG_WARN(
+            "memory commit execute/sync failed, %zu bytes left uncommitted: exec=0x%x sync=0x%x",
+            bytes, exec_rc, sync_rc);
       }
     } else {
       LOG_WARN("memory fill/close failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,

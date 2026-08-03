@@ -89,8 +89,7 @@ void GpuResourceManagerRandomNormal::GenerateBaseSchedulePoints() {
   const double x_pos_lower = dist_.GetMean() - (x_pos_upper - dist_.GetMean());
   const double step = (x_pos_upper - x_pos_lower) / kGpuRandNormalSchedulePointCount;
   const double covered_mass = 2.0 * kGpuRandNormalCdfTarget - 1.0;
-  const double factor =
-      options_.GetGpuLoad() * kGpuRandNormalSchedulePointCount / covered_mass;
+  const double factor = options_.GetGpuLoad() * kGpuRandNormalSchedulePointCount / covered_mass;
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   base_schedule_points_.reserve(kGpuRandNormalSchedulePointCount);
   for (int i = 0; i < kGpuRandNormalSchedulePointCount; ++i) {

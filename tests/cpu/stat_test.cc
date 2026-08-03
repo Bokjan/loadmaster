@@ -110,9 +110,7 @@ TEST(BusyJiffiesTest, HandlesLargeUnsignedValues) {
 // integer division introduces on HZ values that don't divide 1e9 (e.g.
 // HZ=300, where 1e9/300 is not integral).
 
-TEST(JiffiesToNsTest, ZeroMapsToZero) {
-  EXPECT_EQ(JiffiesToNs(0), 0u);
-}
+TEST(JiffiesToNsTest, ZeroMapsToZero) { EXPECT_EQ(JiffiesToNs(0), 0u); }
 
 TEST(JiffiesToNsTest, MatchesFormula) {
   // JiffiesToNs(j) must equal (j * 1e9) / HZ for every j -- this is the
@@ -122,8 +120,8 @@ TEST(JiffiesToNsTest, MatchesFormula) {
   // any HZ by construction.
   const uint64_t freq = static_cast<uint64_t>(util::GetJiffyFrequency());
   ASSERT_GT(freq, 0u);
-  for (uint64_t j : {uint64_t{1}, uint64_t{2}, uint64_t{3}, uint64_t{123},
-                     uint64_t{1'000}, uint64_t{100'000}, uint64_t{1ULL << 40}}) {
+  for (uint64_t j : {uint64_t{1}, uint64_t{2}, uint64_t{3}, uint64_t{123}, uint64_t{1'000},
+                     uint64_t{100'000}, uint64_t{1ULL << 40}}) {
     const __uint128_t expected = (static_cast<__uint128_t>(j) * 1'000'000'000ULL) / freq;
     EXPECT_EQ(JiffiesToNs(j), static_cast<uint64_t>(expected)) << "jiffies=" << j;
   }

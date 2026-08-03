@@ -302,12 +302,9 @@ TEST_F(OptionsTest, GpuVendorAllAcceptedTokens) {
     Options::GpuVendor expected;
   };
   const Case cases[] = {
-      {"auto", Options::GpuVendor::kAuto},
-      {"nvidia", Options::GpuVendor::kNvidia},
-      {"amd", Options::GpuVendor::kAmd},
-      {"apple", Options::GpuVendor::kApple},
-      {"intel", Options::GpuVendor::kIntel},
-      {"opencl", Options::GpuVendor::kOpenCL},
+      {"auto", Options::GpuVendor::kAuto},   {"nvidia", Options::GpuVendor::kNvidia},
+      {"amd", Options::GpuVendor::kAmd},     {"apple", Options::GpuVendor::kApple},
+      {"intel", Options::GpuVendor::kIntel}, {"opencl", Options::GpuVendor::kOpenCL},
   };
   for (const auto &c : cases) {
     Options opts;

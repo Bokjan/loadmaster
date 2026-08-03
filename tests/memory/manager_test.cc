@@ -64,9 +64,9 @@ TEST_F(MemoryManagerTest, InlinePathPeriodicScheduleRunsCleanly) {
   ASSERT_TRUE(mgr.Init());
 
   const TimePoint t0{};
-  Schedule(mgr, t0);                                       // empty -> allocate
-  Schedule(mgr, t0 + std::chrono::seconds(10));            // within 45s -> no-op
-  Schedule(mgr, t0 + std::chrono::seconds(46));            // past 45s -> re-allocate
+  Schedule(mgr, t0);                             // empty -> allocate
+  Schedule(mgr, t0 + std::chrono::seconds(10));  // within 45s -> no-op
+  Schedule(mgr, t0 + std::chrono::seconds(46));  // past 45s -> re-allocate
   // Destructor runs clean (no background thread on this path); ASAN
   // catches any leak across the allocate/release cycles.
   SUCCEED();

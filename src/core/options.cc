@@ -80,8 +80,8 @@ bool Options::ProcessCliArguments(const cli::CliArgument &args) {
     // comfortably inside `int` in the rand_normal scheduler.
     const int max_load = kCpuMaxLoadPerCore * cpu::CoreCount();
     if (load > max_load) {
-      LOG_ERROR("invalid CPU load (must be <= %d = 100 * %d cores): %d", max_load,
-                cpu::CoreCount(), load);
+      LOG_ERROR("invalid CPU load (must be <= %d = 100 * %d cores): %d", max_load, cpu::CoreCount(),
+                load);
       return false;
     }
     cpu_load_ = load;
