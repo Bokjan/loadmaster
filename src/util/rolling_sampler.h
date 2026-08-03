@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <numeric>
 #include <vector>
 
@@ -37,7 +38,11 @@ class RollingSampler final {
         index_ = 0;
       }
     }
-    mean_cached_ = sum_ / static_cast<T>(values_.size());
+    // Round to nearest rather than truncating toward zero: the integer
+    // division `sum / count` introduced a persistent <=1 low bias that
+    // fed straight into the CPU control law's steady-state error.
+    mean_cached_ = static_cast<T>(std::round(static_cast<double>(sum_) /
+                                             static_cast<double>(values_.size())));
   }
 
  private:

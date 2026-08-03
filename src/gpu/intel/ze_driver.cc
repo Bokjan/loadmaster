@@ -24,7 +24,11 @@ bool Resolve(util::DlHandle handle, const char *name, Fn &slot) {
     LOG_WARN("Dlsym(ze_loader, %s) failed: %s", name, util::Dlerror());
     return false;
   }
-  slot = reinterpret_cast<Fn>(sym);
+  // void* -> function pointer: reinterpret_cast is conditionally-supported
+  // (implementation-defined) per the C++ standard, so the conversion is
+  // not portable well-formed; copy the bytes for a defined conversion.
+  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
+  std::memcpy(&slot, &sym, sizeof(slot));
   return true;
 }
 

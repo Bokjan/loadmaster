@@ -72,7 +72,11 @@ DlHandle DlopenAny(const char *const *names) {
       char abs_path[MAX_PATH];
       const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));
       if (n > 0 && n < sizeof(abs_path)) {
-        if (std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name) > 0) {
+        // snprintf returns the count that *would* have been written; a value
+        // >= the buffer room means truncation, which would load a cut-off
+        // (non-existent) path. Only attempt the load when it fit in full.
+        const int written = std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name);
+        if (written > 0 && static_cast<size_t>(written) < sizeof(abs_path) - n) {
           h = ::LoadLibraryExA(abs_path, nullptr, kFlags);
           if (h != nullptr) {
             return reinterpret_cast<DlHandle>(h);
@@ -93,7 +97,13 @@ void *Dlsym(DlHandle handle, const char *name) {
     return nullptr;
   }
   FARPROC p = ::GetProcAddress(reinterpret_cast<HMODULE>(handle), name);
-  return reinterpret_cast<void *>(p);
+  // FARPROC (function pointer) -> void* (object pointer): a direct
+  // reinterpret_cast is conditionally-supported / implementation-defined
+  // per the C++ standard, so copy the bytes for a well-defined conversion.
+  void *sym = nullptr;
+  static_assert(sizeof(sym) == sizeof(p), "pointer size mismatch");
+  std::memcpy(&sym, &p, sizeof(sym));
+  return sym;
 }
 
 void Dlclose(DlHandle handle) {

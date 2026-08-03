@@ -67,27 +67,29 @@ TEST(RollingSamplerTest, OverwritesOldestOnceFull) {
 
 TEST(RollingSamplerTest, FullRingRotation) {
   // Push enough values to wrap the ring index multiple times and
-  // verify the running mean stays correct.
+  // verify the running mean stays correct. GetMean rounds to nearest
+  // (std::round, half away from zero) rather than truncating toward
+  // zero, so the X.5 cases below round up.
   RollingSampler<int> s(4);
   for (int v : {1, 2, 3, 4}) {
     s.InsertValue(v);
   }
-  EXPECT_EQ(s.GetMean(), 2);  // (1+2+3+4)/4 = 2 (integer division: 10/4)
+  EXPECT_EQ(s.GetMean(), 3);  // (1+2+3+4)/4 = 2.5 -> rounds to 3
 
   // Now overwrite each slot once more.
-  s.InsertValue(5);   // evicts 1 -> {5,2,3,4}, mean = 14/4 = 3
-  EXPECT_EQ(s.GetMean(), 3);
-  s.InsertValue(6);   // evicts 2 -> {5,6,3,4}, mean = 18/4 = 4
+  s.InsertValue(5);   // evicts 1 -> {5,2,3,4}, mean = 14/4 = 3.5 -> 4
   EXPECT_EQ(s.GetMean(), 4);
-  s.InsertValue(7);   // evicts 3 -> {5,6,7,4}, mean = 22/4 = 5
+  s.InsertValue(6);   // evicts 2 -> {5,6,3,4}, mean = 18/4 = 4.5 -> 5
   EXPECT_EQ(s.GetMean(), 5);
-  s.InsertValue(8);   // evicts 4 -> {5,6,7,8}, mean = 26/4 = 6
+  s.InsertValue(7);   // evicts 3 -> {5,6,7,4}, mean = 22/4 = 5.5 -> 6
   EXPECT_EQ(s.GetMean(), 6);
+  s.InsertValue(8);   // evicts 4 -> {5,6,7,8}, mean = 26/4 = 6.5 -> 7
+  EXPECT_EQ(s.GetMean(), 7);
 
   // Second full rotation -- exercises the index wrap-around branch
   // (index_ >= capacity -> index_ = 0).
-  s.InsertValue(9);   // evicts 5 -> {9,6,7,8}, mean = 30/4 = 7
-  EXPECT_EQ(s.GetMean(), 7);
+  s.InsertValue(9);   // evicts 5 -> {9,6,7,8}, mean = 30/4 = 7.5 -> 8
+  EXPECT_EQ(s.GetMean(), 8);
 }
 
 TEST(RollingSamplerTest, CapacityOneAlwaysHoldsLatest) {

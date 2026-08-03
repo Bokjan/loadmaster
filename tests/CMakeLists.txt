@@ -97,6 +97,7 @@ loadmaster_add_test(util_rolling_sampler_test
 loadmaster_add_test(util_normal_dist_test
     util/normal_dist_test.cc
     ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
+    ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
 # Compile-time XOR obfuscation layer. Pure header-only: no extra .cc

@@ -202,9 +202,7 @@ bool OpenClDevice::Init(int device_index) {
 }
 
 std::string OpenClDevice::Name() const {
-  char buf[384];
-  std::snprintf(buf, sizeof(buf), "%s (#%d)", name_.c_str(), device_index_);
-  return std::string(buf);
+  return name_ + " (#" + std::to_string(device_index_) + ")";
 }
 
 bool OpenClDevice::AllocateMemory(std::size_t bytes) {

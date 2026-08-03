@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdarg>
 
 #ifndef SOURCE_PATH_SIZE  // this should be defined by CMake scripts
@@ -63,13 +64,17 @@ class Logger {
     if (target <= kLevelUnknown || target > kLevelOff) {
       return false;
     }
-    current_level_ = target;
+    current_level_.store(target, std::memory_order_relaxed);
     return true;
   }
-  bool WillPrint(LogLevel level) const { return level >= current_level_; }
+  bool WillPrint(LogLevel level) const { return level >= current_level_.load(std::memory_order_relaxed); }
 
  private:
-  LogLevel current_level_;
+  // Atomic: SetLevel (e.g. from a `-L` parse on the main thread) and
+  // WillPrint (from every LOG_* site, including worker threads) race on
+  // this field. Relaxed ordering is sufficient -- the level is a hint, not
+  // a release/acquire fence for other data.
+  std::atomic<LogLevel> current_level_;
 };
 
 class StderrLogger final : public Logger {
@@ -104,7 +109,7 @@ void SetDefaultLogger(Logger *ptr);
 #define LOG_GENERAL_FORWARD(p, lvl, fmt, ...)                                            \
   do {                                                                                   \
     auto *_lm_logger = (p);                                                              \
-    if (_lm_logger->WillPrint(lvl)) {                                                    \
+    if (_lm_logger != nullptr && _lm_logger->WillPrint(lvl)) {                           \
       _lm_logger->Log(lvl, "[%s] %s (%s:%d) " fmt "\n", _lm_logger->GetTimeCString(lvl), \
                       util::logger_internal::g_log_level_cstr[lvl], FILE_NAME(__FILE__), \
                       __LINE__ __VA_OPT__(, ) __VA_ARGS__);                              \
