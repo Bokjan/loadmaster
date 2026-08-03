@@ -296,13 +296,26 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   cl_desc.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC;
   cl_desc.commandQueueGroupOrdinal = 0;
   ze_command_list_handle_t tmp = nullptr;
-  if (api_->zeCommandListCreate(context_, device_, &cl_desc, &tmp) == ZE_RESULT_SUCCESS) {
+  ze_result_t cl_rc = api_->zeCommandListCreate(context_, device_, &cl_desc, &tmp);
+  if (cl_rc != ZE_RESULT_SUCCESS) {
+    // Allocation itself succeeded, so the device memory is reserved and
+    // we still report success; but the pages are not pre-faulted, so log
+    // loudly rather than silently degrading the commit step.
+    LOG_WARN("zeCommandListCreate failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,
+             ZeResultString(cl_rc), cl_rc);
+  } else {
     const uint8_t pattern = 0xA5;
-    if (api_->zeCommandListAppendMemoryFill(tmp, mem_load_ptr_, &pattern, sizeof(pattern), bytes,
-                                            nullptr, 0, nullptr) == ZE_RESULT_SUCCESS &&
-        api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS) {
+    const ze_result_t fill_rc =
+        api_->zeCommandListAppendMemoryFill(tmp, mem_load_ptr_, &pattern, sizeof(pattern), bytes,
+                                            nullptr, 0, nullptr);
+    const bool filled = fill_rc == ZE_RESULT_SUCCESS &&
+                        api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS;
+    if (filled) {
       api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
       api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
+    } else {
+      LOG_WARN("memory fill/close failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,
+               ZeResultString(fill_rc), fill_rc);
     }
     api_->zeCommandListDestroy(tmp);
   }

@@ -35,13 +35,17 @@ constexpr ze_result_t ZE_RESULT_SUCCESS = 0;
 constexpr uint32_t ZE_INIT_FLAG_GPU_ONLY = 1u;
 
 // ---- Structure types (subset; matches ze_structure_type_t in spec) -------
-constexpr uint32_t ZE_STRUCTURE_TYPE_CONTEXT_DESC = 0x4;
-constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC = 0x5;
-constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC = 0x6;
-constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC = 0xb;
-constexpr uint32_t ZE_STRUCTURE_TYPE_MODULE_DESC = 0xd;
+// Values copied verbatim from the official oneAPI Level Zero ze_api.h
+// (tag v1.17.39). The driver loader validates stype on every desc, so a
+// wrong value here silently disables the whole Intel backend (ZE_RESULT_
+// ERROR_INVALID_ARGUMENT during enumeration).
+constexpr uint32_t ZE_STRUCTURE_TYPE_CONTEXT_DESC = 0xd;
+constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC = 0xe;
+constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC = 0xf;
+constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC = 0x15;
+constexpr uint32_t ZE_STRUCTURE_TYPE_MODULE_DESC = 0x1b;
 constexpr uint32_t ZE_STRUCTURE_TYPE_KERNEL_DESC = 0x1d;
-constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES = 0x1;
+constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES = 0x3;
 
 // ---- Module format -------------------------------------------------------
 constexpr uint32_t ZE_MODULE_FORMAT_IL_SPIRV = 0u;

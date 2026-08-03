@@ -118,31 +118,37 @@ const ZeApi *LoadZeApi() {
 const char *ZeResultString(ze_result_t err) {
   // Level Zero doesn't expose a public string-from-result helper in the
   // loader ABI, so we map only the codes we expect to see and fall back
-  // to a hex dump otherwise. Mirrors the spec values from ze_api.h.
+  // to a hex dump otherwise. Values copied verbatim from the official
+  // ze_api.h (tag v1.17.39). NOTE: ze_result_t is NOT a dense sequential
+  // enum -- the codes are spread across 0x1, 0x7000000x, 0x7001xxxx,
+  // 0x7002xxxx and 0x78xxxxxx prefix bands. Earlier code filled them in
+  // by declaration order (0x70000001..0x70000007), which mismatched every
+  // entry; functional checks use `rc != ZE_RESULT_SUCCESS` and were
+  // unaffected, but the log strings were all wrong.
   switch (err) {
     case ZE_RESULT_SUCCESS:
       return "ZE_RESULT_SUCCESS";
-    case 0x70000001:
+    case 0x1:
       return "ZE_RESULT_NOT_READY";
-    case 0x70000002:
-      return "ZE_RESULT_ERROR_UNINITIALIZED";
-    case 0x70000003:
+    case 0x70000001:
       return "ZE_RESULT_ERROR_DEVICE_LOST";
-    case 0x70000004:
-      return "ZE_RESULT_ERROR_INVALID_ARGUMENT";
-    case 0x70000005:
+    case 0x70000002:
       return "ZE_RESULT_ERROR_OUT_OF_HOST_MEMORY";
-    case 0x70000006:
+    case 0x70000003:
       return "ZE_RESULT_ERROR_OUT_OF_DEVICE_MEMORY";
-    case 0x70000007:
+    case 0x70000004:
       return "ZE_RESULT_ERROR_MODULE_BUILD_FAILURE";
-    case 0x70000010:
+    case 0x70010000:
       return "ZE_RESULT_ERROR_INSUFFICIENT_PERMISSIONS";
-    case 0x70000011:
+    case 0x70010001:
       return "ZE_RESULT_ERROR_NOT_AVAILABLE";
-    case 0x70000018:
+    case 0x70020000:
       return "ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE";
     case 0x78000001:
+      return "ZE_RESULT_ERROR_UNINITIALIZED";
+    case 0x78000004:
+      return "ZE_RESULT_ERROR_INVALID_ARGUMENT";
+    case 0x7ffffffe:
       return "ZE_RESULT_ERROR_UNKNOWN";
     default:
       return "<level zero error>";
