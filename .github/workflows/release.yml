@@ -93,7 +93,9 @@ jobs:
           key: ccache-release-macos-v1
           restore-keys: ccache-release-macos-v1
       - name: Build arm64
-        run: cmake --preset macos-arm64-release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+        run: |
+          cmake --preset macos-arm64-release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build --preset macos-arm64-release -j "$(sysctl -n hw.ncpu)"
       - name: Stage + strip
         run: |
           mkdir -p dist
