@@ -62,7 +62,11 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 }
 
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-    Write-Error @"
+    # Use `throw` (not Write-Error) so the script always aborts here
+    # regardless of the caller's $ErrorActionPreference -- otherwise a
+    # caller that relaxed it would fall through to `cmake -S` and fail
+    # with a less actionable message.
+    throw @"
 cmake.exe not found.
 
 Tried:

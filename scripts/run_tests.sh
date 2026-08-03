@@ -113,4 +113,7 @@ CTEST_ARGS=(--output-on-failure -j "${JOBS}")
 if [[ -n "${FILTER}" ]]; then
     CTEST_ARGS+=(--tests-regex "${FILTER}")
 fi
-ctest --test-dir "${BUILD_DIR}" "${CTEST_ARGS[@]}"
+# Run ctest from inside the build dir. `ctest --test-dir` would be cleaner
+# but needs CMake >= 3.20; the project floor is 3.15, so cd in a subshell
+# to stay compatible.
+(cd "${BUILD_DIR}" && ctest "${CTEST_ARGS[@]}")
