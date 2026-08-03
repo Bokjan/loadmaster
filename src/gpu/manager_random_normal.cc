@@ -43,6 +43,13 @@ void GpuResourceManagerRandomNormal::Schedule(TimePoint time_point) {
 }
 
 void GpuResourceManagerRandomNormal::AdvanceDevice(size_t worker_index, TimePoint time_point) {
+  // Defensive: Schedule() is only called after Init() sizes states_ to match
+  // workers_, but guard the index anyway so a contract violation (Init
+  // skipped, or workers_/states_ desync) is a quiet no-op rather than an
+  // out-of-bounds access.
+  if (worker_index >= states_.size()) {
+    return;
+  }
   auto &state = states_[worker_index];
   // First tick: state.last_change is epoch-zero -> elapsed_ms is huge ->
   // we fire immediately, which is what we want.
@@ -74,12 +81,16 @@ void GpuResourceManagerRandomNormal::GenerateBaseSchedulePoints() {
   // CDF over [-CDF_target, CDF_target] standard deviations and let each
   // bin contribute proportionally to its area. The `factor` is chosen so
   // the values average out to options_.GetGpuLoad() over one full
-  // period.
+  // period. The denominator is the probability mass actually covered by
+  // the [lower, upper] interval -- 2*CDF_target - 1 (0.90 for 0.95) --
+  // NOT CDF_target itself: the interval spans both tails, so dividing by
+  // 0.95 made the average come out at ~0.947 * load (a ~5% low bias).
   const double x_pos_upper = dist_.FindXAxisPositionCDF(kGpuRandNormalCdfTarget);
   const double x_pos_lower = dist_.GetMean() - (x_pos_upper - dist_.GetMean());
   const double step = (x_pos_upper - x_pos_lower) / kGpuRandNormalSchedulePointCount;
+  const double covered_mass = 2.0 * kGpuRandNormalCdfTarget - 1.0;
   const double factor =
-      options_.GetGpuLoad() * kGpuRandNormalSchedulePointCount / kGpuRandNormalCdfTarget;
+      options_.GetGpuLoad() * kGpuRandNormalSchedulePointCount / covered_mass;
   auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
   base_schedule_points_.reserve(kGpuRandNormalSchedulePointCount);
   for (int i = 0; i < kGpuRandNormalSchedulePointCount; ++i) {
