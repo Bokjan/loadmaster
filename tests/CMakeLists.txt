@@ -82,6 +82,17 @@ function(loadmaster_add_test name)
         )
     endif()
 
+    # Apple / BSD libc++ gate std::jthread / std::stop_token behind
+    # -fexperimental-library (same condition as the loadmaster target in
+    # src/CMakeLists.txt). Tests that compile the memory module (which uses
+    # jthread) must get the flag too, or they fail to compile on those
+    # platforms. gtest itself is configured above without the flag and is
+    # unaffected.
+    if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly" OR APPLE)
+        target_compile_options(${name} PRIVATE -fexperimental-library)
+        target_link_options(${name} PRIVATE -fexperimental-library)
+    endif()
+
     gtest_discover_tests(${name})
 endfunction()
 
