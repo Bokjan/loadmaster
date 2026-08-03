@@ -103,7 +103,9 @@ jobs:
           strip -x dist/loadmaster-macos-arm64
           file dist/loadmaster-macos-arm64
       - name: Smoke test
-        run: timeout 30 ./dist/loadmaster-macos-arm64 -h
+        # macOS runners do not ship GNU `timeout`, so run the binary directly.
+        # `-h` returns immediately, so no timeout wrapper is needed here.
+        run: ./dist/loadmaster-macos-arm64 -h
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
