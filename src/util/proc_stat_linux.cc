@@ -77,7 +77,7 @@ bool ParseProcPidStat(FILE *fp, StatFields &stat) {
 
 }  // namespace internal
 
-std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
+std::optional<uint64_t> ProcStat::ReadProcessCpuTicks() const {
   internal::StatFields stat{};
   char file_path[kSmallBufferLength];
   std::snprintf(file_path, sizeof(file_path), "/proc/%d/stat", pid_);
@@ -91,14 +91,22 @@ std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
     return std::nullopt;
   }
   // Self + reaped-children user/system jiffies (matches historical behavior).
+  // Returned as raw jiffies -- the native unit -- so the caller diffs in
+  // tick space (never wrapping in realistic uptime) and only converts the
+  // small diff via ProcessCpuTicksToNs. Returning cumulative ns here would
+  // overflow uint64 after ~9 years on a process pegging 64 cores.
   const int64_t jiffies = static_cast<int64_t>(stat.utime) + static_cast<int64_t>(stat.stime) +
                           stat.cutime + stat.cstime;
   const int64_t clamped = jiffies < 0 ? 0 : jiffies;
+  return static_cast<uint64_t>(clamped);
+}
+
+uint64_t ProcessCpuTicksToNs(uint64_t tick_diff) {
   // jiffy -> ns: diff * 1e9 / HZ with a 128-bit intermediate. Working from
   // the frequency (not a precomputed ms-per-jiffy) avoids the ~10% low-bias
   // on HZ=300 and the collapse to 0 on HZ>=2000 that the old
   // GetJiffyMillisecond()*1e6 path had.
-  return static_cast<uint64_t>((static_cast<__uint128_t>(clamped) * 1'000'000'000ULL) /
+  return static_cast<uint64_t>((static_cast<__uint128_t>(tick_diff) * 1'000'000'000ULL) /
                                static_cast<uint64_t>(GetJiffyFrequency()));
 }
 

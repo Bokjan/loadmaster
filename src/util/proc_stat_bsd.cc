@@ -22,8 +22,12 @@ namespace util {
 // `struct kinfo_proc`. On FreeBSD and DragonFly the relevant field is
 // `ki_runtime`, which the kernel documents as the **microseconds** of
 // CPU time accumulated by the process (user + system combined).
-// Multiplying by 1000 yields nanoseconds, which is the unit ProcStat
-// stores internally on every platform.
+//
+// We return ki_runtime raw (microseconds, the native unit) so the caller
+// diffs in tick space -- microseconds do not overflow uint64 in any
+// realistic uptime, unlike the cumulative-nanosecond path which wrapped
+// after ~9 years on a 64-core-pegged process -- and only converts the
+// small diff via ProcessCpuTicksToNs.
 //
 // Note: ki_runtime aggregates across all threads of the process, which
 // is what we want -- the rest of loadmaster compares this number
@@ -35,7 +39,7 @@ namespace util {
 #    error "loadmaster: only FreeBSD / DragonFly are wired up in the BSD backend so far"
 #  endif
 
-std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
+std::optional<uint64_t> ProcStat::ReadProcessCpuTicks() const {
   struct kinfo_proc kp{};
   std::size_t len = sizeof(kp);
   int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid_};
@@ -52,8 +56,13 @@ std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
     LOG_ERROR("sysctl(kern.proc.pid) short read: %zu bytes for pid %d", len, pid_);
     return std::nullopt;
   }
-  // ki_runtime is microseconds on FreeBSD/DragonFly. Convert to ns.
-  return static_cast<uint64_t>(kp.ki_runtime) * 1000ULL;
+  // ki_runtime is microseconds on FreeBSD/DragonFly -- native tick unit.
+  return static_cast<uint64_t>(kp.ki_runtime);
+}
+
+uint64_t ProcessCpuTicksToNs(uint64_t tick_diff) {
+  // microseconds -> nanoseconds.
+  return tick_diff * 1000ULL;
 }
 
 }  // namespace util
