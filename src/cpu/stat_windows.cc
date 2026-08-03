@@ -11,8 +11,9 @@ namespace cpu {
 
 // Windows reports cumulative idle / kernel / user time as FILETIMEs (100ns
 // ticks). Crucially the kernel bucket INCLUDES idle, so the busy time is
-// user + (kernel - idle): everything the system was not idle for.
-std::optional<uint64_t> ReadSystemBusyNs() {
+// user + (kernel - idle): everything the system was not idle for. Returned
+// in native 100ns ticks; BusyTicksToNs scales a diff by 100.
+std::optional<uint64_t> ReadSystemBusyTicks() {
   FILETIME idle, kernel, user;
   if (!GetSystemTimes(&idle, &kernel, &user)) {
     LOG_ERROR("failed to invoke GetSystemTimes");
@@ -25,10 +26,12 @@ std::optional<uint64_t> ReadSystemBusyNs() {
   // kernel >= idle always holds (idle is a subset of kernel time), but guard
   // anyway so a transient counter glitch can't underflow the unsigned diff.
   const uint64_t busy_kernel_100ns = (kernel_100ns >= idle_100ns) ? (kernel_100ns - idle_100ns) : 0;
-  const uint64_t busy_100ns = user_100ns + busy_kernel_100ns;
+  return user_100ns + busy_kernel_100ns;
+}
 
+uint64_t BusyTicksToNs(uint64_t tick_diff) {
   // 100ns ticks -> ns.
-  return busy_100ns * 100ULL;
+  return tick_diff * 100ULL;
 }
 
 }  // namespace cpu

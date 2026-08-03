@@ -18,7 +18,7 @@ namespace cpu {
 // sysconf(_SC_CLK_TCK), typically 100 Hz on macOS). Mach folds interrupt
 // time into the "system" bucket, so "busy = user + nice + system" already
 // matches the "not idle" intent without an explicit irq term.
-std::optional<uint64_t> ReadSystemBusyNs() {
+std::optional<uint64_t> ReadSystemBusyTicks() {
   host_cpu_load_info_data_t load{};
   mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
   const kern_return_t kr = ::host_statistics64(::mach_host_self(), HOST_CPU_LOAD_INFO,
@@ -30,9 +30,15 @@ std::optional<uint64_t> ReadSystemBusyNs() {
   const uint64_t busy_jiffies = static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_USER]) +
                                 static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_NICE]) +
                                 static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_SYSTEM]);
-  // jiffy -> ns. GetJiffyMillisecond() is available on macOS (clock.cc is
-  // compiled for every non-Windows platform).
-  return busy_jiffies * static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  return busy_jiffies;
+}
+
+uint64_t BusyTicksToNs(uint64_t tick_diff) {
+  // jiffy -> ns: diff * 1e9 / HZ (128-bit intermediate). GetJiffyFrequency
+  // is available on macOS (clock.cc is compiled for every non-Windows
+  // platform). Only safe for diffs, not cumulative values.
+  return static_cast<uint64_t>((static_cast<__uint128_t>(tick_diff) * 1'000'000'000ULL) /
+                               static_cast<uint64_t>(util::GetJiffyFrequency()));
 }
 
 }  // namespace cpu

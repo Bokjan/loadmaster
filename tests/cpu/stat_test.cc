@@ -103,19 +103,30 @@ TEST(BusyJiffiesTest, HandlesLargeUnsignedValues) {
 
 // ---- JiffiesToNs ----------------------------------------------------------
 //
-// jiffies -> nanoseconds is a pure multiplication by
-// GetJiffyMillisecond() * 1e6. We don't hardcode the jiffy length (it's a
-// platform property) but lock in the structural properties: zero maps to
-// zero, monotonicity, linearity, constant scaling, and the exact factor.
+// jiffies -> nanoseconds is `jiffies * 1e9 / HZ` with a 128-bit intermediate
+// (HZ from util::GetJiffyFrequency). We don't hardcode the jiffy length (it's
+// a platform property) but verify the conversion matches its formula
+// exactly, is monotonic, and is linear up to the single-tick rounding that
+// integer division introduces on HZ values that don't divide 1e9 (e.g.
+// HZ=300, where 1e9/300 is not integral).
 
 TEST(JiffiesToNsTest, ZeroMapsToZero) {
   EXPECT_EQ(JiffiesToNs(0), 0u);
 }
 
-TEST(JiffiesToNsTest, MatchesExpectedFactor) {
-  const uint64_t factor = static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
-  EXPECT_EQ(JiffiesToNs(1), factor);
-  EXPECT_EQ(JiffiesToNs(123), 123u * factor);
+TEST(JiffiesToNsTest, MatchesFormula) {
+  // JiffiesToNs(j) must equal (j * 1e9) / HZ for every j -- this is the
+  // whole contract. Pinning the formula catches both a wrong factor and a
+  // dropped 128-bit intermediate (which would overflow for large j on
+  // HZ=100). HZ=100 divides 1e9 exactly here, but the formula holds for
+  // any HZ by construction.
+  const uint64_t freq = static_cast<uint64_t>(util::GetJiffyFrequency());
+  ASSERT_GT(freq, 0u);
+  for (uint64_t j : {uint64_t{1}, uint64_t{2}, uint64_t{3}, uint64_t{123},
+                     uint64_t{1'000}, uint64_t{100'000}, uint64_t{1ULL << 40}}) {
+    const __uint128_t expected = (static_cast<__uint128_t>(j) * 1'000'000'000ULL) / freq;
+    EXPECT_EQ(JiffiesToNs(j), static_cast<uint64_t>(expected)) << "jiffies=" << j;
+  }
 }
 
 TEST(JiffiesToNsTest, IsMonotonicallyNonDecreasing) {
@@ -127,19 +138,17 @@ TEST(JiffiesToNsTest, IsMonotonicallyNonDecreasing) {
   }
 }
 
-TEST(JiffiesToNsTest, IsLinear) {
-  // f(a + b) == f(a) + f(b). Pure multiplication, so any operands work.
+TEST(JiffiesToNsTest, IsLinearUpToRounding) {
+  // f(a + b) differs from f(a) + f(b) by at most 1ns of integer-division
+  // rounding on HZ values that don't divide 1e9. On HZ=100 (divides 1e9)
+  // the difference is exactly 0; pin the tolerant bound so the test stays
+  // green on HZ=300/250/etc.
   const uint64_t a = 13;
   const uint64_t b = 409;
-  EXPECT_EQ(JiffiesToNs(a + b), JiffiesToNs(a) + JiffiesToNs(b));
-}
-
-TEST(JiffiesToNsTest, ScalesByConstantFactor) {
-  // f(k * x) == k * f(x): implies the factor is constant (cached, not
-  // re-read from sysconf every call).
-  const uint64_t x = 137;
-  const uint64_t k = 1000;
-  EXPECT_EQ(JiffiesToNs(k * x), k * JiffiesToNs(x));
+  const uint64_t lhs = JiffiesToNs(a + b);
+  const uint64_t rhs = JiffiesToNs(a) + JiffiesToNs(b);
+  EXPECT_LE(lhs, rhs + 1);
+  EXPECT_GE(lhs, rhs);
 }
 
 }  // namespace

@@ -94,9 +94,12 @@ std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
   const int64_t jiffies = static_cast<int64_t>(stat.utime) + static_cast<int64_t>(stat.stime) +
                           stat.cutime + stat.cstime;
   const int64_t clamped = jiffies < 0 ? 0 : jiffies;
-  // jiffy -> ns.
-  return static_cast<uint64_t>(clamped) * static_cast<uint64_t>(GetJiffyMillisecond()) *
-         1'000'000ULL;
+  // jiffy -> ns: diff * 1e9 / HZ with a 128-bit intermediate. Working from
+  // the frequency (not a precomputed ms-per-jiffy) avoids the ~10% low-bias
+  // on HZ=300 and the collapse to 0 on HZ>=2000 that the old
+  // GetJiffyMillisecond()*1e6 path had.
+  return static_cast<uint64_t>((static_cast<__uint128_t>(clamped) * 1'000'000'000ULL) /
+                               static_cast<uint64_t>(GetJiffyFrequency()));
 }
 
 }  // namespace util

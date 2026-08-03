@@ -1,8 +1,8 @@
-// Linux-only internals of cpu::ReadSystemBusyNs(), exposed in a dedicated
+// Linux-only internals of cpu::ReadSystemBusyTicks(), exposed in a dedicated
 // header so the pure busy-aggregation and unit-conversion logic can be
 // exercised directly from unit tests. Do NOT include this from production
-// code outside of stat_linux.cc; the public surface is `cpu::ReadSystemBusyNs`
-// in stat.h.
+// code outside of stat_linux.cc; the public surface is
+// `cpu::ReadSystemBusyTicks` / `cpu::BusyTicksToNs` in stat.h.
 //
 // The entire header is compiled out on non-Linux platforms so it cannot
 // accidentally be referenced from portable code.
@@ -39,7 +39,10 @@ struct ProcStatFields final {
 // kernel, so they are not added again. Pure: jiffies in, jiffies out.
 uint64_t BusyJiffies(const ProcStatFields &f);
 
-// Convert a jiffy count to nanoseconds using GetJiffyMillisecond(). Pure.
+// Convert a jiffy DIFF to nanoseconds via util::GetJiffyFrequency()
+// (diff * 1e9 / HZ), using a 128-bit intermediate so a large stalled-gap
+// diff still can't overflow before the divide. Pure. Only safe for diffs,
+// not cumulative values -- see ReadSystemBusyTicks.
 uint64_t JiffiesToNs(uint64_t jiffies);
 
 }  // namespace cpu::internal

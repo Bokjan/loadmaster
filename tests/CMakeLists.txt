@@ -107,7 +107,7 @@ loadmaster_add_test(util_obfuscate_test
     util/obfuscate_test.cc
 )
 
-# POSIX-only: util::GetJiffyMillisecond. The TU is guarded by
+# POSIX-only: util::GetJiffyFrequency. The TU is guarded by
 # !IS_WINDOWS and compiles to zero tests on Windows (matching the
 # guard inside clock.cc itself); the target is still registered
 # everywhere so the build doesn't bit-rot.
@@ -188,7 +188,7 @@ loadmaster_add_test(cli_version_string_test
 # reference platform-only APIs (GetSystemTimes / host_statistics64) and must
 # never be compiled into this test. The target is still registered
 # everywhere so the build doesn't bit-rot; off Linux it compiles to zero
-# tests. We deliberately do NOT exercise ReadSystemBusyNs() (it touches
+# tests. We deliberately do NOT exercise ReadSystemBusyTicks() (it touches
 # /proc, GetSystemTimes, or host_statistics64).
 if(UNIX AND NOT APPLE)
     loadmaster_add_test(cpu_stat_test

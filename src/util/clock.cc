@@ -7,13 +7,13 @@
 namespace util {
 
 #if !IS_WINDOWS
-int GetJiffyMillisecond() {
-  static const int kCached = []() {
+long GetJiffyFrequency() {
+  static const long kCached = []() {
     long freq = ::sysconf(_SC_CLK_TCK);
     if (freq <= 0) {
-      return 10;  // sensible fallback (HZ=100)
+      return 100L;  // sensible fallback (HZ=100)
     }
-    return static_cast<int>(1000 / freq);
+    return freq;
   }();
   return kCached;
 }

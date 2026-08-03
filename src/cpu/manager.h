@@ -38,9 +38,14 @@ class CpuResourceManager : public core::ResourceManager {
   // (std::atomic, std::jthread).
   std::vector<std::unique_ptr<CpuWorkerContext>> workers_;
   int base_loop_count_;
-  // System-wide cumulative busy time (ns) captured at the previous
-  // Schedule() tick. 0 means "no prior sample yet".
-  uint64_t prev_system_busy_ns_ = 0;
+  // System-wide cumulative busy time (native ticks) captured at the
+  // previous Schedule() tick. has_prev_busy_ticks_ distinguishes "no prior
+  // sample yet" from a legitimately-zero cumulative counter (the old
+  // `== 0` sentinel conflated the two, though a real zero is unrealistic
+  // post-boot). Diffs are taken in tick space (never overflowing) and only
+  // the small diff is converted to ns via BusyTicksToNs().
+  uint64_t prev_system_busy_ticks_ = 0;
+  bool has_prev_busy_ticks_ = false;
   util::RollingSampler<int> system_sampler_;
   util::ProcStat proc_stat_;
   util::RollingSampler<int> process_sampler_;

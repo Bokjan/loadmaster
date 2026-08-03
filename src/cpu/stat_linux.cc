@@ -41,13 +41,17 @@ uint64_t BusyJiffies(const ProcStatFields &f) {
 }
 
 uint64_t JiffiesToNs(uint64_t jiffies) {
-  // jiffy -> ns: jiffies * (ms per jiffy) * 1e6 ns/ms.
-  return jiffies * static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  // jiffy -> ns: jiffies * 1e9 / HZ. The 128-bit intermediate keeps a
+  // large stalled-gap diff from overflowing before the divide; a single
+  // scheduling interval is tiny, but a minutes-long gap can still be
+  // millions of jiffies. Only safe for diffs, not cumulative values.
+  return static_cast<uint64_t>((static_cast<__uint128_t>(jiffies) * 1'000'000'000ULL) /
+                               static_cast<uint64_t>(util::GetJiffyFrequency()));
 }
 
 }  // namespace internal
 
-std::optional<uint64_t> ReadSystemBusyNs() {
+std::optional<uint64_t> ReadSystemBusyTicks() {
   // Constrain `%s` width to avoid buffer overflow (kSmallBufferLength == 128).
   char buffer[kSmallBufferLength];
   UniqueFile fp(std::fopen("/proc/stat", "r"));
@@ -60,16 +64,24 @@ std::optional<uint64_t> ReadSystemBusyNs() {
       "%127s" LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64 LMPU64;
   const int count = std::fscanf(fp.get(), kStatFormat, buffer, &f.user, &f.nice, &f.system, &f.idle,
                                 &f.iowait, &f.irq, &f.softirq, &f.steal, &f.guest, &f.guest_nice);
-  if (count != 11) {
-    LOG_ERROR("failed to `fscanf` from /proc/stat, get val: %d, expect: 11", count);
+  // Require through `steal` (buffer + 8 numerics == 9). The trailing
+  // guest / guest_nice fields are optional on older kernels and are not
+  // used by BusyJiffies anyway, so a short read that still reaches steal
+  // is fine; the unscanned tail stays zero from `f{}`. Requiring exactly
+  // 11 used to fail the whole tick on older kernels and spam LOG_ERROR.
+  if (count < 9) {
+    LOG_ERROR("failed to `fscanf` from /proc/stat, got %d fields, need >= 9 (through steal)",
+              count);
     return std::nullopt;
   }
   if (!std::string_view(buffer).starts_with("cpu")) {
     LOG_ERROR("failed to read /proc/stat, have: %s, expect: cpu", buffer);
     return std::nullopt;
   }
-  return internal::JiffiesToNs(internal::BusyJiffies(f));
+  return internal::BusyJiffies(f);
 }
+
+uint64_t BusyTicksToNs(uint64_t tick_diff) { return internal::JiffiesToNs(tick_diff); }
 
 }  // namespace cpu
 
