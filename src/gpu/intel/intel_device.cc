@@ -311,8 +311,15 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
     const bool filled = fill_rc == ZE_RESULT_SUCCESS &&
                         api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS;
     if (filled) {
-      api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
-      api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
+      const ze_result_t exec_rc = api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
+      ze_result_t sync_rc = ZE_RESULT_SUCCESS;
+      if (exec_rc == ZE_RESULT_SUCCESS) {
+        sync_rc = api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
+      }
+      if (exec_rc != ZE_RESULT_SUCCESS || sync_rc != ZE_RESULT_SUCCESS) {
+        LOG_WARN("memory commit execute/sync failed, %zu bytes left uncommitted: exec=0x%x sync=0x%x",
+                 bytes, exec_rc, sync_rc);
+      }
     } else {
       LOG_WARN("memory fill/close failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,
                ZeResultString(fill_rc), fill_rc);

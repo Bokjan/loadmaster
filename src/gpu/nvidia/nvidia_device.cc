@@ -153,9 +153,21 @@ bool NvidiaDevice::AllocateMemory(size_t bytes) {
     mem_load_ptr_ = 0;
     return false;
   }
-  // Force physical commit.
-  api_->cuMemsetD8(mem_load_ptr_, 0xA5, bytes);
-  api_->cuCtxSynchronize();
+  // Force physical commit by faulting every page. Check the sync: a failure
+  // here usually means a real device error, and silently holding
+  // uncommitted VRAM is worse than reporting the allocation as failed.
+  const CUresult set_rc = api_->cuMemsetD8(mem_load_ptr_, 0xA5, bytes);
+  if (set_rc != CUDA_SUCCESS) {
+    LOG_WARN("cuMemsetD8(%zu) failed: %s", bytes, CudaErrorString(set_rc));
+  }
+  const CUresult sync_rc = api_->cuCtxSynchronize();
+  if (sync_rc != CUDA_SUCCESS) {
+    LOG_WARN("cuCtxSynchronize after memset failed: %s -- releasing %zu bytes",
+             CudaErrorString(sync_rc), bytes);
+    api_->cuMemFree(mem_load_ptr_);
+    mem_load_ptr_ = 0;
+    return false;
+  }
   mem_load_bytes_ = bytes;
   return true;
 }

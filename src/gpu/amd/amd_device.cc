@@ -190,8 +190,19 @@ bool AmdDevice::AllocateMemory(size_t bytes) {
     mem_load_ptr_ = nullptr;
     return false;
   }
-  api_->hipMemset(mem_load_ptr_, 0xA5, bytes);
-  api_->hipCtxSynchronize();
+  // Force physical commit by faulting every page; check the sync.
+  const hipError_t set_rc = api_->hipMemset(mem_load_ptr_, 0xA5, bytes);
+  if (set_rc != hipSuccess) {
+    LOG_WARN("hipMemset(%zu) failed: %s", bytes, HipErrorString(set_rc));
+  }
+  const hipError_t sync_rc = api_->hipCtxSynchronize();
+  if (sync_rc != hipSuccess) {
+    LOG_WARN("hipCtxSynchronize after memset failed: %s -- releasing %zu bytes",
+             HipErrorString(sync_rc), bytes);
+    api_->hipFree(mem_load_ptr_);
+    mem_load_ptr_ = nullptr;
+    return false;
+  }
   mem_load_bytes_ = bytes;
   return true;
 }

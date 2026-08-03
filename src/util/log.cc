@@ -13,10 +13,12 @@
 #if IS_WINDOWS
 #  include <cstdint>
 // `struct timeval` lives in <winsock2.h>, but we don't want to bring in the
-// rest of winsock; declare it locally.
+// rest of winsock; declare it locally. tv_sec is 64-bit so it survives 2038
+// (Windows `long` is 32-bit even on x64, and the old 32-bit tv_sec wrapped
+// in 2038).
 struct timeval {
-  long tv_sec;
-  long tv_usec;
+  long long tv_sec;
+  long long tv_usec;
 };
 #else
 #  include <sys/time.h>
@@ -24,19 +26,18 @@ struct timeval {
 
 #if IS_WINDOWS
 static int gettimeofday(timeval *tp, struct timezone * /*tzp*/) {
-  constexpr uint64_t kEpoch = ((uint64_t)116444736000000000ULL);
-
-  SYSTEMTIME system_time;
-  FILETIME file_time;
-  uint64_t time;
-
-  GetSystemTime(&system_time);
-  SystemTimeToFileTime(&system_time, &file_time);
-  time = ((uint64_t)file_time.dwLowDateTime);
-  time += ((uint64_t)file_time.dwHighDateTime) << 32;
-
-  tp->tv_sec = (long)((time - kEpoch) / 10000000L);
-  tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+  // FILETIME is 100ns ticks since 1601-01-01. Derive both tv_sec and
+  // tv_usec from a single GetSystemTimeAsFileTime sample: the old code
+  // took two samples (GetSystemTime for microseconds, SystemTimeToFileTime
+  // for seconds), so the two fields could straddle a second boundary and
+  // disagree by up to ~1 ms.
+  constexpr uint64_t kEpoch100ns = 116444736000000000ULL;  // 1601->1970, 100ns ticks
+  FILETIME ft;
+  ::GetSystemTimeAsFileTime(&ft);
+  uint64_t t = (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+  const uint64_t since_epoch = t - kEpoch100ns;  // 100ns ticks since 1970
+  tp->tv_sec = static_cast<long long>(since_epoch / 10000000ULL);
+  tp->tv_usec = static_cast<long long>((since_epoch / 10ULL) % 1000000ULL);
   return 0;
 }
 #endif
