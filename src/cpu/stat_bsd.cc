@@ -9,8 +9,8 @@
 
 #  include <cstddef>
 #  include <cstdint>
+#  include <unistd.h>
 
-#  include "util/clock.h"
 #  include "util/log.h"
 
 namespace cpu {
@@ -31,8 +31,9 @@ namespace cpu {
 // expose an iowait equivalent on BSD, so there is nothing analogous
 // to Linux's iowait-exclusion to worry about.
 //
-// Unit conversion uses util::GetJiffyMillisecond(), which is
-// sysconf(_SC_CLK_TCK)-based and works on BSD just as on Linux/macOS.
+// Unit conversion divides by the statclock rate (stathz), not the
+// scheduler hz / _SC_CLK_TCK -- see GetStatHz() below for why the two
+// differ on FreeBSD and why dividing by _SC_CLK_TCK was wrong.
 
 // Only FreeBSD and DragonFly are wired up for now. OpenBSD/NetBSD
 // share the same MIB shape but the rest of the ProcStat path differs
@@ -58,6 +59,39 @@ constexpr std::size_t kCpStateSys  = 2;
 constexpr std::size_t kCpStateIntr = 3;
 constexpr std::size_t kCpStateIdle = 4;
 constexpr std::size_t kCpuStateCount = 5;
+
+// Layout of kern.clockrate's struct clockinfo (four ints: hz, tick, profhz,
+// stathz), confirmed against `sysctl kern.clockrate`. Defined locally to
+// avoid pulling in <sys/timex.h> and to stay independent of any header
+// churn -- the layout has been stable since 4.4BSD.
+struct ClockInfo {
+  int hz;
+  int tick;
+  int profhz;
+  int stathz;
+};
+
+// kern.cp_time is advanced by the statclock at stathz Hz, NOT at the
+// scheduler hz that sysconf(_SC_CLK_TCK) returns. On a typical FreeBSD box
+// _SC_CLK_TCK == hz == 100 but stathz == 127, so dividing cp_time by
+// _SC_CLK_TCK over-estimated busy time by ~27% (127/100) and inflated every
+// load reading. Read the real statclock rate from kern.clockrate; fall back
+// to _SC_CLK_TCK if the sysctl is unavailable or reports stathz == 0 (some
+// kernels fold the statclock into the scheduler clock) so we degrade to
+// the old divisor rather than risk a divide-by-zero.
+long GetStatHz() {
+  static const long kCached = []() -> long {
+    int mib[2] = {CTL_KERN, KERN_CLOCKRATE};
+    ClockInfo ci{};
+    std::size_t len = sizeof(ci);
+    if (::sysctl(mib, 2, &ci, &len, nullptr, 0) == 0 && ci.stathz > 0) {
+      return static_cast<long>(ci.stathz);
+    }
+    const long clk = ::sysconf(_SC_CLK_TCK);
+    return clk > 0 ? clk : 100;
+  }();
+  return kCached;
+}
 
 }  // namespace
 
@@ -99,10 +133,11 @@ std::optional<uint64_t> ReadSystemBusyTicks() {
 }
 
 uint64_t BusyTicksToNs(uint64_t tick_diff) {
-  // jiffy -> ns: diff * 1e9 / HZ (128-bit intermediate). GetJiffyFrequency
-  // is sysconf(_SC_CLK_TCK)-based and works on BSD as on Linux/macOS.
+  // kern.cp_time ticks at stathz (not hz / _SC_CLK_TCK), so divide by the
+  // real statclock rate from GetStatHz(); 128-bit intermediate keeps a
+  // large stalled-gap diff from overflowing before the divide.
   return static_cast<uint64_t>((static_cast<__uint128_t>(tick_diff) * 1'000'000'000ULL) /
-                               static_cast<uint64_t>(util::GetJiffyFrequency()));
+                               static_cast<uint64_t>(GetStatHz()));
 }
 
 }  // namespace cpu
