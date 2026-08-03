@@ -6,7 +6,7 @@ namespace core::version {
 constexpr auto kVersionProject = "loadmaster";
 constexpr int kVersionMajor = 0;
 constexpr int kVersionMinor = 7;
-constexpr int kVersionPatch = 21;
+constexpr int kVersionPatch = 22;
 constexpr auto kVersionSuffix = "";
 
 }  // namespace core::version

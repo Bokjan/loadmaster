@@ -23,7 +23,7 @@ bool CpuResourceManagerDefault::Init() {
     return false;
   }
   if (count > CoreCount()) {
-    LOG_ERROR("CPU load `%d` needs %d CPU, have %u", options_.GetCpuLoad(), count, CoreCount());
+    LOG_ERROR("CPU load `%d` needs %d CPU, have %d", options_.GetCpuLoad(), count, CoreCount());
     return false;
   }
   return this->ConstructWorkerThreads(count);
