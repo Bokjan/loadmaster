@@ -29,18 +29,18 @@ jobs:
           - { os: ubuntu-24.04-arm, preset: debug }
           - { os: ubuntu-24.04-arm, preset: release }
           - { os: ubuntu-24.04-arm, preset: tsan }
-          # macOS arm64 (Apple Silicon; macos-15 = Xcode 16, libc++ exposes std::jthread)
+          # macOS arm64 only (Apple Silicon; macos-15 = Xcode 16). x86_64 macOS is
+          # intentionally dropped -- the user accepts an arm64-only macOS deliverable.
+          # std::jthread on Apple libc++ is enabled via -fexperimental-library in
+          # src/CMakeLists.txt (see there).
           - { os: macos-15,         preset: macos-arm64-debug }
           - { os: macos-15,         preset: macos-arm64-release }
-          # macOS x86_64 (cross-compiled on Apple Silicon, runs under Rosetta 2)
-          - { os: macos-15,         preset: macos-x86_64-debug }
-          - { os: macos-15,         preset: macos-x86_64-release }
           # Windows x64 (pin windows-2022: it ships VS 2022; windows-latest here
           # no longer exposes a VS instance to vswhere, so the VS generator fails)
           - { os: windows-2022,     preset: windows-debug }
           - { os: windows-2022,     preset: windows-release }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.0
 
       # -- ccache (Linux & macOS only; skipped on Windows) ------------------
       - name: Install ccache (Linux)

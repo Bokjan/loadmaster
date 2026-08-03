@@ -328,22 +328,25 @@ else()
     )
 endif()
 
-# FreeBSD libc++ ships <stop_token> / std::jthread (LLVM 18+ implements
-# them fully) but the base system's libc++ build defines
-# _LIBCPP_HAS_NO_EXPERIMENTAL_STOP_TOKEN, which gates the entire header
-# out at the preprocessor level. As a result, even on FreeBSD 15 with
-# Clang 19, an unflagged compile sees "no type named 'jthread' in
-# namespace 'std'". LLVM provides -fexperimental-library specifically to
-# turn that gate off; on libc++ 19 the remaining "experimental" surface
-# is essentially just stop_token, so the flag is effectively scoped to
-# the feature we need.
+# <stop_token> / std::jthread are gated behind _LIBCPP_HAS_NO_EXPERIMENTAL_STOP_TOKEN
+# in several libc++ builds, so an unflagged compile fails with "no type named
+# 'jthread' in namespace 'std'". LLVM provides -fexperimental-library to turn
+# that gate off; on modern libc++ the residual experimental surface is
+# essentially just stop_token, so the flag is effectively scoped to the
+# feature we need.
 #
-# We don't apply this on Linux (libstdc++ has jthread in mainline since
-# GCC 10; Linux clang+libc++ ships it without the gate too) or on macOS
-# (Apple libc++ 17+ on macOS 14+ ships it directly; older Xcodes are
-# already below the project's tested baseline). Both would also reject
-# or no-op the flag in less than ideal ways.
-if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+# Affected platforms:
+#   * FreeBSD / DragonFly: base-system libc++ defines the gate (verified on
+#     FreeBSD 15 / Clang 19).
+#   * macOS: Apple's libc++, even on Xcode 16.4 (LLVM 18/19-based), still
+#     gates stop_token / jthread behind this flag -- the "Apple libc++ 17+ on
+#     macOS 14+ ships it directly" assumption does not hold on the CI runners,
+#     which default to Xcode 16.x. Adding the flag is harmless where jthread
+#     is already available and required where it is gated.
+# Linux is excluded: libstdc++ has had jthread in mainline since GCC 10 and
+# Linux clang+libc++ ships it without the gate, so the flag is unnecessary
+# there (and rejected by some non-Clang toolchains).
+if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly" OR APPLE)
     target_compile_options(loadmaster PRIVATE -fexperimental-library)
     target_link_options(loadmaster PRIVATE -fexperimental-library)
 endif()
