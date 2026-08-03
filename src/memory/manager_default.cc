@@ -16,7 +16,8 @@ MemoryResourceManagerDefault::MemoryResourceManagerDefault(const core::Options &
 MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
   // If a background allocator thread is still running, signal it to stop
   // and wait. `std::jthread` already does this in its destructor, but doing
-  // it explicitly makes the lifetime obvious.
+  // it explicitly makes the lifetime obvious. The fill loop checks the stop
+  // token between chunks, so this join returns promptly even mid-fill.
   if (bg_alloc_thread_.joinable()) {
     bg_alloc_thread_.request_stop();
     bg_alloc_thread_.join();
@@ -24,12 +25,17 @@ MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
 }
 
 void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
-  if (!WillSchedule(time_point)) {
+  // Check the in-flight flag BEFORE WillSchedule. While a background fill is
+  // running, allocator_ is being mutated by that thread; observing
+  // bg_in_flight_==false (acquire) guarantees the background thread's
+  // allocator_ writes are complete (they precede its release-store of false),
+  // so WillSchedule's IsEmpty() read is race-free. Checking the flag first
+  // also means we never read allocator_ concurrently with the fill.
+  if (bg_in_flight_.load(std::memory_order_acquire)) {
+    LOG_TRACE("background allocate-and-fill still running, skipping this tick");
     return;
   }
-  // Skip scheduling if a previous background fill is still in flight.
-  if (bg_alloc_thread_.joinable()) {
-    LOG_TRACE("background allocate-and-fill still running, skipping this tick");
+  if (!WillSchedule(time_point)) {
     return;
   }
 
@@ -44,15 +50,21 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
   std::uniform_int_distribution<int> byte_dis(0, 255);
   const auto seed = static_cast<std::byte>(byte_dis(generator_));
 
-  const size_t threshold_bytes = static_cast<size_t>(kMemoryNoThreadSpawnThresholdMiB) * kMebiByte;
+  const size_t threshold_bytes =
+      static_cast<size_t>(kMemoryBackgroundThreadThresholdMiB) * kMebiByte;
   if (byte_count >= threshold_bytes) {
-    // Spawn a one-shot background thread to allocate + fill the block,
-    // so the main scheduling loop is not blocked on a potentially long
-    // memset/page-fault storm.
-    bg_alloc_thread_ = std::jthread(
-        [this, byte_count, seed](std::stop_token) { AllocateAndFill(byte_count, seed); });
+    // Spawn a one-shot background thread to allocate + fill the block, so
+    // the main scheduling loop is not blocked on a potentially long
+    // memset/page-fault storm. Reassigning bg_alloc_thread_ joins the
+    // previous (already-finished) thread first; we only reach here when not
+    // in flight, so that previous thread has already cleared the flag.
+    bg_in_flight_.store(true, std::memory_order_release);
+    bg_alloc_thread_ = std::jthread([this, byte_count, seed](std::stop_token st) {
+      AllocateAndFill(byte_count, seed, st);
+      bg_in_flight_.store(false, std::memory_order_release);
+    });
   } else {
-    AllocateAndFill(byte_count, seed);
+    AllocateAndFill(byte_count, seed, std::stop_token{});
   }
 
   last_scheduling_ = time_point;
@@ -68,10 +80,11 @@ bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
   return time_diff.count() > kMemoryScheduleIntervalSecond;
 }
 
-void MemoryResourceManagerDefault::AllocateAndFill(size_t byte_count, std::byte seed) {
+void MemoryResourceManagerDefault::AllocateAndFill(size_t byte_count, std::byte seed,
+                                                   std::stop_token st) {
   try {
     allocator_.AllocateBlock(byte_count);
-    allocator_.FillXor(seed);
+    allocator_.FillXorInterruptible(seed, st);
   } catch (const std::bad_alloc &e) {
     LOG_ERROR("memory allocation of %zu bytes failed: %s", byte_count, e.what());
   } catch (const std::exception &e) {

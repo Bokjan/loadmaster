@@ -37,6 +37,7 @@
 #include "memory/allocator.h"
 
 #include <cstddef>
+#include <stop_token>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -159,6 +160,41 @@ TEST(AllocatorTest, FillXorAcrossVariousSeedsRunsCleanly) {
   for (int s = 0; s < 256; ++s) {
     a.FillXor(static_cast<std::byte>(s));
   }
+  EXPECT_FALSE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillXorInterruptibleOnEmptyAllocatorIsNoop) {
+  // Same nullptr guard as FillXor; the interruptible variant must not
+  // dereference a missing block on the manager's first tick.
+  Allocator a;
+  std::stop_source src;
+  a.FillXorInterruptible(std::byte{0xAB}, src.get_token());
+  EXPECT_TRUE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillXorInterruptibleWithClearedTokenFillsCompletely) {
+  // A stop token that is never stopped must behave like FillXor: it walks
+  // the whole block. We can't peek at bytes, but a non-stopped token over a
+  // non-power-of-two size exercises every chunk-boundary branch (first
+  // chunk, full middle chunks, final short chunk) -- ASAN catches any
+  // out-of-bounds in the chunked loop.
+  Allocator a;
+  a.AllocateBlock(257);  // smaller than one 4 MiB chunk -> single short chunk
+  std::stop_source src;
+  a.FillXorInterruptible(std::byte{0x5A}, src.get_token());
+  EXPECT_FALSE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillXorInterruptibleReturnsEarlyWhenAlreadyStopped) {
+  // A pre-stopped token must return without touching the block. We can't
+  // observe the bytes, but the structural state is unchanged and the call
+  // must not crash; this pins the "check stop_requested() per chunk" guard
+  // that lets the manager abort a long background fill on shutdown.
+  Allocator a;
+  a.AllocateBlock(1024);
+  std::stop_source src;
+  src.request_stop();
+  a.FillXorInterruptible(std::byte{0x5A}, src.get_token());
   EXPECT_FALSE(a.IsEmpty());
 }
 

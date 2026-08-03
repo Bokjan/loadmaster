@@ -223,3 +223,18 @@ loadmaster_add_test(memory_allocator_test
     memory/allocator_test.cc
     ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
 )
+
+# MemoryResourceManagerDefault scheduling: the 45-second periodic resize
+# loop (WillSchedule/Schedule) and the one-shot background allocate-and-fill
+# jthread. These are behavioural smoke tests -- the manager exposes no
+# allocator state, so we drive the inline and background paths and rely on
+# ASAN/UBSAN to catch leaks, races, and missing joins. Pins the H1
+# in-flight-flag lifecycle and the M10 stop-token chunked fill.
+loadmaster_add_test(memory_manager_test
+    memory/manager_test.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/manager_default.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/manager.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
+    ${CMAKE_SOURCE_DIR}/src/core/options.cc
+    ${CMAKE_SOURCE_DIR}/src/util/log.cc
+)
