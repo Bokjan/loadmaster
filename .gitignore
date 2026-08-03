@@ -51,3 +51,6 @@ compile_commands.json
 # clangd writes its on-disk index here when it consumes the
 # compile_commands.json above. Per-checkout, never committed.
 .cache/
+
+# Local review / research notes (per-checkout, never committed)
+.notes/

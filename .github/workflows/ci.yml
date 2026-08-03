@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} / ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (host arch; native toolchain, no Docker needed)
+          - { os: ubuntu-24.04,     preset: debug }
+          - { os: ubuntu-24.04,     preset: release }
+          - { os: ubuntu-24.04,     preset: tsan }
+          # Linux arm64 (host arch)
+          - { os: ubuntu-24.04-arm, preset: debug }
+          - { os: ubuntu-24.04-arm, preset: release }
+          - { os: ubuntu-24.04-arm, preset: tsan }
+          # macOS arm64 (Apple Silicon)
+          - { os: macos-14,         preset: macos-arm64-debug }
+          - { os: macos-14,         preset: macos-arm64-release }
+          # macOS x86_64 (Intel)
+          - { os: macos-13,         preset: macos-x86_64-debug }
+          - { os: macos-13,         preset: macos-x86_64-release }
+          # Windows x64 (MSVC does not support -fsanitize, so no tsan leg)
+          - { os: windows-latest,   preset: windows-debug }
+          - { os: windows-latest,   preset: windows-release }
+    steps:
+      - uses: actions/checkout@v4
+
+      # -- ccache (Linux & macOS only; skipped on Windows) ------------------
+      - name: Install ccache (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
+      - name: Install ccache + CMake (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+          brew install ccache cmake
+
+      - name: Cache ccache (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-ci-${{ matrix.os }}-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: |
+            ccache-ci-${{ matrix.os }}-${{ matrix.preset }}-
+
+      - name: Cache ccache (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ci-${{ matrix.os }}-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: |
+            ccache-ci-${{ matrix.os }}-${{ matrix.preset }}-
+
+      # -- Configure / Build / Test ----------------------------------------
+      - name: Configure
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          ${{ runner.os != 'Windows' && '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache' || '' }}
+
+      - name: Build
+        # Auto-detect build parallelism per runner (avoid -j with no arg, which
+        # Make treats as UNLIMITED and thrashes low-core machines).
+        shell: bash
+        run: cmake --build --preset ${{ matrix.preset }} -j $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
+      - name: Test
+        shell: bash
+        run: ctest --preset ${{ matrix.preset }} -j $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4) --timeout 300

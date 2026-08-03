@@ -1,0 +1,166 @@
+name: Release
+
+# Triggered by version tags (vX.Y.Z). Also runnable manually via
+# workflow_dispatch (builds + uploads artifacts, but the publish job only
+# creates a GitHub Release when the run is on a tag ref).
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # gh release create
+
+jobs:
+  # ----- Linux x86_64: manylinux2014 inside Docker on a native x86_64 host --
+  # The portable binary links glibc dynamically (so the GPU module can dlopen
+  # vendor libraries), so it must be built against an old glibc baseline.
+  # manylinux2014 pins glibc 2.17, giving cross-distro portability. This is
+  # unavoidable given the dynamic-glibc + dlopen design (see README).
+  linux-x86_64:
+    name: Linux x86_64 (manylinux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable binary (manylinux2014)
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -c "cmake --preset release -DLOADMASTER_BUILD_TESTS=OFF && cmake --build --preset release -j $(nproc)"
+      - name: Stage + strip
+        run: |
+          mkdir -p dist
+          cp build/release/src/loadmaster dist/loadmaster-x86_64
+          strip dist/loadmaster-x86_64
+          file dist/loadmaster-x86_64
+      - name: Smoke test
+        run: timeout 30 ./dist/loadmaster-x86_64 -h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: dist/loadmaster-x86_64
+          if-no-files-found: error
+
+  # ----- Linux aarch64: manylinux2014_aarch64 inside Docker on native arm64 -
+  linux-aarch64:
+    name: Linux aarch64 (manylinux)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable binary (manylinux2014)
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work \
+            quay.io/pypa/manylinux2014_aarch64 \
+            bash -c "cmake --preset release -DLOADMASTER_BUILD_TESTS=OFF && cmake --build --preset release -j $(nproc)"
+      - name: Stage + strip
+        run: |
+          mkdir -p dist
+          cp build/release/src/loadmaster dist/loadmaster-aarch64
+          strip dist/loadmaster-aarch64
+          file dist/loadmaster-aarch64
+      - name: Smoke test
+        run: timeout 30 ./dist/loadmaster-aarch64 -h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64
+          path: dist/loadmaster-aarch64
+          if-no-files-found: error
+
+  # ----- macOS: one Apple Silicon runner builds both arm64 and x86_64 ------
+  # Cross-arch compile via CMAKE_OSX_ARCHITECTURES; deployment target 11.0
+  # (set in the preset). Not statically linked (Apple ships no static
+  # libc++/libSystem), so it relies on the OS-provided dylibs.
+  macos:
+    name: macOS (arm64 + x86_64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ccache + CMake
+        run: |
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
+          brew install ccache cmake
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-release-macos-v1
+          restore-keys: ccache-release-macos-v1
+      - name: Build arm64
+        run: cmake --preset macos-arm64-release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      - name: Build x86_64
+        run: cmake --preset macos-x86_64-release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      - name: Stage + strip
+        run: |
+          mkdir -p dist
+          cp build/macos-arm64-release/src/loadmaster dist/loadmaster-macos-arm64
+          cp build/macos-x86_64-release/src/loadmaster dist/loadmaster-macos-x86_64
+          strip -x dist/loadmaster-macos-arm64
+          strip -x dist/loadmaster-macos-x86_64
+          file dist/loadmaster-macos-*
+      - name: Smoke test (arm64)
+        run: timeout 30 ./dist/loadmaster-macos-arm64 -h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist/loadmaster-macos-arm64
+            dist/loadmaster-macos-x86_64
+          if-no-files-found: error
+
+  # ----- Windows x86_64: VS 2022 (static /MT runtime via CMake) ------------
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure + build
+        run: |
+          cmake --preset windows-release
+          cmake --build --preset windows-release
+      - name: Stage
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "build/windows-release/src/Release/loadmaster.exe" dist/loadmaster-windows-x86_64.exe
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\loadmaster-windows-x86_64.exe -ArgumentList '-h' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "smoke test failed: exit $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/loadmaster-windows-x86_64.exe
+          if-no-files-found: error
+
+  # ----- Publish: assemble all artifacts into a GitHub Release ------------
+  publish:
+    name: Publish GitHub Release
+    needs: [linux-x86_64, linux-aarch64, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: List assets
+        run: ls -la release
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --latest \
+            release/*
