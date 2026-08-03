@@ -116,6 +116,33 @@ TEST_F(CliTest, NonIntegerValueRejected) {
   EXPECT_EQ(r.exit_code, EXIT_FAILURE);
 }
 
+TEST_F(CliTest, TrailingGarbageAfterIntegerRejected) {
+  // sscanf("%d") used to accept "5abc" as 5, silently dropping the tail.
+  // from_chars requires the whole token to be consumed.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-l", "5abc"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  EXPECT_EQ(r.exit_code, EXIT_FAILURE);
+}
+
+TEST_F(CliTest, HexPrefixedIntegerRejected) {
+  // "0x10" was previously parsed as 0 by sscanf("%d") with the tail
+  // dropped; from_chars (base 10) rejects it outright.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-c", "0x10"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  EXPECT_EQ(r.exit_code, EXIT_FAILURE);
+}
+
+TEST_F(CliTest, IntegerOverflowRejected) {
+  // Out-of-int-range values are UB under sscanf("%d"); from_chars reports
+  // result_out_of_range and we reject.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-c", "2147483648"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  EXPECT_EQ(r.exit_code, EXIT_FAILURE);
+}
+
 TEST_F(CliTest, MemoryFlagParsed) {
   Options opts;
   auto a = MakeArgv({"loadmaster", "-m", "16"});

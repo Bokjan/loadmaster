@@ -8,6 +8,7 @@
 #include "constants.h"
 
 #include "cli/cli_argument.h"
+#include "cpu/constants.h"
 #include "cpu/stat.h"
 #include "gpu/constants.h"
 #include "util/log.h"
@@ -67,16 +68,36 @@ Options::Options()
 bool Options::ProcessCliArguments(const cli::CliArgument &args) {
   // CPU load
   if (args.cpu_load) {
-    cpu_load_ = args.cpu_load.value();
+    const int load = args.cpu_load.value();
+    if (load < 0) {
+      LOG_ERROR("invalid CPU load (must be >= 0): %d", load);
+      return false;
+    }
+    // cpu_load is "100 per core": requesting more than 100% of every core
+    // can't be satisfied and would be rejected later in the manager's Init()
+    // (via a `count > CoreCount()` guard); reject it here with a clear
+    // message instead. This also keeps `load * kCpuRandNormalSchedulePointCount`
+    // comfortably inside `int` in the rand_normal scheduler.
+    const int max_load = kCpuMaxLoadPerCore * cpu::CoreCount();
+    if (load > max_load) {
+      LOG_ERROR("invalid CPU load (must be <= %d = 100 * %d cores): %d", max_load,
+                cpu::CoreCount(), load);
+      return false;
+    }
+    cpu_load_ = load;
   }
   // CPU count
   if (args.cpu_count) {
-    if (args.cpu_count.value() > cpu::CoreCount()) {
-      LOG_ERROR("hardware CPU count: %u, you require %d, abort", cpu::CoreCount(),
-                args.cpu_count.value());
+    const int count = args.cpu_count.value();
+    if (count < 0) {
+      LOG_ERROR("invalid CPU count (must be >= 0): %d", count);
       return false;
     }
-    cpu_count_ = args.cpu_count.value();
+    if (count > cpu::CoreCount()) {
+      LOG_ERROR("hardware CPU count: %d, you require %d, abort", cpu::CoreCount(), count);
+      return false;
+    }
+    cpu_count_ = count;
   }
   // CPU scheduling algorithm
   if (args.cpu_algorithm) {

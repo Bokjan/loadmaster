@@ -13,6 +13,7 @@
 
 #include "cli/cli_argument.h"
 #include "core/constants.h"
+#include "cpu/constants.h"
 #include "cpu/stat.h"
 #include "gpu/constants.h"
 #include "util/log.h"
@@ -68,15 +69,30 @@ TEST_F(OptionsTest, EmptyArgumentsAreNoop) {
 
 // ---- CPU ------------------------------------------------------------------
 
-TEST_F(OptionsTest, CpuLoadIsForwardedRawWithoutBoundsCheck) {
-  // The current implementation does NOT clamp cpu_load; it trusts the
-  // value. This test pins that behavior so a future change becomes a
-  // deliberate decision rather than an accidental tightening.
+TEST_F(OptionsTest, CpuLoadNegativeRejected) {
+  // cpu_load < 0 used to slip through and caused signed-overflow UB in
+  // the worker-count arithmetic (e.g. `(load + 99) / 100`).
   Options opts;
   CliArgument args;
-  args.cpu_load = 350;
+  args.cpu_load = -1;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuLoadFullMachineBudgetAccepted) {
+  // 100% of every core is the natural ceiling: the manager's Init() would
+  // reject anything above it anyway via `count > CoreCount()`.
+  Options opts;
+  CliArgument args;
+  args.cpu_load = kCpuMaxLoadPerCore * cpu::CoreCount();
   EXPECT_TRUE(opts.ProcessCliArguments(args));
-  EXPECT_EQ(opts.GetCpuLoad(), 350);
+  EXPECT_EQ(opts.GetCpuLoad(), kCpuMaxLoadPerCore * cpu::CoreCount());
+}
+
+TEST_F(OptionsTest, CpuLoadBeyondMachineBudgetRejected) {
+  Options opts;
+  CliArgument args;
+  args.cpu_load = kCpuMaxLoadPerCore * cpu::CoreCount() + 1;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 
 TEST_F(OptionsTest, CpuCountAcceptsBelowHardwareLimit) {
@@ -94,6 +110,15 @@ TEST_F(OptionsTest, CpuCountRejectsAboveHardwareLimit) {
   // hardware_concurrency() can theoretically return 0 on exotic
   // hosts; pick something that overflows any realistic CI machine.
   args.cpu_count = cpu::CoreCount() + 1000;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuCountNegativeRejected) {
+  // A negative cpu_count used to be silently accepted; downstream it
+  // collapsed into "derive thread count from load" with no diagnostic.
+  Options opts;
+  CliArgument args;
+  args.cpu_count = -1;
   EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 

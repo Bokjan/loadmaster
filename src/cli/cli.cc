@@ -1,7 +1,9 @@
 #include "cli.h"
 
-#include <cstdio>
 #include <cstdlib>
+
+#include <charconv>
+#include <cstring>
 
 #include <algorithm>
 #include <functional>
@@ -73,13 +75,14 @@ bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
     return false;
   }
   const char *int_str = argv[++idx];
+  const size_t len = std::strlen(int_str);
   int target = 0;
-#ifdef _MSC_VER
-  int affected = sscanf_s(int_str, "%d", &target);
-#else
-  int affected = std::sscanf(int_str, "%d", &target);
-#endif
-  if (affected != 1) {
+  // std::from_chars rejects partial parses (trailing garbage) via the
+  // `ptr != end` check and reports `int` overflow as `result_out_of_range`,
+  // neither of which `sscanf("%d")` does. This mirrors the ParseGpuIndices
+  // style in options.cc.
+  const auto [ptr, ec] = std::from_chars(int_str, int_str + len, target);
+  if (ec != std::errc{} || ptr != int_str + len) {
     LOG_ERROR("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
     return false;
   }
