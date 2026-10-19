@@ -38,7 +38,9 @@ rel_build
 build_release_*
 build_tests
 build_tests_sanitize
+build_ci
 dist
+CMakeUserPresets.json
 .vscode
 .vs/
 

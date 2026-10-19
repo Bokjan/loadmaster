@@ -11,6 +11,7 @@
 #     scripts/run_tests.sh --filter Foo*  # Run only tests matching pattern
 #     scripts/run_tests.sh --clean        # Wipe build dir before configuring
 #     scripts/run_tests.sh --sanitize     # ASan + UBSan build (own build dir)
+#     scripts/run_tests.sh --werror       # warnings are errors (CI)
 #     scripts/run_tests.sh --help
 #
 # Output:
@@ -35,7 +36,8 @@ Options:
   --clean             Remove the build directory before configuring
   --sanitize [list]   Build with sanitizers (default: address,undefined) in
                       build_tests_sanitize/
-  -j <N>              Parallel build/test jobs (default: nproc)
+  --werror            Build with LOADMASTER_WERROR=ON (warnings are errors)
+  -j <N>              Parallel build/test jobs (default: CPU count)
   -h, --help          Show this message
 
 The build tree is reused at build_tests/ across runs so incremental
@@ -48,13 +50,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
 BUILD_DIR="${REPO_ROOT}/build_tests"
 
+# shellcheck source=lib/common.sh
+source "${REPO_ROOT}/scripts/lib/common.sh"
+
 BUILD_TYPE="Debug"
 SANITIZE=""
 FILTER=""
 CLEAN=0
-# Default to host CPU count; fall back to 4 if nproc isn't available
-# (e.g. on a stripped-down container).
-JOBS="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
+WERROR=OFF
+JOBS="$(lm_jobs)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -82,6 +86,10 @@ while [[ $# -gt 0 ]]; do
                 SANITIZE="address,undefined"
                 shift
             fi
+            ;;
+        --werror)
+            WERROR=ON
+            shift
             ;;
         -j)
             JOBS="${2:-}"
@@ -122,8 +130,9 @@ if [[ "${CLEAN}" -eq 1 ]]; then
 fi
 
 echo "==> configuring (${BUILD_TYPE})"
+lm_prefer_ninja "${BUILD_DIR}"
 CMAKE_ARGS=(-DLOADMASTER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
-            -DLOADMASTER_SANITIZE="${SANITIZE}")
+            -DLOADMASTER_SANITIZE="${SANITIZE}" -DLOADMASTER_WERROR="${WERROR}")
 if [[ -n "${SANITIZE}" ]]; then
     CMAKE_ARGS+=(-DLOADMASTER_LINK_COMPILE_COMMANDS=OFF)
 fi

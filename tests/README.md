@@ -16,6 +16,7 @@ scripts/run_tests.sh --filter 'Cli.*' # narrow to a subset
 scripts/run_tests.sh --release        # Release build
 scripts/run_tests.sh --clean          # wipe build_tests/ first
 scripts/run_tests.sh --sanitize       # ASan + UBSan, in build_tests_sanitize/
+scripts/run_tests.sh --werror         # warnings are errors (as in CI)
 scripts/run_tests.sh --help           # full option list
 ```
 
@@ -25,6 +26,7 @@ scripts\run_tests.ps1                 # Debug build, all tests
 scripts\run_tests.ps1 -Filter 'Cli.*' # narrow to a subset
 scripts\run_tests.ps1 -Release        # Release build
 scripts\run_tests.ps1 -Clean          # wipe build_tests\ first
+scripts\run_tests.ps1 -Werror         # warnings are errors (as in CI)
 scripts\run_tests.ps1 -?              # full option list
 ```
 
@@ -40,6 +42,9 @@ cmake --build build_tests -j
 # 3. Run via CTest (from the build dir; `--test-dir` needs CMake 3.20).
 cd build_tests && ctest --output-on-failure
 ```
+
+With CMake 3.21+, `cmake --preset dev && cmake --build --preset dev &&
+ctest --preset dev` does the same (see `CMakePresets.json`).
 
 An installed GoogleTest (e.g. Debian's `libgtest-dev`, Homebrew's
 `googletest`, or one on `CMAKE_PREFIX_PATH`) is used when CMake finds one,

@@ -11,10 +11,12 @@
 #     scripts/build_macos.sh                 # auto-detect host arch
 #     scripts/build_macos.sh --arch arm64
 #     scripts/build_macos.sh --arch x86_64
+#     scripts/build_macos.sh --incremental   # reuse the build tree
 #     scripts/build_macos.sh --help
 #
 # Output:
-#     dist/loadmaster-macos-<arch>
+#     dist/loadmaster-<version>-macos-<arch>
+#     dist/loadmaster-<version>-macos-<arch>.sha256
 #
 # Notes:
 #   * Unlike the Linux build, we do NOT statically link libc++/libSystem:
@@ -33,16 +35,18 @@ set -o nounset
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--arch <arm64|x86_64>] [--help]
+Usage: $(basename "$0") [--arch <arm64|x86_64>] [--incremental] [--help]
 
   --arch <arch>   Target architecture. Defaults to the host's arch.
                   Cross-compiling is supported on Apple Silicon hosts via
                   CMAKE_OSX_ARCHITECTURES (no Rosetta needed at build
                   time, but the resulting x86_64 binary will run under
                   Rosetta 2 on Apple Silicon).
+  --incremental   Reuse the existing build tree instead of starting from
+                  scratch (faster; for iteration, not releases).
   --help, -h      Show this message.
 
-Output: dist/loadmaster-macos-<arch>
+Output: dist/loadmaster-<version>-macos-<arch> (+ .sha256)
 EOF
 }
 
@@ -55,11 +59,16 @@ detect_arch() {
 }
 
 ARCH="$(detect_arch)"
+INCREMENTAL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)
             ARCH="${2:-}"
             shift 2
+            ;;
+        --incremental)
+            INCREMENTAL=1
+            shift
             ;;
         -h|--help)
             usage
@@ -95,27 +104,39 @@ if ! command -v cmake >/dev/null 2>&1; then
     exit 1
 fi
 
-readonly ARCH
+readonly ARCH INCREMENTAL
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BUILD_DIR="${REPO_ROOT}/build_release_macos_${ARCH}"
 readonly DIST_DIR="${REPO_ROOT}/dist"
-readonly OUTPUT="${DIST_DIR}/loadmaster-macos-${ARCH}"
+
+# shellcheck source=lib/common.sh
+source "${REPO_ROOT}/scripts/lib/common.sh"
 
 # Deployment target: 11.0 covers every Apple-Silicon-capable macOS plus
 # the last few Intel releases. Bump if you need APIs from a newer SDK.
 readonly DEPLOYMENT_TARGET="11.0"
 
 mkdir -p "${DIST_DIR}"
-rm -rf "${BUILD_DIR}"
+if [[ "${INCREMENTAL}" -eq 0 ]]; then
+    rm -rf "${BUILD_DIR}"
+fi
+lm_prefer_ninja "${BUILD_DIR}"
 
+# LOADMASTER_LINK_COMPILE_COMMANDS=OFF: a release build shouldn't repoint
+# the developer's clangd link at its throwaway tree.
 cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
       -DCMAKE_BUILD_TYPE=Release \
+      -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF \
       -DCMAKE_OSX_ARCHITECTURES="${ARCH}" \
       -DCMAKE_OSX_DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}"
-cmake --build "${BUILD_DIR}" -j
+cmake --build "${BUILD_DIR}" -j "$(lm_jobs)"
 
+OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-macos-${ARCH}"
+readonly OUTPUT
 cp "${BUILD_DIR}/src/loadmaster" "${OUTPUT}"
 strip -x "${OUTPUT}"   # -x: keep external symbols (required by dlopen)
+lm_write_sha256 "${OUTPUT}"
 file "${OUTPUT}"
 echo
-echo "Built: ${OUTPUT}"
+echo "Built:  ${OUTPUT}"
+echo "SHA256: $(cut -d ' ' -f 1 "${OUTPUT}.sha256")"

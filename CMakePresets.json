@@ -1,0 +1,72 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Debug + unit tests (same tree as scripts/run_tests.sh)",
+      "binaryDir": "${sourceDir}/build_tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LOADMASTER_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "sanitize",
+      "displayName": "Debug + unit tests under ASan/UBSan (same tree as run_tests.sh --sanitize)",
+      "binaryDir": "${sourceDir}/build_tests_sanitize",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LOADMASTER_BUILD_TESTS": "ON",
+        "LOADMASTER_SANITIZE": "address,undefined",
+        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release binary for this host (not portable; see scripts/build_*)",
+      "binaryDir": "${sourceDir}/build_release_local",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
+      }
+    },
+    {
+      "name": "ci",
+      "displayName": "Release + unit tests, warnings as errors",
+      "binaryDir": "${sourceDir}/build_ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LOADMASTER_BUILD_TESTS": "ON",
+        "LOADMASTER_WERROR": "ON",
+        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev", "configurePreset": "dev", "configuration": "Debug" },
+    { "name": "sanitize", "configurePreset": "sanitize", "configuration": "Debug" },
+    { "name": "release", "configurePreset": "release", "configuration": "Release" },
+    { "name": "ci", "configurePreset": "ci", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "sanitize",
+      "configurePreset": "sanitize",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

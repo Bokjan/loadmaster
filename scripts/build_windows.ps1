@@ -10,9 +10,11 @@
 #
 # Usage (any PowerShell, Windows 10/11):
 #     scripts\build_windows.ps1
+#     scripts\build_windows.ps1 -Incremental   # reuse the build tree
 #
 # Output:
-#     dist\loadmaster-windows-x86_64.exe
+#     dist\loadmaster-<version>-windows-x86_64.exe
+#     dist\loadmaster-<version>-windows-x86_64.exe.sha256
 #
 # The resulting executable links the C/C++ runtime statically (/MT) so it
 # does not need the Visual C++ Redistributable on the target machine.
@@ -21,14 +23,17 @@
 # for the GPU module; AMD requires the HIP SDK runtime.
 
 [CmdletBinding()]
-param()
+param(
+    # Reuse the existing build tree instead of starting from scratch
+    # (faster; for iteration, not releases).
+    [switch]$Incremental
+)
 
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot  = Resolve-Path "$PSScriptRoot\.."
 $BuildDir  = Join-Path $RepoRoot 'build_release_windows'
 $DistDir   = Join-Path $RepoRoot 'dist'
-$Output    = Join-Path $DistDir 'loadmaster-windows-x86_64.exe'
 
 # ---------------------------------------------------------------------------
 # Locate Visual Studio + bundled CMake without requiring the user to start
@@ -77,7 +82,7 @@ Fix one of:
 "@
 }
 
-if (Test-Path $BuildDir) {
+if (-not $Incremental -and (Test-Path $BuildDir)) {
     Remove-Item -Recurse -Force $BuildDir
 }
 New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
@@ -85,7 +90,8 @@ New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 # Use the multi-config Visual Studio generator on x64; build Release. The
 # generator itself locates the VS toolchain via the registry, so we don't
 # need vcvars to be loaded -- only cmake.exe needs to be reachable.
-& cmake -S $RepoRoot -B $BuildDir -G "Visual Studio 17 2022" -A x64
+& cmake -S $RepoRoot -B $BuildDir -G "Visual Studio 17 2022" -A x64 `
+        -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
 & cmake --build $BuildDir --config Release --parallel
@@ -95,8 +101,18 @@ $Built = Join-Path $BuildDir 'src\Release\loadmaster.exe'
 if (-not (Test-Path $Built)) {
     throw "expected build output not found: $Built"
 }
+# CMake parses the version out of src/core/version.h at configure time.
+$Version = (Get-Content (Join-Path $BuildDir 'version.txt') -Raw).Trim()
+$OutputName = "loadmaster-$Version-windows-x86_64.exe"
+$Output = Join-Path $DistDir $OutputName
 Copy-Item -Force $Built $Output
 
+# "<hex>  <name>\n", the format `sha256sum -c` reads; written by hand so
+# PowerShell adds no BOM / CRLF.
+$Hash = (Get-FileHash -Algorithm SHA256 $Output).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText("$Output.sha256", "$Hash  $OutputName`n")
+
 Write-Host ""
-Write-Host "Built: $Output"
+Write-Host "Built:  $Output"
+Write-Host "SHA256: $Hash"
 Get-Item $Output | Select-Object Name, Length, LastWriteTime | Format-List

@@ -10,6 +10,7 @@
 #     scripts\run_tests.ps1 -Filter 'Cli.*'       # Only tests matching pattern
 #     scripts\run_tests.ps1 -Clean                # Wipe build dir before configuring
 #     scripts\run_tests.ps1 -Jobs 8               # Override parallelism
+#     scripts\run_tests.ps1 -Werror               # Warnings are errors (CI)
 #     scripts\run_tests.ps1 -?                    # Help
 #
 # Output:
@@ -29,7 +30,8 @@ param(
     [switch]$Release,
     [string]$Filter = "",
     [switch]$Clean,
-    [int]$Jobs = 0
+    [int]$Jobs = 0,
+    [switch]$Werror
 )
 
 $ErrorActionPreference = 'Stop'
@@ -117,6 +119,7 @@ Write-Host "==> configuring ($BuildType)"
 & cmake -S $RepoRoot -B $BuildDir `
         -G "Visual Studio 17 2022" -A x64 `
         -DLOADMASTER_BUILD_TESTS=ON `
+        "-DLOADMASTER_WERROR=$(if ($Werror) { 'ON' } else { 'OFF' })" `
         "-DCMAKE_BUILD_TYPE=$BuildType"
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 

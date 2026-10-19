@@ -7,7 +7,12 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 
 # Build & Run
 - Typical CMake building routine (see `scripts/build_local.sh` for a
-  one-shot local helper).
+  one-shot local helper), or a preset from `CMakePresets.json` with CMake
+  3.21+: `cmake --preset release && cmake --build --preset release`
+  (`dev`: Debug + tests, `sanitize`: ASan/UBSan + tests, `ci`: Release +
+  tests with warnings as errors; `ctest --preset <name>` runs the tests).
+- The scripts in `scripts/` use Ninja for new build trees when it is
+  installed, and CMake uses `ccache` when it is installed.
 - libstdc++/libgcc are linked statically by default so the binary is portable
   across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
   the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
@@ -21,7 +26,7 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 | `LOADMASTER_OBFUSCATE` | `ON` | XOR-mask embedded GPU kernel sources, the SPIR-V module, and the CLI version / help text in `.rodata` so `strings` and AV heuristics don't trip on them. Runtime output is unchanged. Turn off when bisecting a kernel build / JIT failure. |
 | `LOADMASTER_LOG_MIN_LEVEL` | `trace` | Strips `LOG_*` sites below this level at preprocessor time. Lower-priority sites expand to `((void)0)`, so their format strings, `__FILE__` paths, and helper code never enter the binary. Bump to `info` / `warn` for a quieter, leaner release; `LOG_FATAL` is never compiled out. |
 | `LOADMASTER_SANITIZE` | *(empty)* | Comma-separated sanitizers for every target, tests included, e.g. `address,undefined` (GCC / Clang) or `address` (MSVC). Disables `LOADMASTER_STATIC_LINK`. `scripts/run_tests.sh --sanitize` builds the test suite this way in `build_tests_sanitize/`. |
-| `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; `scripts/build_linux.sh` does. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
+| `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; the release scripts and the `sanitize` / `release` / `ci` presets do. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
 | `LOADMASTER_BUILD_TESTS` | `OFF` | Build the GoogleTest suite (`scripts/run_tests.sh` / `run_tests.ps1` turn it on). |
 | `LOADMASTER_SYSTEM_GTEST` | `ON` | Use an installed GoogleTest when CMake finds one instead of downloading it (not for sanitizer or MSVC builds). |
 | `LOADMASTER_HARDEN` | `ON` | Exploit mitigations, each used where the toolchain supports it: PIE, `-fstack-protector-strong`, `-fstack-clash-protection`, CET (`-fcf-protection`, x86) / PAC+BTI (`-mbranch-protection`, AArch64), `_FORTIFY_SOURCE=2` (optimised, non-sanitizer builds), full RELRO on ELF; `/guard:cf` and `/CETCOMPAT` on MSVC. PIE is dropped (with a configure message) when the toolchain's static `libstdc++` isn't position-independent. |
@@ -40,16 +45,25 @@ virtually any distro from the last decade, use the helper scripts in
 
 | Target | Script | Output |
 |--------|--------|--------|
-| Linux x86_64   | `scripts/build_linux.sh`               (host auto-detected) | `dist/loadmaster-x86_64`             |
-| Linux aarch64  | `scripts/build_linux.sh --arch aarch64` (run on aarch64 host) | `dist/loadmaster-aarch64`            |
-| Windows x86_64 | `scripts\build_windows.ps1`            (Windows + VS 2022)   | `dist/loadmaster-windows-x86_64.exe` |
-| macOS arm64    | `scripts/build_macos.sh`               (Apple Silicon host)  | `dist/loadmaster-macos-arm64`        |
-| macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (Apple Silicon or Intel host) | `dist/loadmaster-macos-x86_64`       |
+| Linux x86_64   | `scripts/build_linux.sh`               (host auto-detected) | `dist/loadmaster-<version>-linux-x86_64`       |
+| Linux aarch64  | `scripts/build_linux.sh --arch aarch64` (run on aarch64 host) | `dist/loadmaster-<version>-linux-aarch64`      |
+| Windows x86_64 | `scripts\build_windows.ps1`            (Windows + VS 2022)   | `dist/loadmaster-<version>-windows-x86_64.exe` |
+| macOS arm64    | `scripts/build_macos.sh`               (Apple Silicon host)  | `dist/loadmaster-<version>-macos-arm64`        |
+| macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (Apple Silicon or Intel host) | `dist/loadmaster-<version>-macos-x86_64`       |
+
+`<version>` is the one in `src/core/version.h` (what `-v` prints). Each
+artifact gets a `<artifact>.sha256` next to it (`sha256sum -c` /
+`shasum -a 256 -c` format). The scripts start from an empty build tree,
+as a release should; pass `--incremental` (`-Incremental` on Windows)
+to reuse it while iterating.
 
 The Linux script only requires Docker. It builds inside the
 manylinux2014 image (CentOS 7 / glibc 2.17) as the invoking user (so
 the build tree stays yours), strips the result inside the container,
-and drops it into `dist/`. It prints the image digest it used; set
+and drops it into `dist/`. `--manylinux 2_28` builds in the
+manylinux_2_28 image (AlmaLinux 8 / glibc 2.28, newer GCC) instead,
+which drops CentOS / RHEL 7, Ubuntu < 18.10 and Debian < 10. It prints
+the image digest it used; set
 `MANYLINUX_IMAGE=quay.io/pypa/manylinux2014_<arch>@sha256:<digest>` to
 pin it for reproducible builds. By default it targets the host's architecture
 (`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture

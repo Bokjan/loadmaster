@@ -32,20 +32,17 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
+# shellcheck source=lib/common.sh
+source "${REPO_ROOT}/scripts/lib/common.sh"
+
+lm_prefer_ninja "$build_dir"
 # -S/-B instead of `cd build && cmake ..`, so an absolute or nested
-# build_dir works too.
-cmake -S "${REPO_ROOT}" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
-# Compute an explicit jobs count and pass it to `cmake --build`. We
-# cannot use `cmake --build . -j` (without a number): CMake 3.x simply
-# forwards a bare `-j` to the underlying build tool, which works for
-# GNU make ("unlimited parallelism") but fails for FreeBSD's base
-# bmake ("option requires an argument -- j"). Using `nproc` would be
-# Linux-only; instead we use `getconf` which is POSIX and present on
-# Linux/macOS/FreeBSD alike, with a hard-coded "2" fallback that is
-# safe (slow but correct) on the off chance _NPROCESSORS_ONLN is
-# unavailable.
-jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
-cmake --build "$build_dir" -j "$jobs"
+# build_dir works too. LOADMASTER_LINK_COMPILE_COMMANDS=OFF: a release
+# build shouldn't repoint the developer's clangd link at its tree.
+cmake -S "${REPO_ROOT}" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release \
+      -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF
+# An explicit job count: see lm_jobs.
+cmake --build "$build_dir" -j "$(lm_jobs)"
 cp "$build_dir/src/loadmaster" "./$binary_name"
 strip "$binary_name"
 file "$binary_name"
