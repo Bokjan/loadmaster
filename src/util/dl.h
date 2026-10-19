@@ -11,6 +11,11 @@ using DlHandle = void *;
 
 // Try to load each candidate library name in order. Returns the handle
 // of the first one that succeeds, or nullptr if all fail.
+//
+// Windows search order per name: System32, then the absolute directories
+// in %PATH% -- never the current directory or the executable's directory,
+// so a DLL planted next to the binary or in the working directory is not
+// picked up. POSIX: plain dlopen() search (LD_LIBRARY_PATH, ld.so cache).
 //   names: nullptr-terminated array of library names
 //          (e.g. "libcuda.so.1" on Linux, "nvcuda.dll" on Windows).
 DlHandle DlopenAny(const char *const *names);

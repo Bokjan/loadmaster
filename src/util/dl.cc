@@ -6,6 +6,7 @@
 #  include <windows.h>
 #  include <cstdio>
 #  include <cstring>
+#  include <string>
 #else
 #  include <dlfcn.h>
 #endif
@@ -39,50 +40,96 @@ const char *FormatLastError() {
   }
   return g_err_buf;
 }
+
+// Try `name` in every absolute directory listed in %PATH%. Relative
+// entries (".", "bin", empty) are skipped: they resolve against the
+// current directory, which is exactly the DLL-planting vector we avoid.
+// Some vendor SDKs (notably the AMD HIP SDK) are only reachable this way.
+HMODULE LoadFromPath(const char *name) {
+  const DWORD needed = ::GetEnvironmentVariableA("PATH", nullptr, 0);
+  if (needed == 0) {
+    return nullptr;
+  }
+  std::string path(needed, '\0');
+  const DWORD len = ::GetEnvironmentVariableA("PATH", path.data(), needed);
+  path.resize(len);
+  size_t start = 0;
+  while (start <= path.size()) {
+    size_t end = path.find(';', start);
+    if (end == std::string::npos) {
+      end = path.size();
+    }
+    std::string dir = path.substr(start, end - start);
+    start = end + 1;
+    if (dir.size() >= 2 && dir.front() == '"' && dir.back() == '"') {
+      dir = dir.substr(1, dir.size() - 2);
+    }
+    // Absolute only: "C:\..." or a UNC "\\server\...".
+    const bool absolute = (dir.size() >= 3 && dir[1] == ':' && (dir[2] == '\\' || dir[2] == '/')) ||
+                          (dir.size() >= 2 && dir[0] == '\\' && dir[1] == '\\');
+    if (!absolute) {
+      continue;
+    }
+    if (dir.back() != '\\' && dir.back() != '/') {
+      dir += '\\';
+    }
+    const std::string full = dir + name;
+    if (::GetFileAttributesA(full.c_str()) == INVALID_FILE_ATTRIBUTES) {
+      continue;
+    }
+    // DLL_LOAD_DIR lets the library find its sibling DLLs (e.g. HIP's
+    // amd_comgr) next to it.
+    HMODULE h = ::LoadLibraryExA(
+        full.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    if (h != nullptr) {
+      return h;
+    }
+  }
+  return nullptr;
+}
 }  // namespace
 
 DlHandle DlopenAny(const char *const *names) {
-  // Use LoadLibraryExA with explicit search flags so that the system DLL
-  // directory (where vendor GPU drivers live, e.g. nvcuda.dll) is always
-  // considered, regardless of any process-wide default search-path
-  // restrictions inherited from the launcher.
-  constexpr DWORD kFlags = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_SYSTEM32 |
-                           LOAD_LIBRARY_SEARCH_USER_DIRS | LOAD_LIBRARY_SEARCH_APPLICATION_DIR;
+  // Take the current directory out of the legacy search order for this
+  // process, so neither our loads nor the vendor libraries' own by-name
+  // loads can pick up a DLL planted in the working directory.
+  static const bool kCwdRemoved = ::SetDllDirectoryA("") != 0;
+  (void)kCwdRemoved;
+
+  // Vendor GPU drivers (nvcuda.dll, OpenCL.dll, ze_loader.dll) live in
+  // System32. The search is restricted to it on purpose: the previous
+  // flags also searched the application directory, and a plain
+  // LoadLibraryA() fallback followed the legacy order (current
+  // directory, then %PATH%) -- with `-gv auto` probing every vendor, a
+  // nvcuda.dll dropped next to the exe or in the working directory (say,
+  // Downloads) on a machine without NVIDIA would have been loaded and run.
+  constexpr DWORD kFlags = LOAD_LIBRARY_SEARCH_SYSTEM32;
   for (int i = 0; names[i] != nullptr; ++i) {
     const char *name = names[i];
     HMODULE h = ::LoadLibraryExA(name, nullptr, kFlags);
     if (h != nullptr) {
       return reinterpret_cast<DlHandle>(h);
     }
-    // Fallback: plain LoadLibraryA, which also follows %PATH%. Some
-    // vendor SDKs (e.g. AMD HIP) install into a directory that is only
-    // reachable via PATH.
-    h = ::LoadLibraryA(name);
-    if (h != nullptr) {
-      return reinterpret_cast<DlHandle>(h);
-    }
-    // Final fallback for short names: try an absolute path under
-    // %SystemRoot%\System32. This handles environments where the
-    // process default DLL search path has been hardened so much that
-    // even System32 is excluded, or where some intermediary has
-    // redirected the System32 search to a non-existent location.
     const bool has_sep =
         (std::strchr(name, '\\') != nullptr) || (std::strchr(name, '/') != nullptr);
-    if (!has_sep) {
-      char abs_path[MAX_PATH];
-      const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));
-      if (n > 0 && n < sizeof(abs_path)) {
-        if (std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name) > 0) {
-          h = ::LoadLibraryExA(abs_path, nullptr, kFlags);
-          if (h != nullptr) {
-            return reinterpret_cast<DlHandle>(h);
-          }
-          h = ::LoadLibraryA(abs_path);
-          if (h != nullptr) {
-            return reinterpret_cast<DlHandle>(h);
-          }
-        }
+    if (has_sep) {
+      continue;
+    }
+    // Absolute path under %SystemRoot%\System32, for environments where
+    // the search-flag variant above is unavailable or redirected.
+    char abs_path[MAX_PATH];
+    const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));
+    if (n > 0 && n < sizeof(abs_path) &&
+        std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name) > 0) {
+      h = ::LoadLibraryExA(abs_path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+      if (h != nullptr) {
+        return reinterpret_cast<DlHandle>(h);
       }
+    }
+    // Last resort: absolute %PATH% directories (HIP SDK).
+    h = LoadFromPath(name);
+    if (h != nullptr) {
+      return reinterpret_cast<DlHandle>(h);
     }
   }
   return nullptr;
