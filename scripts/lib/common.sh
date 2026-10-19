@@ -21,7 +21,7 @@ lm_prefer_ninja() {
     fi
 }
 
-# The full version (e.g. 0.8.0 or 0.8.0-rc1) that CMake parsed from
+# The full version (e.g. 0.7.26 or 0.7.26-rc1) that CMake parsed from
 # src/core/version.h into <build_dir>/version.txt at configure time.
 lm_version() {
     local file="$1/version.txt"
