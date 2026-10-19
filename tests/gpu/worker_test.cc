@@ -98,9 +98,15 @@ TEST_F(GpuWorkerTest, WorkerGivesUpAfterConsecutiveFailures) {
   raw->fail_ = true;
   ctx.SetLoadSet(1);
   ctx.Start();
-  // kGpuMaxConsecutiveFailures retries, one per period, then it stops.
-  std::this_thread::sleep_for(
-      std::chrono::milliseconds((kGpuMaxConsecutiveFailures + 10) * kScheduleIntervalMS));
+  // kGpuMaxConsecutiveFailures retries, about one per period, then it
+  // stops. Poll instead of sleeping a fixed number of periods: sleeps
+  // overshoot on loaded or timer-coalescing hosts (a macOS CI runner managed
+  // only 43 periods in 6 s).
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+  while (raw->failures_.load() < kGpuMaxConsecutiveFailures &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(kScheduleIntervalMS));
+  }
   const int failures = raw->failures_.load();
   std::this_thread::sleep_for(std::chrono::milliseconds(3 * kScheduleIntervalMS));
   EXPECT_EQ(raw->failures_.load(), failures) << "worker kept retrying";
