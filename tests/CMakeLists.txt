@@ -1,127 +1,92 @@
 # Unit tests for loadmaster.
 #
 # This CMakeLists is only entered when LOADMASTER_BUILD_TESTS=ON (see the
-# top-level CMakeLists.txt). It pulls GoogleTest via FetchContent so no
-# system-wide install is required, and registers one executable per test
-# binary with CTest.
+# top-level CMakeLists.txt). It uses an installed GoogleTest when there is
+# one and otherwise pulls it in via FetchContent, and registers one
+# executable per test binary with CTest.
 
-include(FetchContent)
-
-# Use extraction time as the timestamp of unpacked files so that changing
-# the URL forces a rebuild. Set via the policy rather than the
-# DOWNLOAD_EXTRACT_TIMESTAMP keyword, which only exists since CMake 3.24
-# and would be mis-parsed as part of URL_HASH by older versions.
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
+# Prefer an installed GoogleTest (distro package, vcpkg, Homebrew, ...): no
+# download, so a fresh build tree configures offline. Not under sanitizers,
+# where GoogleTest is built instrumented along with everything else (see
+# LOADMASTER_SANITIZE), nor on MSVC, where a prebuilt package rarely
+# matches the CRT that LOADMASTER_STATIC_LINK selects.
+option(LOADMASTER_SYSTEM_GTEST "Use an installed GoogleTest when one is found" ON)
+if(LOADMASTER_SYSTEM_GTEST AND NOT LOADMASTER_SANITIZE AND NOT MSVC)
+    find_package(GTest 1.10 CONFIG QUIET)
 endif()
 
-# Pin to a known-good GoogleTest release. Update deliberately.
-FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
-    URL_HASH SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
-)
+if(GTest_FOUND)
+    message(STATUS "GoogleTest: using installed ${GTest_VERSION} (${GTest_DIR})")
+else()
+    include(FetchContent)
 
-# Make sure GoogleTest links against the same CRT we use on MSVC. The
-# top-level project sets MSVC_RUNTIME_LIBRARY on the loadmaster target;
-# gtest reads this global at configure time.
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # Use extraction time as the timestamp of unpacked files so that
+    # changing the URL forces a rebuild. Set via the policy rather than the
+    # DOWNLOAD_EXTRACT_TIMESTAMP keyword, which only exists since CMake 3.24
+    # and would be mis-parsed as part of URL_HASH by older versions.
+    if(POLICY CMP0135)
+        cmake_policy(SET CMP0135 NEW)
+    endif()
 
-# Tests don't need to install gtest's own targets.
-set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    # Pin to a known-good GoogleTest release. Update deliberately.
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
+        URL_HASH SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
+    )
 
-FetchContent_MakeAvailable(googletest)
+    # The C runtime on MSVC comes from CMAKE_MSVC_RUNTIME_LIBRARY (top-level
+    # CMakeLists.txt), which applies to GoogleTest's targets too; keep
+    # gtest's own flag rewriting out of the way.
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
-# GoogleTest's own .o files bake __FILE__ paths starting with
-# <build>/_deps/googletest-src/... into the test binaries. The
-# per-test compile_options we apply in loadmaster_add_test() do not
-# reach those targets, so we sanitize them directly here. Same
-# CMAKE_BINARY_DIR-prefix map as below; only applied on non-MSVC
-# (MSVC defaults to relative __FILE__).
-if(NOT MSVC)
-    foreach(_gtest_tgt gtest gtest_main gmock gmock_main)
-        if(TARGET ${_gtest_tgt})
-            target_compile_options(${_gtest_tgt} PRIVATE
-                "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
-            )
-        endif()
-    endforeach()
+    # Tests don't need to install gtest's own targets.
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(googletest)
+
+    # GoogleTest's own .o files bake __FILE__ paths starting with
+    # <build>/_deps/googletest-src/... into the test binaries. The
+    # compile options from loadmaster_build_flags do not reach those
+    # targets, so we sanitize them directly here. Only applied on non-MSVC
+    # (MSVC defaults to relative __FILE__).
+    if(NOT MSVC)
+        foreach(_gtest_tgt gtest gtest_main gmock gmock_main)
+            if(TARGET ${_gtest_tgt})
+                target_compile_options(${_gtest_tgt} PRIVATE
+                    "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
+                )
+            endif()
+        endforeach()
+    endif()
 endif()
 
 include(GoogleTest)
 
-# The platform process-stat backend (util::ProcStat) plus its helpers.
-if(WIN32)
-    set(LOADMASTER_TEST_PROC_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_windows.cc)
-elseif(APPLE)
-    set(LOADMASTER_TEST_PROC_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_macos.cc)
-elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
-    set(LOADMASTER_TEST_PROC_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_bsd.cc)
-else()
-    set(LOADMASTER_TEST_PROC_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_linux.cc
-        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
-endif()
-
-# The platform CPU-stat backend (cpu::CoreCount / ReadSystemBusyNs) plus
-# what it depends on, for tests whose code under test calls CoreCount().
-if(WIN32)
-    set(LOADMASTER_TEST_CPU_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpu/stat_windows.cc)
-elseif(APPLE)
-    set(LOADMASTER_TEST_CPU_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpu/stat_macos.cc
-        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
-elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
-    set(LOADMASTER_TEST_CPU_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpu/stat_bsd.cc
-        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
-else()
-    set(LOADMASTER_TEST_CPU_STAT_SOURCES
-        ${CMAKE_SOURCE_DIR}/src/cpu/stat_linux.cc
-        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
-endif()
-
 # Helper: declare a test binary that compiles `sources`, links gtest_main,
 # and is registered with CTest via gtest_discover_tests.
+#
+# The code under test comes from loadmaster_core, the library the
+# executable itself is built from, so a test sees exactly the shipped
+# configuration (obfuscation, log threshold, generated headers) and the
+# warning flags of loadmaster_build_flags; the linker pulls in only the
+# objects a test actually references. STANDALONE tests link just the flags
+# target, for header-only code a test wants to build in a configuration of
+# its own (see util_obfuscate_off_test).
 function(loadmaster_add_test name)
-    add_executable(${name} ${ARGN})
-    target_include_directories(${name} PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-    )
-    target_compile_features(${name} PRIVATE cxx_std_20)
+    cmake_parse_arguments(PARSE_ARGV 1 _lm "STANDALONE" "" "")
+    add_executable(${name} ${_lm_UNPARSED_ARGUMENTS})
+    if(_lm_STANDALONE)
+        target_link_libraries(${name} PRIVATE loadmaster_build_flags)
+    else()
+        target_link_libraries(${name} PRIVATE loadmaster_core)
+    endif()
     target_link_libraries(${name} PRIVATE GTest::gtest_main)
 
-    # __FILE__ sanitization. Mirror src/CMakeLists.txt so test binaries
-    # don't leak the absolute build path either. We map two prefixes:
-    #   * CMAKE_SOURCE_DIR : project sources (both src/* and tests/*).
-    #   * CMAKE_BINARY_DIR : FetchContent extracts GoogleTest under
-    #     <build>/_deps/googletest-src/, so its own __FILE__ strings
-    #     also pick up the builder's home dir unless we rewrite them.
-    # SOURCE_PATH_SIZE is kept at 0 (matching src/CMakeLists.txt) so
-    # the logger's FILE_NAME() macro is an identity op now that
-    # __FILE__ is already a project-relative path.
-    target_compile_definitions(${name} PRIVATE SOURCE_PATH_SIZE=0)
-
-    # Mirror the warning flags from src/CMakeLists.txt so tests catch the
-    # same things, but stay tolerant of gtest's own quirks where needed.
-    if(MSVC)
-        target_compile_options(${name} PRIVATE
-            /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /utf-8
-        )
-        target_compile_definitions(${name} PRIVATE _CRT_SECURE_NO_WARNINGS)
-    else()
-        target_compile_options(${name} PRIVATE
-            -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter
-            # An undefined IS_* platform macro silently evaluates to 0 in
-            # `#if`, which once compiled a whole Linux-only suite out.
-            -Werror=undef
-            "-ffile-prefix-map=${CMAKE_SOURCE_DIR}/="
-            "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
-        )
+    # GoogleTest's headers live under the build tree when it was fetched,
+    # and its macros expand __FILE__-carrying code into the test TUs.
+    if(NOT MSVC)
+        target_compile_options(${name} PRIVATE "-ffile-prefix-map=${CMAKE_BINARY_DIR}/=")
     endif()
 
     gtest_discover_tests(${name})
@@ -138,29 +103,26 @@ loadmaster_add_test(util_rolling_sampler_test
 
 loadmaster_add_test(util_normal_dist_test
     util/normal_dist_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
 )
 
 # rand_normal schedule builder shared by the CPU and GPU managers: exact
 # period average, bell shape, and the GPU's clip-and-redistribute at 100%.
 loadmaster_add_test(util_normal_schedule_test
     util/normal_schedule_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/normal_schedule.cc
-    ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
 )
 
-# Compile-time XOR obfuscation layer. Pure header-only: no extra .cc
-# is needed. The test exercises Encode/Decode round-trips, MixByte
-# self-inverse, and the Holder/Scoped wrappers used by version_string
-# and the GPU kernel sources.
-loadmaster_add_test(util_obfuscate_test
+# Compile-time XOR obfuscation layer. Pure header-only, and built in both
+# configurations regardless of LOADMASTER_OBFUSCATE, hence STANDALONE. The
+# test exercises Encode/Decode round-trips, MixByte self-inverse, and the
+# Holder/Scoped wrappers used by version_string and the GPU kernel sources.
+loadmaster_add_test(util_obfuscate_test STANDALONE
     util/obfuscate_test.cc
 )
 target_compile_definitions(util_obfuscate_test PRIVATE LOADMASTER_OBFUSCATE=1)
 
 # Same source with obfuscation disabled (-DLOADMASTER_OBFUSCATE=OFF builds):
 # Encode / Decode must degrade to the identity and still round-trip.
-loadmaster_add_test(util_obfuscate_off_test
+loadmaster_add_test(util_obfuscate_off_test STANDALONE
     util/obfuscate_test.cc
 )
 target_compile_definitions(util_obfuscate_off_test PRIVATE LOADMASTER_OBFUSCATE=0)
@@ -170,7 +132,6 @@ target_compile_definitions(util_obfuscate_off_test PRIVATE LOADMASTER_OBFUSCATE=
 # !IS_WINDOWS, matching the guard inside clock.cc itself.
 loadmaster_add_test(util_clock_test
     util/clock_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/clock.cc
 )
 
 # Windows-only: util::FiletimeTo100Ns is a one-line inline helper but
@@ -188,7 +149,6 @@ loadmaster_add_test(util_win_util_test
 # every host.
 loadmaster_add_test(util_dl_test
     util/dl_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/dl.cc
 )
 
 # Linux-only: parse-side of util::ProcStat (the comm-field disambiguation
@@ -198,25 +158,16 @@ loadmaster_add_test(util_dl_test
 # will simply find zero tests on non-Linux hosts.
 loadmaster_add_test(util_proc_stat_internal_test
     util/proc_stat_internal_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/proc_stat_linux.cc
-    ${CMAKE_SOURCE_DIR}/src/util/clock.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
 # util::ProcStat against this process's real CPU time (burn, then idle).
 loadmaster_add_test(util_proc_stat_test
     util/proc_stat_test.cc
-    ${CMAKE_SOURCE_DIR}/src/util/proc_stat.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
-    ${LOADMASTER_TEST_PROC_STAT_SOURCES}
 )
 
 # ---- core ----
 loadmaster_add_test(core_options_test
     core/options_test.cc
-    ${CMAKE_SOURCE_DIR}/src/core/options.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
-    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )
 
 # SignalFlag is a header-only singleton wrapper around AtomicBitmap.
@@ -230,20 +181,13 @@ loadmaster_add_test(core_signal_flag_test
 )
 
 # ---- cli ----
-# End-to-end argv -> Options pipeline. Pulls in the cli parser plus its
-# transitive deps (options + logger). VersionString() lives entirely in
-# its header now, so no extra .cc is needed.
+# End-to-end argv -> Options pipeline.
 loadmaster_add_test(cli_cli_test
     cli/cli_test.cc
-    ${CMAKE_SOURCE_DIR}/src/cli/cli.cc
-    ${CMAKE_SOURCE_DIR}/src/core/options.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
-    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )
 
 # Header-only VersionString(): the compile-time-assembled, optionally
-# XOR-obfuscated "loadmaster X.Y.Z[-suffix]" entry point. No .cc deps
-# are needed; we only pull in core/version.h transitively.
+# XOR-obfuscated "loadmaster X.Y.Z[-suffix]" entry point.
 loadmaster_add_test(cli_version_string_test
     cli/version_string_test.cc
 )
@@ -251,25 +195,12 @@ loadmaster_add_test(cli_version_string_test
 # ---- cpu ----
 # Pure helpers from the Linux cpu/stat backend, exposed via
 # cpu/stat_internal.h: the BusyJiffies aggregation ("everything not idle")
-# and the JiffiesToNs conversion. The test TU is guarded by IS_LINUX, and we
-# only pull in stat_linux.cc on Linux -- the Windows/macOS backends
-# reference platform-only APIs (GetSystemTimes / host_statistics64) and must
-# never be compiled into this test. The target is still registered
-# everywhere so the build doesn't bit-rot; off Linux it compiles to zero
-# tests. We deliberately do NOT exercise ReadSystemBusyNs() (it touches
-# /proc, GetSystemTimes, or host_statistics64).
-if(UNIX AND NOT APPLE)
-    loadmaster_add_test(cpu_stat_test
-        cpu/stat_test.cc
-        ${CMAKE_SOURCE_DIR}/src/cpu/stat_linux.cc
-        ${CMAKE_SOURCE_DIR}/src/util/clock.cc
-        ${CMAKE_SOURCE_DIR}/src/util/log.cc
-    )
-else()
-    loadmaster_add_test(cpu_stat_test
-        cpu/stat_test.cc
-    )
-endif()
+# and the JiffiesToNs conversion. The test TU is guarded by IS_LINUX; the
+# target is still registered everywhere so the build doesn't bit-rot, and
+# off Linux it compiles to zero tests.
+loadmaster_add_test(cpu_stat_test
+    cpu/stat_test.cc
+)
 
 # CriticalLoop is the inner busy-multiply routine each CPU worker
 # burns cycles in. We pin only the call-contract (count<=0 -> 0) and
@@ -278,7 +209,6 @@ endif()
 # thread_local PRNG) so we don't test it directly.
 loadmaster_add_test(cpu_critical_loop_test
     cpu/critical_loop_test.cc
-    ${CMAKE_SOURCE_DIR}/src/cpu/critical_loop.cc
 )
 
 # LoadController turns load measurements into the CPU demand. Pure, so
@@ -287,7 +217,6 @@ loadmaster_add_test(cpu_critical_loop_test
 # step response and that it no longer rides the clamp rails.
 loadmaster_add_test(cpu_load_controller_test
     cpu/load_controller_test.cc
-    ${CMAKE_SOURCE_DIR}/src/cpu/load_controller.cc
 )
 
 # ---- gpu ----
@@ -296,22 +225,14 @@ loadmaster_add_test(cpu_load_controller_test
 # vendor library is needed.
 loadmaster_add_test(gpu_worker_test
     gpu/worker_test.cc
-    ${CMAKE_SOURCE_DIR}/src/gpu/worker.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
 # The CMake-side XOR encoder for busy_kernel.spv must agree with
-# util::obfuscate and with the key in spirv_kernel.h. Compiled with the
-# same LOADMASTER_OBFUSCATE value and generated include dir as the binary.
+# util::obfuscate and with the key in spirv_kernel.h. loadmaster_core
+# supplies the LOADMASTER_OBFUSCATE value and the generated include dir.
 loadmaster_add_test(gpu_spirv_embed_test
     gpu/spirv_embed_test.cc
 )
-target_include_directories(gpu_spirv_embed_test PRIVATE ${CMAKE_BINARY_DIR}/src/generated)
-if(LOADMASTER_OBFUSCATE)
-    target_compile_definitions(gpu_spirv_embed_test PRIVATE LOADMASTER_OBFUSCATE=1)
-else()
-    target_compile_definitions(gpu_spirv_embed_test PRIVATE LOADMASTER_OBFUSCATE=0)
-endif()
 target_compile_definitions(gpu_spirv_embed_test PRIVATE
     LOADMASTER_SPIRV_SOURCE="${CMAKE_SOURCE_DIR}/src/gpu/intel/busy_kernel.spv")
 
@@ -323,7 +244,6 @@ target_compile_definitions(gpu_spirv_embed_test PRIVATE
 # class exposes no buffer getter to peek at.
 loadmaster_add_test(memory_allocator_test
     memory/allocator_test.cc
-    ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
 )
 
 # MemoryResourceManagerDefault scheduling: block size range / alignment,
@@ -331,10 +251,4 @@ loadmaster_add_test(memory_allocator_test
 # (>= 32 MiB) allocation. Time is injected; no 45 s waits.
 loadmaster_add_test(memory_manager_test
     memory/manager_test.cc
-    ${CMAKE_SOURCE_DIR}/src/memory/manager_default.cc
-    ${CMAKE_SOURCE_DIR}/src/memory/manager.cc
-    ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
-    ${CMAKE_SOURCE_DIR}/src/core/options.cc
-    ${CMAKE_SOURCE_DIR}/src/util/log.cc
-    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )

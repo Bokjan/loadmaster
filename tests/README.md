@@ -41,11 +41,13 @@ cmake --build build_tests -j
 cd build_tests && ctest --output-on-failure
 ```
 
-GoogleTest itself is fetched and built on the first configure via
-`FetchContent` (pinned to a specific release tag + SHA-256 hash, see
-`tests/CMakeLists.txt`). No system-wide install of gtest is required.
-Subsequent configures reuse the cached download under
-`build_tests/_deps/`.
+An installed GoogleTest (e.g. Debian's `libgtest-dev`, Homebrew's
+`googletest`, or one on `CMAKE_PREFIX_PATH`) is used when CMake finds one,
+so configuring needs no network. Otherwise it is fetched and built on the
+first configure via `FetchContent` (pinned to a specific release tag +
+SHA-256 hash, see `tests/CMakeLists.txt`) and later configures reuse the
+download under `build_tests/_deps/`. Sanitizer and MSVC builds always use
+the fetched copy; `-DLOADMASTER_SYSTEM_GTEST=OFF` forces it everywhere.
 
 Each `TEST()` is registered as a separate CTest entry by
 `gtest_discover_tests`, so you can also filter with the standard
@@ -132,16 +134,17 @@ unavailable:
    ```cmake
    loadmaster_add_test(util_my_thing_test
        util/my_thing_test.cc
-       # If the test exercises a .cc (not a header-only template),
-       # list its source here so we don't have to depend on the main
-       # `loadmaster` target. Keep the dependency surface minimal.
-       ${CMAKE_SOURCE_DIR}/src/util/my_thing.cc
    )
    ```
 
+   The test links `loadmaster_core`, the static library the executable is
+   built from, so the code under test needs no listing and is compiled
+   with the shipped configuration and warning flags. Pass `STANDALONE`
+   for a header-only test that wants its own configuration (it then links
+   only the `loadmaster_build_flags` target).
+
 3. Inside the test file, include the header by its in-`src/` path
-   (e.g. `#include "util/my_thing.h"`); the test target already adds
-   `src/` to its include directories.
+   (e.g. `#include "util/my_thing.h"`); `src/` is on the include path.
 4. Re-run `scripts/run_tests.sh` (it re-configures, so CMake picks up
    the new file).
 
@@ -162,13 +165,10 @@ unavailable:
 - Tests are pure C++20 and build on Linux/macOS/Windows with the same
   compiler set that the main project supports (GCC 10+, Clang 12+,
   AppleClang 13+, MSVC 19.29+).
-- On MSVC, `gtest_force_shared_crt` is left **on** in
-  `tests/CMakeLists.txt`. The main `loadmaster` target uses
-  `/MT` (static CRT) in release builds; tests do not inherit that
-  setting because it would force-rebuild gtest with `/MT` and
-  complicate the FetchContent cache. If you need to test code that is
-  sensitive to CRT flavor, build the test binary separately with the
-  matching runtime.
+- On MSVC, the C runtime is chosen once for the whole build
+  (`CMAKE_MSVC_RUNTIME_LIBRARY`, from `LOADMASTER_STATIC_LINK`), so
+  `loadmaster_core`, the tests and GoogleTest all use the same one
+  (`/MT` by default); mixing them fails to link.
 - Tests that touch platform-specific surfaces (e.g. `/proc/stat` parsing)
   are guarded with `#if IS_LINUX` / `IS_WINDOWS` from `core/platform.h`.
   Include that header explicitly: an undefined `IS_*` macro evaluates to 0

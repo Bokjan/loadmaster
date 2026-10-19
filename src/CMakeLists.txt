@@ -21,10 +21,21 @@ set(SOURCE_PATH_SIZE 0)
 
 find_package(Threads REQUIRED)
 
-add_executable(loadmaster)
+# Targets:
+#   * loadmaster_build_flags -- INTERFACE target carrying the language
+#     level, warnings and path-scrubbing flags. The single place they are
+#     defined; tests/ links it too.
+#   * loadmaster_core -- static library with everything but main.cc. The
+#     executable and every unit test link it, so each source compiles
+#     once, with exactly the configuration (obfuscation, log threshold,
+#     generated headers) the shipped binary uses.
+#   * loadmaster -- the executable: main.cc + loadmaster_core.
+add_library(loadmaster_build_flags INTERFACE)
+add_library(loadmaster_core STATIC)
+add_executable(loadmaster main.cc)
+target_link_libraries(loadmaster PRIVATE loadmaster_core)
 
-target_sources(loadmaster PRIVATE
-    main.cc
+target_sources(loadmaster_core PRIVATE
     core/runtime.cc
     core/options.cc
     cli/cli.cc
@@ -64,7 +75,7 @@ target_sources(loadmaster PRIVATE
 # (.mm) so we can use the Metal/Foundation frameworks directly. ARC is
 # enabled below.
 if(APPLE)
-    target_sources(loadmaster PRIVATE
+    target_sources(loadmaster_core PRIVATE
         gpu/apple/metal_device.mm
     )
     set_source_files_properties(gpu/apple/metal_device.mm
@@ -76,12 +87,12 @@ endif()
 # util/proc_stat.cc (the shared throttle/diff body) is always compiled
 # and stays in the main list.
 if(WIN32)
-    target_sources(loadmaster PRIVATE
+    target_sources(loadmaster_core PRIVATE
         cpu/stat_windows.cc
         util/proc_stat_windows.cc
     )
 elseif(APPLE)
-    target_sources(loadmaster PRIVATE
+    target_sources(loadmaster_core PRIVATE
         cpu/stat_macos.cc
         util/proc_stat_macos.cc
     )
@@ -90,18 +101,18 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
     # sysctl(KERN_PROC_PID) for per-process CPU. OpenBSD / NetBSD share
     # the same MIBs but kinfo_proc layout differs enough that the BSD
     # backend files #error out on them for now -- see those files.
-    target_sources(loadmaster PRIVATE
+    target_sources(loadmaster_core PRIVATE
         cpu/stat_bsd.cc
         util/proc_stat_bsd.cc
     )
 else()  # Linux (__linux__)
-    target_sources(loadmaster PRIVATE
+    target_sources(loadmaster_core PRIVATE
         cpu/stat_linux.cc
         util/proc_stat_linux.cc
     )
 endif()
 
-target_include_directories(loadmaster PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(loadmaster_build_flags INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ---- String / payload obfuscation ----------------------------------------
 # Several .rodata blobs (the four GPU kernel sources, the SPIR-V module,
@@ -127,10 +138,12 @@ if(DEFINED LOADMASTER_OBFUSCATE_KERNELS AND NOT DEFINED CACHE{LOADMASTER_OBFUSCA
     set(LOADMASTER_OBFUSCATE "${LOADMASTER_OBFUSCATE_KERNELS}" CACHE BOOL "" FORCE)
     set(LOADMASTER_OBFUSCATE_OVERRIDDEN ON CACHE INTERNAL "")
 endif()
+# PUBLIC: headers such as cli/version_string.h encode at compile time in
+# whatever TU includes them, so main.cc and the tests need the same value.
 if(LOADMASTER_OBFUSCATE)
-    target_compile_definitions(loadmaster PRIVATE LOADMASTER_OBFUSCATE=1)
+    target_compile_definitions(loadmaster_core PUBLIC LOADMASTER_OBFUSCATE=1)
 else()
-    target_compile_definitions(loadmaster PRIVATE LOADMASTER_OBFUSCATE=0)
+    target_compile_definitions(loadmaster_core PUBLIC LOADMASTER_OBFUSCATE=0)
 endif()
 
 # ---- Compile-time log threshold ------------------------------------------
@@ -171,7 +184,7 @@ else()
         "LOADMASTER_LOG_MIN_LEVEL must be one of trace/debug/info/warn/error/fatal, "
         "got '${LOADMASTER_LOG_MIN_LEVEL}'")
 endif()
-target_compile_definitions(loadmaster PRIVATE
+target_compile_definitions(loadmaster_core PUBLIC
     LOADMASTER_LOG_MIN_LEVEL=${_lm_log_level_num})
 message(STATUS
     "Log threshold: keeping LOG_${_lm_log_level_lc}+ sites compiled in (level ${_lm_log_level_num})")
@@ -286,7 +299,7 @@ endif()
 # mtime on every configure and forced intel_device.cc to recompile.
 file(WRITE "${INTEL_SPIRV_GEN_HEADER}.tmp" "${INTEL_SPIRV_HEADER_CONTENT}")
 configure_file("${INTEL_SPIRV_GEN_HEADER}.tmp" "${INTEL_SPIRV_GEN_HEADER}" COPYONLY)
-target_include_directories(loadmaster PRIVATE
+target_include_directories(loadmaster_core PUBLIC
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 # Optional: rebuild busy_kernel.spv from busy_kernel.cl (recipe "Option B"
@@ -307,12 +320,12 @@ if(LOADMASTER_CLANG_FOR_SPIRV AND LOADMASTER_LLVM_SPIRV)
         VERBATIM)
 endif()
 
-target_compile_features(loadmaster PRIVATE cxx_std_20)
+target_compile_features(loadmaster_build_flags INTERFACE cxx_std_20)
 
-target_compile_definitions(loadmaster PRIVATE SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
+target_compile_definitions(loadmaster_build_flags INTERFACE SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
 
 if(MSVC)
-    target_compile_options(loadmaster PRIVATE
+    target_compile_options(loadmaster_build_flags INTERFACE
         /W4
         /permissive-
         /Zc:__cplusplus      # report the actual C++ standard via __cplusplus
@@ -331,14 +344,14 @@ if(MSVC)
         # expects, and append a trailing backslash so the trimmed result
         # starts cleanly at "src\...".
         file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/" _lm_repo_native)
-        target_compile_options(loadmaster PRIVATE "/d1trimfile:${_lm_repo_native}")
+        target_compile_options(loadmaster_build_flags INTERFACE "/d1trimfile:${_lm_repo_native}")
     endif()
-    target_compile_definitions(loadmaster PRIVATE
+    target_compile_definitions(loadmaster_build_flags INTERFACE
         _CRT_SECURE_NO_WARNINGS  # we use std::sscanf etc.; their MSVC-specific
                                  # _s variants are guarded by _MSC_VER.
     )
 else()
-    target_compile_options(loadmaster PRIVATE
+    target_compile_options(loadmaster_build_flags INTERFACE
         -Wall -Wextra -Wpedantic
         -Wshadow
         -Wno-unused-parameter
@@ -357,6 +370,14 @@ else()
         # non-MSVC paths).
         "-ffile-prefix-map=${CMAKE_SOURCE_DIR}/="
     )
+endif()
+
+if(LOADMASTER_WERROR)
+    if(MSVC)
+        target_compile_options(loadmaster_build_flags INTERFACE /WX)
+    else()
+        target_compile_options(loadmaster_build_flags INTERFACE -Werror)
+    endif()
 endif()
 
 # FreeBSD libc++ ships <stop_token> / std::jthread (LLVM 18+ implements
@@ -378,18 +399,19 @@ endif()
 # The flag is Clang-only (GCC rejects it); a GCC-from-ports build uses
 # libstdc++, which has no such gate in the first place.
 if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(loadmaster PRIVATE -fexperimental-library)
-    target_link_options(loadmaster PRIVATE -fexperimental-library)
+    target_compile_options(loadmaster_build_flags INTERFACE -fexperimental-library)
+    target_link_options(loadmaster_build_flags INTERFACE -fexperimental-library)
 endif()
 
 # Debug-only macro
-target_compile_definitions(loadmaster PRIVATE
+target_compile_definitions(loadmaster_build_flags INTERFACE
     $<$<CONFIG:Debug>:DEBUG>
 )
 
 # Threading. CMAKE_DL_LIBS is empty on Windows (LoadLibrary lives in
 # kernel32, auto-linked), and resolves to -ldl on Linux.
-target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(loadmaster_core PUBLIC
+    loadmaster_build_flags Threads::Threads ${CMAKE_DL_LIBS})
 
 # Linking strategy.
 #   * Linux/GCC/Clang:
@@ -414,18 +436,15 @@ target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 #   * Windows/MSVC:
 #     Use the static C/C++ runtime (/MT, /MTd in Debug) so the binary
 #     does not require the Visual C++ Redistributable on the target
-#     machine.
-option(LOADMASTER_STATIC_LINK
-       "Statically link the C++/runtime into the loadmaster executable" ON)
+#     machine. Selected build-wide via CMAKE_MSVC_RUNTIME_LIBRARY in the
+#     top-level CMakeLists.txt, where the option is declared.
 if(LOADMASTER_STATIC_LINK AND LOADMASTER_SANITIZE)
     # The sanitizer runtimes expect the shared C++ runtime; a static
     # libstdc++ / CRT gives link errors or duplicate interceptors.
     message(STATUS "LOADMASTER_SANITIZE is set: ignoring LOADMASTER_STATIC_LINK")
 elseif(LOADMASTER_STATIC_LINK)
     if(MSVC)
-        # CMake 3.15+: pick the static runtime via this property.
-        set_property(TARGET loadmaster PROPERTY
-                     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        # Done build-wide, see above.
     elseif(APPLE)
         # No-op: see comment above. Honoring the option here would just
         # produce a broken link line. We keep the option ON by default for
@@ -451,9 +470,12 @@ if(APPLE)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(METAL_FRAMEWORK Metal REQUIRED)
-    target_link_libraries(loadmaster PRIVATE
+    target_link_libraries(loadmaster_core PUBLIC
         ${COREFOUNDATION_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}
         ${METAL_FRAMEWORK}
     )
 endif()
+
+include(GNUInstallDirs)
+install(TARGETS loadmaster RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

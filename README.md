@@ -23,6 +23,9 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 | `LOADMASTER_SANITIZE` | *(empty)* | Comma-separated sanitizers for every target, tests included, e.g. `address,undefined` (GCC / Clang) or `address` (MSVC). Disables `LOADMASTER_STATIC_LINK`. `scripts/run_tests.sh --sanitize` builds the test suite this way in `build_tests_sanitize/`. |
 | `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; `scripts/build_linux.sh` does. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
 | `LOADMASTER_BUILD_TESTS` | `OFF` | Build the GoogleTest suite (`scripts/run_tests.sh` / `run_tests.ps1` turn it on). |
+| `LOADMASTER_SYSTEM_GTEST` | `ON` | Use an installed GoogleTest when CMake finds one instead of downloading it (not for sanitizer or MSVC builds). |
+| `LOADMASTER_WERROR` | `OFF` | Treat warnings in loadmaster's own code and tests as errors (`-Werror` / `/WX`). CI turns it on. |
+| `LOADMASTER_CCACHE` | `ON` | Use `ccache` as the compiler launcher when it is installed (Makefile / Ninja generators). |
 
 
 ## Portable release builds

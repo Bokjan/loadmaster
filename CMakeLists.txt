@@ -1,5 +1,35 @@
 cmake_minimum_required(VERSION 3.15)
-project(loadmaster LANGUAGES CXX)
+
+# The version lives in src/core/version.h (the binary prints it); mirror it
+# into project(VERSION) so CMake, the install rules and the release scripts
+# (via version.txt below) all agree with it.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/core/version.h" _lm_version_lines
+     REGEX "kVersion(Major|Minor|Patch|Suffix) =")
+foreach(_lm_part Major Minor Patch)
+    string(REGEX MATCH "kVersion${_lm_part} = ([0-9]+)" _lm_match "${_lm_version_lines}")
+    if(NOT _lm_match)
+        message(FATAL_ERROR "Cannot parse kVersion${_lm_part} from src/core/version.h")
+    endif()
+    set(_lm_version_${_lm_part} "${CMAKE_MATCH_1}")
+endforeach()
+string(REGEX MATCH "kVersionSuffix = \"([^\"]*)\"" _lm_match "${_lm_version_lines}")
+set(_lm_version_suffix "${CMAKE_MATCH_1}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/src/core/version.h")
+
+project(loadmaster
+        VERSION ${_lm_version_Major}.${_lm_version_Minor}.${_lm_version_Patch}
+        LANGUAGES CXX)
+
+# Full version as `loadmaster --version` prints it, suffix included. The
+# release scripts read it from version.txt to name their artifacts.
+set(LOADMASTER_VERSION_STRING "${PROJECT_VERSION}")
+if(NOT _lm_version_suffix STREQUAL "")
+    string(APPEND LOADMASTER_VERSION_STRING "-${_lm_version_suffix}")
+endif()
+file(WRITE "${CMAKE_BINARY_DIR}/version.txt.tmp" "${LOADMASTER_VERSION_STRING}\n")
+configure_file("${CMAKE_BINARY_DIR}/version.txt.tmp" "${CMAKE_BINARY_DIR}/version.txt" COPYONLY)
+message(STATUS "loadmaster version: ${LOADMASTER_VERSION_STRING}")
 
 # Sensible defaults
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -9,10 +39,23 @@ endif()
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Picked up by CMAKE_MSVC_RUNTIME_LIBRARY (CMake 3.15+) so that
-# `set_property(... MSVC_RUNTIME_LIBRARY ...)` in src/CMakeLists.txt
-# is the single source of truth for the C runtime selection on MSVC.
+# Picked up by CMAKE_MSVC_RUNTIME_LIBRARY (CMake 3.15+), which selects the
+# C runtime on MSVC (see LOADMASTER_STATIC_LINK below).
 cmake_policy(SET CMP0091 NEW)
+
+# ccache, when installed, as the compiler launcher: release scripts start
+# from an empty build tree every time, so this is what keeps a rebuild of
+# unchanged sources cheap. Only the Makefile / Ninja generators honour
+# compiler launchers. An explicit -DCMAKE_CXX_COMPILER_LAUNCHER=... wins.
+option(LOADMASTER_CCACHE "Use ccache as the compiler launcher when it is installed" ON)
+if(LOADMASTER_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER AND
+   CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
+    find_program(LOADMASTER_CCACHE_PROGRAM ccache)
+    if(LOADMASTER_CCACHE_PROGRAM)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${LOADMASTER_CCACHE_PROGRAM}")
+        message(STATUS "Using ccache: ${LOADMASTER_CCACHE_PROGRAM}")
+    endif()
+endif()
 
 # Emit compile_commands.json so IDEs / clangd / VSCode C/C++ extension
 # can resolve include paths (including FetchContent'd GoogleTest headers
@@ -157,6 +200,22 @@ if(LOADMASTER_SANITIZE)
         add_link_options(-fsanitize=${LOADMASTER_SANITIZE})
     endif()
     message(STATUS "Sanitizers: ${LOADMASTER_SANITIZE}")
+endif()
+
+# Turn warnings into errors (-Werror / /WX) for loadmaster's own code and
+# the tests, not for GoogleTest. Off by default so a newer compiler's new
+# warnings don't break a user's build; CI turns it on.
+option(LOADMASTER_WERROR "Treat compiler warnings as errors" OFF)
+
+# Statically link the C++ runtime (details in src/CMakeLists.txt). On MSVC
+# that is the static CRT, which has to be the same for every object linked
+# together -- the loadmaster_core library, the executable, the tests and
+# GoogleTest -- so it is selected for the whole build here rather than per
+# target.
+option(LOADMASTER_STATIC_LINK
+       "Statically link the C++/runtime into the loadmaster executable" ON)
+if(MSVC AND LOADMASTER_STATIC_LINK AND NOT LOADMASTER_SANITIZE)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 add_subdirectory(src)
