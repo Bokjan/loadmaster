@@ -26,12 +26,15 @@ void Allocator::AllocateBlock(size_t target_size) {
   size_ = target_size;
 }
 
-void Allocator::FillXor(std::byte seed) {
+void Allocator::Fill(std::byte seed) {
   if (block_ptr_ == nullptr) {
     return;
   }
+  // Write-only: the block comes from `new std::byte[]` and is
+  // uninitialized, so the old `block[i] ^= seed` read indeterminate
+  // values (UB). Every byte is written, so every page gets committed.
   for (size_t i = 0; i < size_; ++i) {
-    block_ptr_[i] ^= seed;
+    block_ptr_[i] = seed ^ static_cast<std::byte>(i);
   }
 }
 

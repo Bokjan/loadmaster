@@ -4,6 +4,9 @@
 
 #  include "stat.h"
 
+#  include <algorithm>
+#  include <thread>
+
 #  include <mach/mach.h>
 #  include <mach/mach_host.h>
 
@@ -33,6 +36,12 @@ std::optional<uint64_t> ReadSystemBusyNs() {
   // jiffy -> ns. GetClockTicksPerSecond() is available on macOS (clock.cc
   // is compiled for every non-Windows platform).
   return util::TicksToNs(busy_jiffies, util::GetClockTicksPerSecond());
+}
+
+int CoreCount() {
+  // macOS has no per-process CPU affinity to honour.
+  static const int kCached = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+  return kCached;
 }
 
 }  // namespace cpu

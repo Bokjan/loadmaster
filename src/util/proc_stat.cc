@@ -39,10 +39,11 @@ void ProcStat::UpdateCpuStat(TimePoint now, ForceUpdate force) {
 
   // Skip the load computation on the very first sample (no prior baseline)
   // and when no time has elapsed.
-  if (has_baseline_ && elapsed_ms > 0) {
+  const auto elapsed_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now - time_point_).count();
+  if (has_baseline_ && elapsed_ns > 0) {
     const uint64_t diff = (*cpu_ns >= prev_cpu_ns_) ? (*cpu_ns - prev_cpu_ns_) : 0;
-    const double elapsed_ns = static_cast<double>(elapsed_ms) * 1'000'000.0;
-    cpu_load_cached_ = static_cast<int>(static_cast<double>(diff) / elapsed_ns * 100.0);
+    cpu_load_cached_ = static_cast<double>(diff) / static_cast<double>(elapsed_ns) * 100.0;
   }
   time_point_ = now;
   prev_cpu_ns_ = *cpu_ns;

@@ -1,12 +1,14 @@
 #include "manager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 #include "constants.h"
 #include "critical_loop.h"
 #include "stat.h"
 
+#include "core/constants.h"
 #include "util/log.h"
 
 namespace cpu {
@@ -43,8 +45,11 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   // Refresh system CPU snapshot (cumulative busy nanoseconds).
   const std::optional<uint64_t> current_busy_ns = ReadSystemBusyNs();
   if (!current_busy_ns) {
+    // Keep both the busy baseline and its timestamp, so the next
+    // successful read diffs N intervals of busy time against N intervals
+    // of elapsed time. (Advancing only the timestamp used to read ~2x the
+    // real load on the following tick.)
     LOG_ERROR("failed to ReadSystemBusyNs");
-    SetLastScheduling(time_point);
     return;
   }
 
@@ -74,10 +79,11 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
     return;
   }
   // load = busy_ns / elapsed_ns * 100 (per-core units, summed across cores).
-  const int system_load = static_cast<int>(static_cast<double>(busy_ns_diff) /
-                                           static_cast<double>(elapsed_ns) * kCpuMaxLoadPerCore);
-  system_sampler_.InsertValue(system_load);
-  LOG_TRACE("cur_sys_load=%d, avg_sys_load=%d", system_load, system_sampler_.GetMean());
+  const double system_load_exact =
+      static_cast<double>(busy_ns_diff) / static_cast<double>(elapsed_ns) * kCpuMaxLoadPerCore;
+  system_sampler_.InsertValue(system_load_exact);
+  const int system_load = static_cast<int>(std::lround(system_load_exact));
+  LOG_TRACE("cur_sys_load=%d, avg_sys_load=%.1f", system_load, system_sampler_.GetMean());
 
   // Invoke specified scheduler.
   AdjustWorkerLoad(time_point, system_load);
@@ -146,24 +152,21 @@ void CpuResourceManager::SetWorkerLoadWithTotalLoad(int total_load) {
   if (thread_count == 0) {
     return;
   }
-  const int avg_load = total_load / thread_count;
-  for (auto &th : workers_) {
-    th->SetLoadSet(avg_load);
+  total_load = std::clamp(total_load, 0, Capacity());
+  const int base = total_load / thread_count;
+  const int remainder = total_load % thread_count;
+  for (int i = 0; i < thread_count; ++i) {
+    const int load_percent = base + (i < remainder ? 1 : 0);
+    // Load is "percent of one core"; the worker wants busy milliseconds
+    // per scheduling period. (Identical while kScheduleIntervalMS == 100,
+    // but no longer silently tied to that value.)
+    workers_[i]->SetLoadSet(load_percent * kScheduleIntervalMS / kCpuMaxLoadPerCore);
   }
 }
 
 int CpuResourceManager::CalculateLoadDemand(int target) {
-  // Equation: target = other + proc, other = sysavg - procavg
-  // Then, we assume C = sampling count,  K = C + 1
-  // We have: target * K = other * K + [procavg * C + demand]
-  //          K * (sysavg - procavg) + [procavg * C + demand] = K * target
-  // That is: demand = K * (target - other) - C * procavg
-  const int sysavg = system_sampler_.GetMean();
-  const int procavg = process_sampler_.GetMean();
-  const int other = sysavg - procavg;
-  const int C = system_sampler_.GetSampleCount();
-  const int K = C + 1;
-  return K * (target - other) - C * procavg;
+  return controller_.Update(target, system_sampler_.GetMean(), process_sampler_.GetMean(),
+                            Capacity());
 }
 
 }  // namespace cpu

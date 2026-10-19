@@ -45,6 +45,13 @@ bool CpuResourceManagerRandomNormal::Init() {
               count, CoreCount(), options_.GetCpuLoad());
     return false;
   }
+  if (max_load > count * kCpuMaxLoadPerCore) {
+    // Explicit -c too small for the peaks: they would be silently capped
+    // and the period average would fall short of -l.
+    LOG_ERROR("rand_normal peak load=%d is unreachable with -c %d (avg target=%d)", max_load,
+              count, options_.GetCpuLoad());
+    return false;
+  }
   // Shuffle once before the first scheduling tick so the first 5-minute
   // period is also random (otherwise the points would walk a non-random
   // monotonic-ish sequence on cold start).
@@ -56,8 +63,7 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point,
                                                       [[maybe_unused]] int system_load) {
   this->UpdateLoadTarget(time_point);
   auto load_demand = this->CalculateLoadDemand(load_target_);
-  load_demand = std::clamp(load_demand, 0, load_target_);
-  LOG_TRACE("load_target_=%d, avg_proc_load=%d, avg_sys_load=%d, load_demand=%d", load_target_,
+  LOG_TRACE("load_target_=%d, avg_proc_load=%.1f, avg_sys_load=%.1f, load_demand=%d", load_target_,
             this->GetProcessAverageLoad(), this->GetSystemAverageLoad(), load_demand);
   this->SetWorkerLoadWithTotalLoad(load_demand);
 }

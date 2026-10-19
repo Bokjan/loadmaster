@@ -12,7 +12,9 @@ class Allocator final {
   Allocator(const Allocator &) = delete;
   void AllocateBlock(size_t target_size);
   void ReleaseBlock();
-  void FillXor(std::byte seed);
+  // Overwrite every byte of the block (committing its pages) with a
+  // seed-derived pattern. No-op on an empty allocator.
+  void Fill(std::byte seed);
   bool IsEmpty() const { return size_ == 0 && block_ptr_ == nullptr; }
 
  private:

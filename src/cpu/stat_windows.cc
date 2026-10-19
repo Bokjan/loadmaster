@@ -4,6 +4,9 @@
 
 #  include "stat.h"
 
+#  include <algorithm>
+#  include <thread>
+
 #  include "util/log.h"
 #  include "util/win_util.h"
 
@@ -29,6 +32,12 @@ std::optional<uint64_t> ReadSystemBusyNs() {
 
   // 100ns ticks -> ns.
   return busy_100ns * 100ULL;
+}
+
+int CoreCount() {
+  // Processor-group / job-object limits are not consulted.
+  static const int kCached = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+  return kCached;
 }
 
 }  // namespace cpu

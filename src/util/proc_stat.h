@@ -22,7 +22,7 @@ class ProcStat final {
 
   explicit ProcStat();
   void UpdateCpuStat(TimePoint now, ForceUpdate force = ForceUpdate::kNo);
-  int GetCpuLoad() const { return cpu_load_cached_; }  // 100 each core
+  double GetCpuLoad() const { return cpu_load_cached_; }  // 100 each core
 
  private:
   // Read this process's cumulative CPU time in nanoseconds. Implemented
@@ -47,7 +47,7 @@ class ProcStat final {
   // replaces the old jiffies_self_ / jiffies_child_ / epoch_ members that
   // each carried a different (and on macOS, mislabeled) unit.
   uint64_t prev_cpu_ns_ = 0;
-  int cpu_load_cached_ = 0;
+  double cpu_load_cached_ = 0.0;
 };
 
 }  // namespace util

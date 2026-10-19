@@ -14,6 +14,10 @@
 #if IS_LINUX
 
 #  include <cstdint>
+#  include <cstdio>
+#  include <optional>
+#  include <string_view>
+#  include <vector>
 
 namespace cpu::internal {
 
@@ -41,6 +45,18 @@ uint64_t BusyJiffies(const ProcStatFields &f);
 
 // Convert a jiffy count to nanoseconds using GetClockTicksPerSecond(). Pure.
 uint64_t JiffiesToNs(uint64_t jiffies);
+
+// Read /proc/stat-formatted content from `fp` and return the total busy
+// jiffies. With `allowed == nullptr` the aggregate "cpu" line is used;
+// otherwise the per-CPU "cpuN" lines are summed for every N with
+// allowed[N] == true (CPUs outside the vector count as not allowed).
+// Returns nullopt if the requested lines are missing or malformed.
+std::optional<uint64_t> ReadBusyJiffies(FILE *fp, const std::vector<bool> *allowed);
+
+// Parse the content of a cgroup v2 `cpu.max` file ("<quota> <period>" or
+// "max <period>") into a CPU count, rounding a fractional quota up.
+// Returns nullopt for "max" (unlimited) or malformed input.
+std::optional<int> ParseCgroupCpuMax(std::string_view content);
 
 }  // namespace cpu::internal
 

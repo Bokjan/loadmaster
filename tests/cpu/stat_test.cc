@@ -21,6 +21,10 @@
 #  include "cpu/stat_internal.h"
 
 #  include <cstdint>
+#  include <cstdio>
+#  include <cstring>
+#  include <optional>
+#  include <vector>
 
 #  include "util/clock.h"
 
@@ -30,7 +34,9 @@ namespace {
 
 using cpu::internal::BusyJiffies;
 using cpu::internal::JiffiesToNs;
+using cpu::internal::ParseCgroupCpuMax;
 using cpu::internal::ProcStatFields;
+using cpu::internal::ReadBusyJiffies;
 
 // Build a fields snapshot with explicit named members so it's obvious which
 // component each test exercises.
@@ -140,6 +146,78 @@ TEST(JiffiesToNsTest, ScalesByConstantFactor) {
   const uint64_t x = 137;
   const uint64_t k = 1000;
   EXPECT_EQ(JiffiesToNs(k * x), k * JiffiesToNs(x));
+}
+
+// ---- ReadBusyJiffies --------------------------------------------------------
+//
+// Feeds /proc/stat-shaped text through fmemopen. Busy per line is
+// user + nice + system + irq + softirq + steal.
+
+constexpr char kProcStat[] =
+    "cpu  60 0 30 900 5 1 2 0 0 0\n"
+    "cpu0 10 0 5 300 1 0 1 0 0 0\n"
+    "cpu1 20 0 10 300 2 1 0 0 0 0\n"
+    "cpu2 30 0 15 300 2 0 1 0 0 0\n"
+    "intr 12345 0 0\n"
+    "ctxt 999\n";
+
+std::optional<uint64_t> ReadFrom(const char *text, const std::vector<bool> *allowed) {
+  FILE *fp = fmemopen(const_cast<char *>(text), std::strlen(text), "r");
+  if (fp == nullptr) {
+    return std::nullopt;
+  }
+  const auto r = ReadBusyJiffies(fp, allowed);
+  std::fclose(fp);
+  return r;
+}
+
+TEST(ReadBusyJiffiesTest, AggregateLineWhenUnrestricted) {
+  EXPECT_EQ(ReadFrom(kProcStat, nullptr), std::optional<uint64_t>(60 + 30 + 1 + 2));
+}
+
+TEST(ReadBusyJiffiesTest, SumsOnlyAllowedCpus) {
+  const std::vector<bool> allowed = {false, true, true};  // cpu1 + cpu2
+  EXPECT_EQ(ReadFrom(kProcStat, &allowed), std::optional<uint64_t>((20 + 10 + 1) + (30 + 15 + 1)));
+}
+
+TEST(ReadBusyJiffiesTest, CpusBeyondMaskAreExcluded) {
+  const std::vector<bool> allowed = {true};  // cpu0 only; cpu1/cpu2 outside the vector
+  EXPECT_EQ(ReadFrom(kProcStat, &allowed), std::optional<uint64_t>(10 + 5 + 1));
+}
+
+TEST(ReadBusyJiffiesTest, AcceptsOldKernelWithoutGuestFields) {
+  EXPECT_EQ(ReadFrom("cpu  7 1 2 50 0 0 0 0\n", nullptr), std::optional<uint64_t>(10));
+}
+
+TEST(ReadBusyJiffiesTest, NoMatchingLineFails) {
+  const std::vector<bool> allowed = {false, false, false, true};  // cpu3 absent
+  EXPECT_FALSE(ReadFrom(kProcStat, &allowed).has_value());
+  EXPECT_FALSE(ReadFrom("intr 1 2 3\n", nullptr).has_value());
+}
+
+TEST(ReadBusyJiffiesTest, MalformedLineFails) {
+  EXPECT_FALSE(ReadFrom("cpu  1 2 x\n", nullptr).has_value());
+}
+
+// ---- ParseCgroupCpuMax -------------------------------------------------------
+
+TEST(ParseCgroupCpuMaxTest, UnlimitedIsNullopt) {
+  EXPECT_FALSE(ParseCgroupCpuMax("max 100000\n").has_value());
+}
+
+TEST(ParseCgroupCpuMaxTest, WholeCpus) {
+  EXPECT_EQ(ParseCgroupCpuMax("200000 100000\n"), std::optional<int>(2));
+}
+
+TEST(ParseCgroupCpuMaxTest, FractionalQuotaRoundsUp) {
+  EXPECT_EQ(ParseCgroupCpuMax("150000 100000"), std::optional<int>(2));
+  EXPECT_EQ(ParseCgroupCpuMax("50000 100000"), std::optional<int>(1));
+}
+
+TEST(ParseCgroupCpuMaxTest, MalformedIsNullopt) {
+  EXPECT_FALSE(ParseCgroupCpuMax("").has_value());
+  EXPECT_FALSE(ParseCgroupCpuMax("garbage").has_value());
+  EXPECT_FALSE(ParseCgroupCpuMax("100000 0").has_value());
 }
 
 }  // namespace

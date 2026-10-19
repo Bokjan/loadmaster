@@ -90,7 +90,7 @@ bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) const {
 void MemoryResourceManagerDefault::AllocateAndFill(size_t byte_count, std::byte seed) {
   try {
     allocator_.AllocateBlock(byte_count);
-    allocator_.FillXor(seed);
+    allocator_.Fill(seed);
   } catch (const std::bad_alloc &e) {
     LOG_ERROR("memory allocation of %zu bytes failed: %s", byte_count, e.what());
   } catch (const std::exception &e) {

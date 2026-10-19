@@ -34,6 +34,7 @@ target_sources(loadmaster PRIVATE
     cpu/manager_random_normal.cc
     cpu/factory.cc
     cpu/critical_loop.cc
+    cpu/load_controller.cc
     memory/factory.cc
     memory/manager.cc
     memory/manager_default.cc

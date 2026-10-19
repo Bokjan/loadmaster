@@ -22,17 +22,15 @@
 //     enforces it.)
 //   * Destruction releases the block (verified via the moved-from
 //     IsEmpty state and via sanitizer-clean runs of the suite).
-//   * FillXor on an empty allocator is a no-op (does not crash).
-//   * FillXor on a non-empty allocator does not change IsEmpty()
+//   * Fill on an empty allocator is a no-op (does not crash).
+//   * Fill on a non-empty allocator does not change IsEmpty()
 //     and does not throw.
 //
-// We deliberately do NOT assert byte-level FillXor correctness: the
-// internal pointer is private and there is no getter -- adding one
-// just for tests would expand the production API surface for no
-// gain. The math (X ^ S ^ S == X) is trivial and is exercised
-// implicitly by the memory subsystem's own self-check at runtime;
-// ASAN/UBSAN runs of this suite are what guards against out-of-
-// bounds or use-after-free in the byte loop.
+// We deliberately do NOT assert byte-level Fill output: the internal
+// pointer is private and there is no getter -- adding one just for tests
+// would expand the production API surface for no gain. Sanitizer runs of
+// this suite (LOADMASTER_SANITIZE) are what guard against out-of-bounds
+// or use-after-free in the byte loop.
 
 #include "memory/allocator.h"
 
@@ -127,37 +125,37 @@ TEST(AllocatorTest, DestructorOfAllocatedAllocatorRunsCleanly) {
   SUCCEED();
 }
 
-TEST(AllocatorTest, FillXorOnEmptyAllocatorIsNoop) {
-  // The guard inside FillXor avoids dereferencing a nullptr block.
+TEST(AllocatorTest, FillOnEmptyAllocatorIsNoop) {
+  // The guard inside Fill avoids dereferencing a nullptr block.
   // Pin it so a future refactor (e.g. removing the guard in favour
   // of an "always-allocated" invariant) doesn't reintroduce a crash
   // on the manager's first tick before any AllocateBlock call.
   Allocator a;
-  a.FillXor(std::byte{0xAB});
+  a.Fill(std::byte{0xAB});
   EXPECT_TRUE(a.IsEmpty());
 }
 
-TEST(AllocatorTest, FillXorOnLiveBlockDoesNotChangeStructuralState) {
+TEST(AllocatorTest, FillOnLiveBlockDoesNotChangeStructuralState) {
   // We can't peek at the buffer's bytes through the public API, but
-  // we can confirm that running FillXor doesn't somehow flip the
+  // we can confirm that running Fill doesn't somehow flip the
   // allocator back to empty / null. This is what the memory manager
   // relies on between successive scheduler ticks.
   Allocator a;
   a.AllocateBlock(1024);
-  a.FillXor(std::byte{0x5A});
-  a.FillXor(std::byte{0x5A});  // self-inverse: applying twice restores the original bytes
-  a.FillXor(std::byte{0x00});  // XOR with zero: explicit no-op path
+  a.Fill(std::byte{0x5A});
+  a.Fill(std::byte{0x5A});  // refilling an already-filled block
+  a.Fill(std::byte{0x00});
   EXPECT_FALSE(a.IsEmpty());
 }
 
-TEST(AllocatorTest, FillXorAcrossVariousSeedsRunsCleanly) {
+TEST(AllocatorTest, FillAcrossVariousSeedsRunsCleanly) {
   // Smoke: every 8-bit seed must drive the byte loop without UB.
   // Under ASAN this is the cheapest way to flush out an off-by-one
   // in the loop bound (which is `size_`).
   Allocator a;
   a.AllocateBlock(257);  // deliberately not a power of two
   for (int s = 0; s < 256; ++s) {
-    a.FillXor(static_cast<std::byte>(s));
+    a.Fill(static_cast<std::byte>(s));
   }
   EXPECT_FALSE(a.IsEmpty());
 }

@@ -4,6 +4,9 @@
 
 #  include "stat.h"
 
+#  include <algorithm>
+#  include <thread>
+
 #  include <sys/sysctl.h>
 #  include <sys/time.h>
 #  include <sys/types.h>
@@ -113,6 +116,12 @@ std::optional<uint64_t> ReadSystemBusyNs() {
       static_cast<uint64_t>(cp_time[kCpStateIntr]);
   // statclock tick -> ns.
   return util::TicksToNs(busy_jiffies, StatClockHz());
+}
+
+int CoreCount() {
+  // cpuset(1) restrictions are not consulted yet.
+  static const int kCached = std::max(1, static_cast<int>(std::thread::hardware_concurrency()));
+  return kCached;
 }
 
 }  // namespace cpu

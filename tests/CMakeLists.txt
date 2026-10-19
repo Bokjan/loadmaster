@@ -46,6 +46,25 @@ endif()
 
 include(GoogleTest)
 
+# The platform CPU-stat backend (cpu::CoreCount / ReadSystemBusyNs) plus
+# what it depends on, for tests whose code under test calls CoreCount().
+if(WIN32)
+    set(LOADMASTER_TEST_CPU_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/cpu/stat_windows.cc)
+elseif(APPLE)
+    set(LOADMASTER_TEST_CPU_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/cpu/stat_macos.cc
+        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
+elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+    set(LOADMASTER_TEST_CPU_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/cpu/stat_bsd.cc
+        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
+else()
+    set(LOADMASTER_TEST_CPU_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/cpu/stat_linux.cc
+        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
+endif()
+
 # Helper: declare a test binary that compiles `sources`, links gtest_main,
 # and is registered with CTest via gtest_discover_tests.
 function(loadmaster_add_test name)
@@ -153,6 +172,7 @@ loadmaster_add_test(core_options_test
     core/options_test.cc
     ${CMAKE_SOURCE_DIR}/src/core/options.cc
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
+    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )
 
 # SignalFlag is a header-only singleton wrapper around AtomicBitmap.
@@ -173,6 +193,7 @@ loadmaster_add_test(cli_cli_test
     ${CMAKE_SOURCE_DIR}/src/cli/cli.cc
     ${CMAKE_SOURCE_DIR}/src/core/options.cc
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
+    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )
 
 # Header-only VersionString(): the compile-time-assembled, optionally
@@ -213,6 +234,15 @@ endif()
 loadmaster_add_test(cpu_critical_loop_test
     cpu/critical_loop_test.cc
     ${CMAKE_SOURCE_DIR}/src/cpu/critical_loop.cc
+)
+
+# LoadController turns load measurements into the CPU demand. Pure, so
+# the test drives it against a simulated system (other load, lagging
+# process measurement, imperfect workers, noise) and checks convergence,
+# step response and that it no longer rides the clamp rails.
+loadmaster_add_test(cpu_load_controller_test
+    cpu/load_controller_test.cc
+    ${CMAKE_SOURCE_DIR}/src/cpu/load_controller.cc
 )
 
 # ---- memory ----
