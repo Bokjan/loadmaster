@@ -32,7 +32,8 @@ class GpuResourceManagerRandomNormal final : public GpuResourceManager {
   struct DeviceState {
     std::vector<int> schedule_points;
     int point_idx = 0;
-    TimePoint last_change;  // default-constructed: epoch-zero -> first tick fires
+    TimePoint last_change;
+    bool started = false;  // false -> the first Schedule() tick fires immediately
   };
 
   std::mt19937 generator_;

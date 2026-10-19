@@ -100,9 +100,9 @@ int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
       break;
     }
     base_loop_count = new_base_loop_count;
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     cpu::CriticalLoop(base_loop_count);
-    auto stop = std::chrono::high_resolution_clock::now();
+    auto stop = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count();
     if (elapsed > kCpuSchedulingGranularityNS) {
       max = base_loop_count;

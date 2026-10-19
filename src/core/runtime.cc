@@ -68,7 +68,7 @@ void Runtime::MainLoop() {
   }
   [[likely]] while (running_flag_) {
     DealSignals();
-    const auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::steady_clock::now();
     for (auto &mgr : managers_) {
       mgr->Schedule(start);
     }
@@ -107,7 +107,7 @@ void Runtime::CreateSignalHandlerFunctors() {
 TimePoint Runtime::NextSchedulingTime(TimePoint start_tp) {
   // Align "start + kScheduleIntervalMS" down to the nearest
   // kScheduleIntervalMS boundary so all scheduling ticks land on a stable
-  // wall-clock grid.
+  // steady-clock grid.
   using namespace std::chrono;
   const auto start_ns = duration_cast<nanoseconds>(start_tp.time_since_epoch());
   const auto next_ns = start_ns + duration_cast<nanoseconds>(milliseconds(kScheduleIntervalMS));

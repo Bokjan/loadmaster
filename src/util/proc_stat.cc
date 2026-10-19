@@ -26,7 +26,7 @@ ProcStat::ProcStat() {
 void ProcStat::UpdateCpuStat(TimePoint now, ForceUpdate force) {
   const auto elapsed_ms =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - time_point_).count();
-  if (force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
+  if (has_baseline_ && force != ForceUpdate::kYes && elapsed_ms < kProcStatIntervalMS) {
     return;
   }
 
@@ -38,14 +38,15 @@ void ProcStat::UpdateCpuStat(TimePoint now, ForceUpdate force) {
   }
 
   // Skip the load computation on the very first sample (no prior baseline)
-  // and when no wall-clock time has elapsed.
-  if (time_point_.time_since_epoch().count() != 0 && elapsed_ms > 0) {
+  // and when no time has elapsed.
+  if (has_baseline_ && elapsed_ms > 0) {
     const uint64_t diff = (*cpu_ns >= prev_cpu_ns_) ? (*cpu_ns - prev_cpu_ns_) : 0;
     const double elapsed_ns = static_cast<double>(elapsed_ms) * 1'000'000.0;
     cpu_load_cached_ = static_cast<int>(static_cast<double>(diff) / elapsed_ns * 100.0);
   }
   time_point_ = now;
   prev_cpu_ns_ = *cpu_ns;
+  has_baseline_ = true;
 }
 
 }  // namespace util

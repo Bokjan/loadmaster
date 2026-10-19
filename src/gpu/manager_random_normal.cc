@@ -44,16 +44,20 @@ void GpuResourceManagerRandomNormal::Schedule(TimePoint time_point) {
 
 void GpuResourceManagerRandomNormal::AdvanceDevice(size_t worker_index, TimePoint time_point) {
   auto &state = states_[worker_index];
-  // First tick: state.last_change is epoch-zero -> elapsed_ms is huge ->
-  // we fire immediately, which is what we want.
-  const auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(time_point - state.last_change).count();
-  if (elapsed_ms < kGpuRandNormalScheduleIntervalMS) {
-    return;
+  // The first tick fires immediately. (Not via a default-constructed
+  // last_change: steady_clock's epoch is typically boot time, so "long
+  // ago" isn't guaranteed.)
+  if (state.started) {
+    const auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point - state.last_change)
+            .count();
+    if (elapsed_ms < kGpuRandNormalScheduleIntervalMS) {
+      return;
+    }
   }
   // Wrapped around: re-shuffle so the next 5-min window picks a new
   // ordering of the same values.
-  if (state.point_idx == 0 && state.last_change != TimePoint{}) {
+  if (state.point_idx == 0 && state.started) {
     state.schedule_points = ShuffledPoints();
   }
   const int load_percent = state.schedule_points[state.point_idx];
@@ -66,6 +70,7 @@ void GpuResourceManagerRandomNormal::AdvanceDevice(size_t worker_index, TimePoin
     state.point_idx = 0;
   }
   state.last_change = time_point;
+  state.started = true;
 }
 
 void GpuResourceManagerRandomNormal::GenerateBaseSchedulePoints() {

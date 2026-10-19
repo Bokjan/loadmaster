@@ -4,7 +4,11 @@
 
 #include "options.h"
 
-using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+// Monotonic clock for every scheduling decision. high_resolution_clock is
+// an alias of system_clock on libstdc++, so a wall-clock step (NTP, VM
+// resume, manual `date`) used to stall the main loop or pin workers at
+// 100% for the size of the step.
+using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
 namespace core {
 

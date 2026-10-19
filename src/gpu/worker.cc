@@ -40,7 +40,7 @@ void GpuWorkerContext::Join() {
 void GpuWorkerContext::Loop(std::stop_token stoken) {
   const auto period = std::chrono::milliseconds(kScheduleIntervalMS);
   while (!stoken.stop_requested()) {
-    const auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::steady_clock::now();
     const int target_ms = load_set_.load(std::memory_order_relaxed);
 
     if (target_ms > 0 && device_ != nullptr) {
@@ -56,7 +56,7 @@ void GpuWorkerContext::Loop(std::stop_token stoken) {
       }
     }
 
-    const auto now = std::chrono::high_resolution_clock::now();
+    const auto now = std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
     const auto sleep_ms = (elapsed < period) ? (period - elapsed) : std::chrono::milliseconds(0);
     std::this_thread::sleep_for(sleep_ms);

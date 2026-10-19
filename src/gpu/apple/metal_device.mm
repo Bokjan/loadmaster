@@ -315,12 +315,12 @@ int AppleMetalDevice::ProbeBaseLoopCount(int target_ms) {
   int low = 1;
   int high = 1024;
   for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::steady_clock::now();
     if (!RunKernel(high)) {
       return std::max(1, low);
     }
     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::high_resolution_clock::now() - start)
+                                std::chrono::steady_clock::now() - start)
                                 .count();
     if (elapsed_ms >= target_ms) {
       break;
@@ -337,12 +337,12 @@ int AppleMetalDevice::ProbeBaseLoopCount(int target_ms) {
   int64_t best_diff = static_cast<int64_t>(target_ms);
   for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
     const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::steady_clock::now();
     if (!RunKernel(mid)) {
       break;
     }
     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::high_resolution_clock::now() - start)
+                                std::chrono::steady_clock::now() - start)
                                 .count();
     const int64_t diff =
         elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);

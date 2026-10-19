@@ -84,7 +84,7 @@ void CpuWorkerContext::UpdateBaseLoopCount(int iterations, int64_t busy_us) {
 }
 
 void CpuWorkerContext::Loop(std::stop_token stoken) {
-  using clock = std::chrono::high_resolution_clock;
+  using clock = std::chrono::steady_clock;
   const auto period = std::chrono::milliseconds(kScheduleIntervalMS);
 
   [[likely]] while (!stoken.stop_requested()) {
@@ -97,7 +97,7 @@ void CpuWorkerContext::Loop(std::stop_token stoken) {
       // Burn until the busy-time budget is exhausted. Each CriticalLoop()
       // call is sized to take ~1ms, giving us ~1ms time-check granularity.
       const auto busy_deadline = period_start + busy_target;
-      while (clock::now() < busy_deadline) {
+      while (clock::now() < busy_deadline && !stoken.stop_requested()) {
         cpu::CriticalLoop(base_loop_count_);
         ++iterations;
       }

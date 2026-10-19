@@ -21,6 +21,8 @@ class CpuResourceManagerRandomNormal final : public CpuResourceManager {
   std::mt19937 generator_;
   int load_target_;
   TimePoint last_load_target_change_;
+  // false until the first target is picked, which happens on the first tick.
+  bool load_target_started_ = false;
 
   void AdjustWorkerLoad(TimePoint time_point, int system_load) override;
 

@@ -86,11 +86,13 @@ void CpuResourceManagerRandomNormal::IncreasePointIndex() {
 }
 
 void CpuResourceManagerRandomNormal::UpdateLoadTarget(TimePoint time_point) {
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_load_target_change_)
-          .count();
-  if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
-    return;
+  if (load_target_started_) {
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                time_point - last_load_target_change_)
+                                .count();
+    if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
+      return;
+    }
   }
   if (point_idx_ == 0) {
     ShuffleSchedulePoints();
@@ -101,6 +103,7 @@ void CpuResourceManagerRandomNormal::UpdateLoadTarget(TimePoint time_point) {
 
   IncreasePointIndex();
   last_load_target_change_ = time_point;
+  load_target_started_ = true;
 }
 
 }  // namespace cpu

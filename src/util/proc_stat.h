@@ -16,7 +16,7 @@ namespace util {
 // they read the raw counter.
 class ProcStat final {
  public:
-  using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+  using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 
   enum class ForceUpdate { kNo, kYes };
 
@@ -38,7 +38,10 @@ class ProcStat final {
 #else
   int pid_ = 0;
 #endif
+  // Monotonic: a wall-clock step (NTP, VM resume, `date`) must not freeze
+  // or spike the computed load.
   TimePoint time_point_;
+  bool has_baseline_ = false;
   // Cumulative CPU time consumed by this process, in nanoseconds, captured
   // at the previous update. Unit is identical on every platform now --
   // replaces the old jiffies_self_ / jiffies_child_ / epoch_ members that
