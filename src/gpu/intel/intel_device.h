@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "gpu/device.h"
 #include "ze_driver.h"
@@ -26,7 +27,6 @@ class IntelDevice final : public GpuDevice {
   bool AllocateMemory(std::size_t bytes) override;
   void ReleaseMemory() override;
   bool RunKernel(int loop_count) override;
-  int ProbeBaseLoopCount(int target_ms) override;
 
  private:
   const ZeApi *api_;
@@ -39,8 +39,12 @@ class IntelDevice final : public GpuDevice {
   ze_kernel_handle_t kernel_;
   void *out_ptr_;  // grid-sized scratch buffer
   std::size_t out_bytes_;
-  void *mem_load_ptr_;  // optional `-gm` block
+  // Optional `-gm` block, split into chunks of at most max_alloc_bytes_:
+  // a single zeMemAllocDevice is capped at maxMemAllocSize (~4 GiB on
+  // many parts) unless the relaxed-allocation-limits extension is used.
+  std::vector<void *> mem_load_ptrs_;
   std::size_t mem_load_bytes_;
+  std::size_t max_alloc_bytes_;
   std::string name_;
   int device_index_;
 

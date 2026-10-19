@@ -20,6 +20,7 @@ using hiprtcResult = int;
 using hiprtcProgram = void *;
 
 constexpr hipError_t hipSuccess = 0;
+constexpr unsigned int kHipDeviceScheduleBlockingSync = 0x4;
 constexpr hiprtcResult HIPRTC_SUCCESS = 0;
 
 struct HipApi {

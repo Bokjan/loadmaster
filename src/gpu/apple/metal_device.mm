@@ -10,7 +10,6 @@
 #include "metal_device.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cstdint>
 #include <cstdio>
 
@@ -303,62 +302,6 @@ bool AppleMetalDevice::RunKernel(int loop_count) {
     }
     return true;
   }
-}
-
-int AppleMetalDevice::ProbeBaseLoopCount(int target_ms) {
-  if (pipeline_ == nullptr) {
-    return 1;
-  }
-  // Same doubling-then-bisection algorithm as the NVIDIA / AMD backends
-  // so the three implementations behave identically from the worker's
-  // point of view.
-  int low = 1;
-  int high = 1024;
-  for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(high)) {
-      return std::max(1, low);
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    if (elapsed_ms >= target_ms) {
-      break;
-    }
-    low = high;
-    if (high >= kGpuKernelLoopBaseMax / 2) {
-      high = kGpuKernelLoopBaseMax;
-      break;
-    }
-    high *= 2;
-  }
-
-  int best = low;
-  int64_t best_diff = static_cast<int64_t>(target_ms);
-  for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
-    const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(mid)) {
-      break;
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    const int64_t diff =
-        elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);
-    if (diff < best_diff) {
-      best = mid;
-      best_diff = diff;
-    }
-    if (elapsed_ms > target_ms) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-  LOG_DEBUG("AppleMetalDevice #%d probed base_loop_count=%d (target=%dms)", device_index_, best,
-            target_ms);
-  return std::max(1, best);
 }
 
 }  // namespace gpu::apple

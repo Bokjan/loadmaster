@@ -121,6 +121,14 @@ loadmaster_add_test(util_normal_dist_test
     ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
 )
 
+# rand_normal schedule builder shared by the CPU and GPU managers: exact
+# period average, bell shape, and the GPU's clip-and-redistribute at 100%.
+loadmaster_add_test(util_normal_schedule_test
+    util/normal_schedule_test.cc
+    ${CMAKE_SOURCE_DIR}/src/util/normal_schedule.cc
+    ${CMAKE_SOURCE_DIR}/src/util/normal_dist.cc
+)
+
 # Compile-time XOR obfuscation layer. Pure header-only: no extra .cc
 # is needed. The test exercises Encode/Decode round-trips, MixByte
 # self-inverse, and the Holder/Scoped wrappers used by version_string
@@ -243,6 +251,16 @@ loadmaster_add_test(cpu_critical_loop_test
 loadmaster_add_test(cpu_load_controller_test
     cpu/load_controller_test.cc
     ${CMAKE_SOURCE_DIR}/src/cpu/load_controller.cc
+)
+
+# ---- gpu ----
+# GpuWorkerContext against a fake (sleep-based) device: shared kernel
+# calibration and giving up on a device that keeps failing. No GPU or
+# vendor library is needed.
+loadmaster_add_test(gpu_worker_test
+    gpu/worker_test.cc
+    ${CMAKE_SOURCE_DIR}/src/gpu/worker.cc
+    ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
 # ---- memory ----

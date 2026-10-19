@@ -19,6 +19,11 @@ using CUfunction = void *;
 using CUstream = void *;
 using CUdeviceptr = std::uintptr_t;
 
+// The *_v2 entry points we bind (cuMemAlloc_v2, ...) take a 64-bit
+// CUdeviceptr, and the function-pointer types below carry no __stdcall,
+// which only matters on 32-bit Windows. Both assume a 64-bit build.
+static_assert(sizeof(void *) == 8, "the CUDA driver bindings assume a 64-bit target");
+
 constexpr CUresult CUDA_SUCCESS = 0;
 
 // Function pointer table. All pointers are nullptr until Load() succeeds.

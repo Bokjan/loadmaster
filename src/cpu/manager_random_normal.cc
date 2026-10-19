@@ -6,6 +6,7 @@
 
 #include "core/options.h"
 #include "util/log.h"
+#include "util/normal_schedule.h"
 
 namespace cpu {
 
@@ -52,7 +53,7 @@ bool CpuResourceManagerRandomNormal::Init() {
               count, options_.GetCpuLoad());
     return false;
   }
-  // Shuffle once before the first scheduling tick so the first 5-minute
+  // Shuffle once before the first scheduling tick so the first 10-minute
   // period is also random (otherwise the points would walk a non-random
   // monotonic-ish sequence on cold start).
   ShuffleSchedulePoints();
@@ -70,18 +71,9 @@ void CpuResourceManagerRandomNormal::AdjustWorkerLoad(TimePoint time_point,
 
 void CpuResourceManagerRandomNormal::GenerateSchedulePoints() {
   point_idx_ = 0;
-  schedule_points_.clear();
-  double x_pos_upper = dist_.FindXAxisPositionCDF(kCpuRandNormalCdfTarget);
-  double x_pos_lower = dist_.GetMean() - (x_pos_upper - dist_.GetMean());
-  double step = (x_pos_upper - x_pos_lower) / kCpuRandNormalSchedulePointCount;
-  double factor =
-      options_.GetCpuLoad() * kCpuRandNormalSchedulePointCount / kCpuRandNormalCdfTarget;
-  auto get_x = [=](int idx) -> double { return x_pos_lower + step * idx; };
-  for (int i = 0; i < kCpuRandNormalSchedulePointCount; ++i) {
-    double integral = dist_.CDF(get_x(i + 1)) - dist_.CDF(get_x(i));
-    int load = static_cast<int>(integral * factor);
-    schedule_points_.emplace_back(load);
-  }
+  // No per-point cap: Init() sizes the worker pool from the peak point.
+  schedule_points_ = util::BuildNormalSchedulePoints(
+      dist_, kCpuRandNormalSchedulePointCount, kCpuRandNormalCdfTarget, options_.GetCpuLoad());
 }
 
 void CpuResourceManagerRandomNormal::ShuffleSchedulePoints() {

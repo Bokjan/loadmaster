@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <thread>
 
 #include "device.h"
@@ -21,9 +22,10 @@ class GpuWorkerContext final {
   GpuWorkerContext(GpuWorkerContext &&) = delete;
   GpuWorkerContext &operator=(GpuWorkerContext &&) = delete;
 
-  // Probe the device's base loop count for one full scheduling period.
-  // Must be called before Start().
-  void CalibrateBaseLoopCount();
+  // Find the loop count for which one kernel launch takes a full
+  // scheduling period. Must be called before Start(). Returns false when
+  // the device cannot run the kernel at all; the caller should drop it.
+  bool CalibrateBaseLoopCount();
 
   void Start();
   void RequestStop();
@@ -38,11 +40,19 @@ class GpuWorkerContext final {
  private:
   int id_;
   std::unique_ptr<GpuDevice> device_;
+  // Loop count for one full kScheduleIntervalMS of kernel time. Written by
+  // CalibrateBaseLoopCount() before Start(), afterwards only by the worker.
   int base_loop_count_;
   std::atomic<int> load_set_;
   std::jthread thread_;
 
   void Loop(std::stop_token stoken);
+  // Run the kernel once and return its wall time in ms, or nullopt on failure.
+  std::optional<double> TimeKernelMs(int loop_count);
+  // Median of three timed runs (robust against a single hiccup).
+  std::optional<double> MedianKernelMs(int loop_count);
+  // Nudge base_loop_count_ towards the observed speed of the device.
+  void AdaptBaseLoopCount(int target_ms, double elapsed_ms);
 };
 
 }  // namespace gpu

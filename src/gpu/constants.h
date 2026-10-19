@@ -11,9 +11,23 @@
 constexpr int kGpuMaxLoadPerDevice = 100;
 constexpr int kGpuKernelGridSize = 1024;
 constexpr int kGpuKernelBlockSize = 256;
-constexpr int kGpuKernelLoopBaseMin = 0;
-constexpr int kGpuKernelLoopBaseMax = 50'000'000;
-constexpr int kGpuKernelLoopBaseTestIteration = 12;
+// Upper bound for the per-thread loop count. Generous: on a top-end GPU
+// the whole grid runs in a single wave, so one scheduling period
+// (100 ms) can take several hundred million iterations per thread.
+constexpr int kGpuKernelLoopBaseMax = 1'000'000'000;
+// Calibration: a sample must take at least this long to be timed
+// reliably; the estimate is accepted once within this relative error.
+constexpr double kGpuCalibrationMinSampleMs = 5.0;
+constexpr double kGpuCalibrationTolerance = 0.03;
+constexpr int kGpuCalibrationRefineRounds = 3;
+// Runtime drift correction (clock boost / throttle): only ticks with at
+// least this much busy time are used, drift below the deadband is ignored.
+constexpr int kGpuAdaptMinBusyMs = 10;
+constexpr double kGpuAdaptDeadband = 0.05;
+constexpr double kGpuAdaptSmoothing = 0.5;
+// After this many consecutive failed launches (~5 s of retries) the
+// worker gives the device up instead of logging a warning forever.
+constexpr int kGpuMaxConsecutiveFailures = 50;
 
 // GPU rand_normal scheduler. Mirrors the CPU rand_normal knobs: every
 // device independently walks its own shuffled set of load points so that
@@ -24,7 +38,7 @@ constexpr int kGpuKernelLoopBaseTestIteration = 12;
 constexpr double kGpuRandNormalMu = 0.0;
 constexpr double kGpuRandNormalSigma = 2.0;
 constexpr double kGpuRandNormalCdfTarget = 0.95;
-constexpr int kGpuRandNormalSchedulePeriodMS = 600'000;   // 5min
+constexpr int kGpuRandNormalSchedulePeriodMS = 600'000;   // 10min
 constexpr int kGpuRandNormalScheduleIntervalMS = 10'000;  // 10s
 constexpr int kGpuRandNormalSchedulePointCount =
     kGpuRandNormalSchedulePeriodMS / kGpuRandNormalScheduleIntervalMS;

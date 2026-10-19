@@ -1,6 +1,6 @@
 #include "intel_device.h"
 
-#include <chrono>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -69,8 +69,8 @@ IntelDevice::IntelDevice()
       kernel_(nullptr),
       out_ptr_(nullptr),
       out_bytes_(0),
-      mem_load_ptr_(nullptr),
       mem_load_bytes_(0),
+      max_alloc_bytes_(0),
       device_index_(-1) {}
 
 IntelDevice::~IntelDevice() { Destroy(); }
@@ -79,11 +79,7 @@ void IntelDevice::Destroy() {
   if (api_ == nullptr) {
     return;
   }
-  if (mem_load_ptr_ != nullptr && context_ != nullptr) {
-    api_->zeMemFree(context_, mem_load_ptr_);
-    mem_load_ptr_ = nullptr;
-    mem_load_bytes_ = 0;
-  }
+  ReleaseMemory();
   if (out_ptr_ != nullptr && context_ != nullptr) {
     api_->zeMemFree(context_, out_ptr_);
     out_ptr_ = nullptr;
@@ -144,6 +140,7 @@ bool IntelDevice::Init(int device_index) {
     // `name` is NUL-terminated per spec; defensively clamp.
     props.name[sizeof(props.name) - 1] = '\0';
     name_.assign(props.name);
+    max_alloc_bytes_ = static_cast<std::size_t>(props.maxMemAllocSize);
   } else {
     name_.assign("Intel GPU");
   }
@@ -275,18 +272,24 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   if (api_ == nullptr || context_ == nullptr) {
     return false;
   }
-  if (mem_load_ptr_ != nullptr) {
-    api_->zeMemFree(context_, mem_load_ptr_);
-    mem_load_ptr_ = nullptr;
-    mem_load_bytes_ = 0;
-  }
-  ze_device_mem_alloc_desc_t mem_desc{};
-  mem_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
-  ze_result_t rc = api_->zeMemAllocDevice(context_, &mem_desc, bytes, 64, device_, &mem_load_ptr_);
-  if (rc != ZE_RESULT_SUCCESS) {
-    LOG_WARN("zeMemAllocDevice(%zu) failed: %s (rc=0x%x)", bytes, ZeResultString(rc), rc);
-    mem_load_ptr_ = nullptr;
-    return false;
+  ReleaseMemory();
+  const std::size_t max_chunk = (max_alloc_bytes_ > 0) ? max_alloc_bytes_ : bytes;
+  std::size_t remaining = bytes;
+  while (remaining > 0) {
+    const std::size_t chunk = std::min(remaining, max_chunk);
+    ze_device_mem_alloc_desc_t mem_desc{};
+    mem_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+    void *ptr = nullptr;
+    const ze_result_t rc = api_->zeMemAllocDevice(context_, &mem_desc, chunk, 64, device_, &ptr);
+    if (rc != ZE_RESULT_SUCCESS) {
+      LOG_WARN("zeMemAllocDevice(%zu) failed after %zu of %zu bytes: %s (rc=0x%x)", chunk,
+               mem_load_bytes_, bytes, ZeResultString(rc), rc);
+      ReleaseMemory();
+      return false;
+    }
+    mem_load_ptrs_.push_back(ptr);
+    mem_load_bytes_ += chunk;
+    remaining -= chunk;
   }
 
   // Force a real backing-store commit by filling once via a transient
@@ -298,24 +301,31 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   ze_command_list_handle_t tmp = nullptr;
   if (api_->zeCommandListCreate(context_, device_, &cl_desc, &tmp) == ZE_RESULT_SUCCESS) {
     const uint8_t pattern = 0xA5;
-    if (api_->zeCommandListAppendMemoryFill(tmp, mem_load_ptr_, &pattern, sizeof(pattern), bytes,
-                                            nullptr, 0, nullptr) == ZE_RESULT_SUCCESS &&
-        api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS) {
+    bool ok = true;
+    std::size_t left = bytes;
+    for (void *ptr : mem_load_ptrs_) {
+      const std::size_t chunk = std::min(left, max_chunk);
+      left -= chunk;
+      ok = ok && api_->zeCommandListAppendMemoryFill(tmp, ptr, &pattern, sizeof(pattern), chunk,
+                                                     nullptr, 0, nullptr) == ZE_RESULT_SUCCESS;
+    }
+    if (ok && api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS) {
       api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
       api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
     }
     api_->zeCommandListDestroy(tmp);
   }
-  mem_load_bytes_ = bytes;
   return true;
 }
 
 void IntelDevice::ReleaseMemory() {
-  if (api_ == nullptr || context_ == nullptr || mem_load_ptr_ == nullptr) {
+  if (api_ == nullptr || context_ == nullptr) {
     return;
   }
-  api_->zeMemFree(context_, mem_load_ptr_);
-  mem_load_ptr_ = nullptr;
+  for (void *ptr : mem_load_ptrs_) {
+    api_->zeMemFree(context_, ptr);
+  }
+  mem_load_ptrs_.clear();
   mem_load_bytes_ = 0;
 }
 
@@ -363,59 +373,6 @@ bool IntelDevice::RunKernel(int loop_count) {
     return false;
   }
   return true;
-}
-
-int IntelDevice::ProbeBaseLoopCount(int target_ms) {
-  if (api_ == nullptr || kernel_ == nullptr) {
-    return 1;
-  }
-  int low = 1;
-  int high = 1024;
-  for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(high)) {
-      return std::max(1, low);
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    if (elapsed_ms >= target_ms) {
-      break;
-    }
-    low = high;
-    if (high >= kGpuKernelLoopBaseMax / 2) {
-      high = kGpuKernelLoopBaseMax;
-      break;
-    }
-    high *= 2;
-  }
-
-  int best = low;
-  int64_t best_diff = static_cast<int64_t>(target_ms);
-  for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
-    const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(mid)) {
-      break;
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    const int64_t diff =
-        elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);
-    if (diff < best_diff) {
-      best = mid;
-      best_diff = diff;
-    }
-    if (elapsed_ms > target_ms) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-  LOG_DEBUG("IntelDevice #%d probed base_loop_count=%d (target=%dms)", device_index_, best,
-            target_ms);
-  return std::max(1, best);
 }
 
 }  // namespace gpu::intel

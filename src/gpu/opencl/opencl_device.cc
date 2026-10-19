@@ -1,8 +1,9 @@
 #include "opencl_device.h"
 
-#include <chrono>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "cl_kernel.h"
 
@@ -21,7 +22,7 @@ OpenClDevice::OpenClDevice()
       kernel_(nullptr),
       out_buf_(nullptr),
       out_bytes_(0),
-      mem_load_buf_(nullptr),
+      local_size_(static_cast<std::size_t>(kGpuKernelBlockSize)),
       mem_load_bytes_(0),
       device_index_(-1) {}
 
@@ -31,11 +32,7 @@ void OpenClDevice::Destroy() {
   if (api_ == nullptr) {
     return;
   }
-  if (mem_load_buf_ != nullptr) {
-    api_->clReleaseMemObject(mem_load_buf_);
-    mem_load_buf_ = nullptr;
-    mem_load_bytes_ = 0;
-  }
+  ReleaseMemory();
   if (out_buf_ != nullptr) {
     api_->clReleaseMemObject(out_buf_);
     out_buf_ = nullptr;
@@ -59,6 +56,34 @@ void OpenClDevice::Destroy() {
   }
 }
 
+namespace {
+
+// A stable identity for the physical GPU behind `device`, or empty if the
+// driver supports neither cl_khr_pci_bus_info nor cl_khr_device_uuid.
+std::string DeviceIdentity(const ClApi *api, cl_device_id device) {
+  cl_uint pci[4] = {};
+  if (api->clGetDeviceInfo(device, CL_DEVICE_PCI_BUS_INFO_KHR, sizeof(pci), pci, nullptr) ==
+      CL_SUCCESS) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "pci:%04x:%02x:%02x.%x", pci[0], pci[1], pci[2], pci[3]);
+    return buf;
+  }
+  unsigned char uuid[16] = {};
+  if (api->clGetDeviceInfo(device, CL_DEVICE_UUID_KHR, sizeof(uuid), uuid, nullptr) ==
+      CL_SUCCESS) {
+    std::string id = "uuid:";
+    for (unsigned char b : uuid) {
+      char hex[3];
+      std::snprintf(hex, sizeof(hex), "%02x", b);
+      id += hex;
+    }
+    return id;
+  }
+  return {};
+}
+
+}  // namespace
+
 std::vector<std::pair<cl_platform_id, cl_device_id>> OpenClDevice::CollectGpuDevices(
     const ClApi *api) {
   std::vector<std::pair<cl_platform_id, cl_device_id>> out;
@@ -73,6 +98,7 @@ std::vector<std::pair<cl_platform_id, cl_device_id>> OpenClDevice::CollectGpuDev
   if (api->clGetPlatformIDs(platform_count, platforms.data(), nullptr) != CL_SUCCESS) {
     return out;
   }
+  std::vector<std::string> seen;
   for (auto p : platforms) {
     cl_uint dev_count = 0;
     if (api->clGetDeviceIDs(p, CL_DEVICE_TYPE_GPU, 0, nullptr, &dev_count) != CL_SUCCESS ||
@@ -84,6 +110,14 @@ std::vector<std::pair<cl_platform_id, cl_device_id>> OpenClDevice::CollectGpuDev
       continue;
     }
     for (auto d : devs) {
+      const std::string id = DeviceIdentity(api, d);
+      if (!id.empty()) {
+        if (std::find(seen.begin(), seen.end(), id) != seen.end()) {
+          LOG_DEBUG("OpenCL: skipping %s, already exposed by another platform", id.c_str());
+          continue;
+        }
+        seen.push_back(id);
+      }
       out.emplace_back(p, d);
     }
   }
@@ -198,6 +232,16 @@ bool OpenClDevice::Init(int device_index) {
     Destroy();
     return false;
   }
+  // Devices / compiled kernels limited below 256 work-items per group
+  // (some Mali, PowerVR, VideoCore, or a register-heavy JIT) reject a
+  // fixed 256 with CL_INVALID_WORK_GROUP_SIZE on every launch.
+  std::size_t max_wg = 0;
+  if (api_->clGetKernelWorkGroupInfo(kernel_, device_, CL_KERNEL_WORK_GROUP_SIZE, sizeof(max_wg),
+                                     &max_wg, nullptr) == CL_SUCCESS &&
+      max_wg > 0) {
+    local_size_ = std::min(local_size_, max_wg);
+  }
+  LOG_DEBUG("OpenCL #%d: work-group size %zu", device_index_, local_size_);
   return true;
 }
 
@@ -211,38 +255,52 @@ bool OpenClDevice::AllocateMemory(std::size_t bytes) {
   if (api_ == nullptr || context_ == nullptr || queue_ == nullptr) {
     return false;
   }
-  if (mem_load_buf_ != nullptr) {
-    api_->clReleaseMemObject(mem_load_buf_);
-    mem_load_buf_ = nullptr;
-    mem_load_bytes_ = 0;
+  ReleaseMemory();
+  cl_ulong max_alloc = 0;
+  if (api_->clGetDeviceInfo(device_, CL_DEVICE_MAX_MEM_ALLOC_SIZE, sizeof(max_alloc), &max_alloc,
+                            nullptr) != CL_SUCCESS ||
+      max_alloc == 0) {
+    max_alloc = bytes;
   }
-  cl_int rc = CL_SUCCESS;
-  mem_load_buf_ = api_->clCreateBuffer(context_, CL_MEM_READ_WRITE, bytes, nullptr, &rc);
-  if (rc != CL_SUCCESS || mem_load_buf_ == nullptr) {
-    LOG_WARN("clCreateBuffer(%zu) failed: %s (rc=%d)", bytes, ClErrorString(rc), rc);
-    mem_load_buf_ = nullptr;
-    return false;
-  }
-  // Force backing-store commit by filling the buffer once.
-  const uint8_t pattern = 0xA5;
-  rc = api_->clEnqueueFillBuffer(queue_, mem_load_buf_, &pattern, sizeof(pattern), 0, bytes, 0,
-                                 nullptr, nullptr);
-  if (rc != CL_SUCCESS) {
-    // Some old ICDs may not implement clEnqueueFillBuffer well; the
-    // alloc still succeeded so we don't tear it down, just warn.
-    LOG_DEBUG("clEnqueueFillBuffer failed: %s (rc=%d)", ClErrorString(rc), rc);
+  // One clCreateBuffer is capped at CL_DEVICE_MAX_MEM_ALLOC_SIZE, so a
+  // large `-gm` used to fail outright; allocate it in chunks instead.
+  std::size_t remaining = bytes;
+  while (remaining > 0) {
+    const std::size_t chunk =
+        static_cast<std::size_t>(std::min<cl_ulong>(remaining, max_alloc));
+    cl_int rc = CL_SUCCESS;
+    cl_mem buf = api_->clCreateBuffer(context_, CL_MEM_READ_WRITE, chunk, nullptr, &rc);
+    if (rc != CL_SUCCESS || buf == nullptr) {
+      LOG_WARN("clCreateBuffer(%zu) failed after %zu of %zu bytes: %s (rc=%d)", chunk,
+               mem_load_bytes_, bytes, ClErrorString(rc), rc);
+      ReleaseMemory();
+      return false;
+    }
+    mem_load_bufs_.push_back(buf);
+    mem_load_bytes_ += chunk;
+    remaining -= chunk;
+    // Force backing-store commit by filling the chunk once.
+    const uint8_t pattern = 0xA5;
+    rc = api_->clEnqueueFillBuffer(queue_, buf, &pattern, sizeof(pattern), 0, chunk, 0, nullptr,
+                                   nullptr);
+    if (rc != CL_SUCCESS) {
+      // Some old ICDs may not implement clEnqueueFillBuffer well; the
+      // alloc still succeeded so we don't tear it down, just note it.
+      LOG_DEBUG("clEnqueueFillBuffer failed: %s (rc=%d)", ClErrorString(rc), rc);
+    }
   }
   api_->clFinish(queue_);
-  mem_load_bytes_ = bytes;
   return true;
 }
 
 void OpenClDevice::ReleaseMemory() {
-  if (api_ == nullptr || mem_load_buf_ == nullptr) {
+  if (api_ == nullptr) {
     return;
   }
-  api_->clReleaseMemObject(mem_load_buf_);
-  mem_load_buf_ = nullptr;
+  for (cl_mem buf : mem_load_bufs_) {
+    api_->clReleaseMemObject(buf);
+  }
+  mem_load_bufs_.clear();
   mem_load_bytes_ = 0;
 }
 
@@ -258,10 +316,8 @@ bool OpenClDevice::RunKernel(int loop_count) {
     LOG_WARN("clSetKernelArg(loop) failed: %s (rc=%d)", ClErrorString(rc), rc);
     return false;
   }
-  const size_t global_size =
-      static_cast<size_t>(kGpuKernelGridSize) * static_cast<size_t>(kGpuKernelBlockSize);
-  const size_t local_size = static_cast<size_t>(kGpuKernelBlockSize);
-  rc = api_->clEnqueueNDRangeKernel(queue_, kernel_, 1, nullptr, &global_size, &local_size, 0,
+  const size_t global_size = static_cast<size_t>(kGpuKernelGridSize) * local_size_;
+  rc = api_->clEnqueueNDRangeKernel(queue_, kernel_, 1, nullptr, &global_size, &local_size_, 0,
                                     nullptr, nullptr);
   if (rc != CL_SUCCESS) {
     LOG_WARN("clEnqueueNDRangeKernel failed: %s (rc=%d)", ClErrorString(rc), rc);
@@ -273,59 +329,6 @@ bool OpenClDevice::RunKernel(int loop_count) {
     return false;
   }
   return true;
-}
-
-int OpenClDevice::ProbeBaseLoopCount(int target_ms) {
-  if (api_ == nullptr || kernel_ == nullptr) {
-    return 1;
-  }
-  int low = 1;
-  int high = 1024;
-  for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(high)) {
-      return std::max(1, low);
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    if (elapsed_ms >= target_ms) {
-      break;
-    }
-    low = high;
-    if (high >= kGpuKernelLoopBaseMax / 2) {
-      high = kGpuKernelLoopBaseMax;
-      break;
-    }
-    high *= 2;
-  }
-
-  int best = low;
-  int64_t best_diff = static_cast<int64_t>(target_ms);
-  for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
-    const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(mid)) {
-      break;
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    const int64_t diff =
-        elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);
-    if (diff < best_diff) {
-      best = mid;
-      best_diff = diff;
-    }
-    if (elapsed_ms > target_ms) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-  LOG_DEBUG("OpenClDevice #%d probed base_loop_count=%d (target=%dms)", device_index_, best,
-            target_ms);
-  return std::max(1, best);
 }
 
 }  // namespace gpu::opencl

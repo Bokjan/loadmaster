@@ -30,6 +30,16 @@ namespace {
 
 using IndexedDevice = std::pair<int, std::unique_ptr<GpuDevice>>;
 
+// Result of probing one backend: how many devices it exposes in total, and
+// the subset the user selected with `-gi`. `total` is what decides whether
+// `-gv auto` moves on to the next backend -- a vendor that HAS devices but
+// none matching `-gi` must not hand the indices to a different backend,
+// where they would silently mean other hardware.
+struct Enumeration {
+  int total = 0;
+  std::vector<IndexedDevice> devices;
+};
+
 // Does the user want device #idx? `-gi all` (or unset) selects everything;
 // otherwise only indices listed explicitly are kept. Centralised so the
 // three vendor-specific Enumerate functions don't each repeat the same
@@ -42,10 +52,23 @@ bool DeviceWanted(const core::Options &options, int idx) {
   return std::find(wanted.begin(), wanted.end(), idx) != wanted.end();
 }
 
+// Warn about `-gi` indices the backend doesn't have; they would otherwise
+// just be dropped without a trace.
+void WarnMissingIndices(const core::Options &options, const char *vendor, int total) {
+  if (options.GpuUseAllDevices()) {
+    return;
+  }
+  for (int idx : options.GetGpuIndices()) {
+    if (idx >= total) {
+      LOG_WARN("%s: requested GPU index %d does not exist (have %d)", vendor, idx, total);
+    }
+  }
+}
+
 // Build the list of (index, device) pairs for a given vendor by enumerating
 // available devices and filtering against the user's `-gi` selection.
-std::vector<IndexedDevice> EnumerateNvidia(const core::Options &options) {
-  std::vector<IndexedDevice> out;
+Enumeration EnumerateNvidia(const core::Options &options) {
+  Enumeration out;
   const auto *api = nvidia::LoadCudaApi();
   if (api == nullptr) {
     return out;
@@ -56,17 +79,19 @@ std::vector<IndexedDevice> EnumerateNvidia(const core::Options &options) {
     return out;
   }
   LOG_INFO("NVIDIA: %d device(s) detected", count);
+  out.total = count;
+  WarnMissingIndices(options, "NVIDIA", count);
   for (int i = 0; i < count; ++i) {
     if (!DeviceWanted(options, i)) {
       continue;
     }
-    out.emplace_back(i, std::make_unique<nvidia::NvidiaDevice>());
+    out.devices.emplace_back(i, std::make_unique<nvidia::NvidiaDevice>());
   }
   return out;
 }
 
-std::vector<IndexedDevice> EnumerateAmd(const core::Options &options) {
-  std::vector<IndexedDevice> out;
+Enumeration EnumerateAmd(const core::Options &options) {
+  Enumeration out;
   const auto *api = amd::LoadHipApi();
   if (api == nullptr) {
     return out;
@@ -77,17 +102,19 @@ std::vector<IndexedDevice> EnumerateAmd(const core::Options &options) {
     return out;
   }
   LOG_INFO("AMD: %d device(s) detected", count);
+  out.total = count;
+  WarnMissingIndices(options, "AMD", count);
   for (int i = 0; i < count; ++i) {
     if (!DeviceWanted(options, i)) {
       continue;
     }
-    out.emplace_back(i, std::make_unique<amd::AmdDevice>());
+    out.devices.emplace_back(i, std::make_unique<amd::AmdDevice>());
   }
   return out;
 }
 
-std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
-  std::vector<IndexedDevice> out;
+Enumeration EnumerateApple(const core::Options &options) {
+  Enumeration out;
 #if IS_MACOS
   const int count = apple::AppleMetalDevice::DeviceCount();
   if (count <= 0) {
@@ -95,11 +122,13 @@ std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
     return out;
   }
   LOG_INFO("Apple: %d Metal device(s) detected", count);
+  out.total = count;
+  WarnMissingIndices(options, "Apple", count);
   for (int i = 0; i < count; ++i) {
     if (!DeviceWanted(options, i)) {
       continue;
     }
-    out.emplace_back(i, std::make_unique<apple::AppleMetalDevice>());
+    out.devices.emplace_back(i, std::make_unique<apple::AppleMetalDevice>());
   }
 #else
   (void)options;
@@ -109,8 +138,8 @@ std::vector<IndexedDevice> EnumerateApple(const core::Options &options) {
 }
 
 // Intel iGPU / Arc via Level Zero. Linux/Windows only; Apple has no L0.
-std::vector<IndexedDevice> EnumerateIntel(const core::Options &options) {
-  std::vector<IndexedDevice> out;
+Enumeration EnumerateIntel(const core::Options &options) {
+  Enumeration out;
 #if IS_MACOS
   (void)options;
   return out;
@@ -161,11 +190,13 @@ std::vector<IndexedDevice> EnumerateIntel(const core::Options &options) {
     return out;
   }
   LOG_INFO("Intel: %d Level Zero GPU device(s) detected", gpu_count);
+  out.total = gpu_count;
+  WarnMissingIndices(options, "Intel", gpu_count);
   for (int i = 0; i < gpu_count; ++i) {
     if (!DeviceWanted(options, i)) {
       continue;
     }
-    out.emplace_back(i, std::make_unique<intel::IntelDevice>());
+    out.devices.emplace_back(i, std::make_unique<intel::IntelDevice>());
   }
   return out;
 #endif
@@ -173,8 +204,8 @@ std::vector<IndexedDevice> EnumerateIntel(const core::Options &options) {
 
 // Generic OpenCL backend -- covers Intel iGPU when L0 is missing, AMD
 // APU iGPU (no ROCm needed), and serves as a universal last-resort.
-std::vector<IndexedDevice> EnumerateOpenCl(const core::Options &options) {
-  std::vector<IndexedDevice> out;
+Enumeration EnumerateOpenCl(const core::Options &options) {
+  Enumeration out;
 #if IS_MACOS
   // OpenCL is deprecated by Apple; we already have Metal. Skip without noise.
   (void)options;
@@ -186,11 +217,13 @@ std::vector<IndexedDevice> EnumerateOpenCl(const core::Options &options) {
     return out;
   }
   LOG_INFO("OpenCL: %d GPU device(s) detected", count);
+  out.total = count;
+  WarnMissingIndices(options, "OpenCL", count);
   for (int i = 0; i < count; ++i) {
     if (!DeviceWanted(options, i)) {
       continue;
     }
-    out.emplace_back(i, std::make_unique<opencl::OpenClDevice>());
+    out.devices.emplace_back(i, std::make_unique<opencl::OpenClDevice>());
   }
   return out;
 #endif
@@ -221,54 +254,55 @@ std::unique_ptr<core::ResourceManager> CreateResourceManager(const core::Options
     return nullptr;
   }
 
-  std::vector<IndexedDevice> devices;
+  Enumeration found;
   switch (options.GetGpuVendor()) {
     case core::Options::GpuVendor::kNvidia:
-      devices = EnumerateNvidia(options);
+      found = EnumerateNvidia(options);
       break;
     case core::Options::GpuVendor::kAmd:
-      devices = EnumerateAmd(options);
+      found = EnumerateAmd(options);
       break;
     case core::Options::GpuVendor::kApple:
-      devices = EnumerateApple(options);
+      found = EnumerateApple(options);
       break;
     case core::Options::GpuVendor::kIntel:
-      devices = EnumerateIntel(options);
+      found = EnumerateIntel(options);
       break;
     case core::Options::GpuVendor::kOpenCL:
-      devices = EnumerateOpenCl(options);
+      found = EnumerateOpenCl(options);
       break;
     case core::Options::GpuVendor::kAuto:
 #if IS_MACOS
       // On macOS the only viable backend is Apple Metal -- NVIDIA / AMD
       // / Intel L0 / OpenCL stacks are not present, so probing them
       // adds nothing but noise.
-      devices = EnumerateApple(options);
+      found = EnumerateApple(options);
 #else
       // Probe order: discrete vendors first (NVIDIA -> AMD HIP), then
       // Intel via Level Zero, then OpenCL as the universal fallback
       // that captures Intel iGPU on systems without L0 *and* AMD APU
       // iGPU (which ROCm can't drive). Mixed-vendor hosts intentionally
-      // out of scope: we stop at the first backend that finds anything.
-      devices = EnumerateNvidia(options);
-      if (devices.empty()) {
-        devices = EnumerateAmd(options);
+      // out of scope: we stop at the first backend that has any device,
+      // even if `-gi` selected none of them (indices are vendor-local).
+      found = EnumerateNvidia(options);
+      if (found.total == 0) {
+        found = EnumerateAmd(options);
       }
-      if (devices.empty()) {
-        devices = EnumerateIntel(options);
+      if (found.total == 0) {
+        found = EnumerateIntel(options);
       }
-      if (devices.empty()) {
-        devices = EnumerateOpenCl(options);
+      if (found.total == 0) {
+        found = EnumerateOpenCl(options);
       }
 #endif
       break;
   }
 
-  if (devices.empty()) {
+  if (found.devices.empty()) {
     LOG_WARN("GPU module: no matching device found, disabling");
     return nullptr;
   }
-  return MakeManager(options, std::move(devices));
+  return MakeManager(options, std::move(found.devices));
 }
 
 }  // namespace gpu

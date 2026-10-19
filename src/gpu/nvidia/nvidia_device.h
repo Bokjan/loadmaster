@@ -17,7 +17,6 @@ class NvidiaDevice final : public GpuDevice {
   bool AllocateMemory(size_t bytes) override;
   void ReleaseMemory() override;
   bool RunKernel(int loop_count) override;
-  int ProbeBaseLoopCount(int target_ms) override;
 
  private:
   const CudaApi *api_;

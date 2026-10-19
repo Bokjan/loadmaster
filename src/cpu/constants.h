@@ -9,7 +9,7 @@ constexpr int kCpuBaseLoopCountTestIteration = 16;
 constexpr double kCpuRandNormalMu = 0.0;
 constexpr double kCpuRandNormalSigma = 2.0;
 constexpr double kCpuRandNormalCdfTarget = 0.95;
-constexpr int kCpuRandNormalSchedulePeriodMS = 600'000;   // 5min
+constexpr int kCpuRandNormalSchedulePeriodMS = 600'000;   // 10min
 constexpr int kCpuRandNormalScheduleIntervalMS = 10'000;  // 10s
 constexpr int kCpuRandNormalSchedulePointCount =
     kCpuRandNormalSchedulePeriodMS / kCpuRandNormalScheduleIntervalMS;

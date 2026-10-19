@@ -73,6 +73,7 @@ bool DoLoad() {
   ok &= Resolve(g_handle, "clCreateKernel", g_api.clCreateKernel);
   ok &= Resolve(g_handle, "clReleaseKernel", g_api.clReleaseKernel);
   ok &= Resolve(g_handle, "clSetKernelArg", g_api.clSetKernelArg);
+  ok &= Resolve(g_handle, "clGetKernelWorkGroupInfo", g_api.clGetKernelWorkGroupInfo);
   ok &= Resolve(g_handle, "clEnqueueNDRangeKernel", g_api.clEnqueueNDRangeKernel);
 
   if (!ok) {

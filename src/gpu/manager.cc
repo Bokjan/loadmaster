@@ -39,9 +39,14 @@ bool GpuResourceManager::Init() {
       }
     }
 
-    auto ctx = std::make_unique<GpuWorkerContext>(next_id++, std::move(dev));
+    auto ctx = std::make_unique<GpuWorkerContext>(next_id, std::move(dev));
     if (options_.GetGpuLoad() > 0) {
-      ctx->CalibrateBaseLoopCount();
+      if (!ctx->CalibrateBaseLoopCount()) {
+        // Can't run the kernel at all: drop the device instead of keeping
+        // a worker that would fail on every tick.
+        LOG_WARN("GPU device #%d failed kernel calibration, skipping", idx);
+        continue;
+      }
       // Initial load: subclasses are free to override on the first
       // Schedule() tick. We seed with the user-requested per-device
       // load so a worker that never sees Schedule() (e.g. the Default
@@ -49,6 +54,7 @@ bool GpuResourceManager::Init() {
       ctx->SetLoadSet(LoadPercentToBusyMs(options_.GetGpuLoad()));
     }
     workers_.emplace_back(std::move(ctx));
+    ++next_id;
   }
   pending_devices_.clear();
 

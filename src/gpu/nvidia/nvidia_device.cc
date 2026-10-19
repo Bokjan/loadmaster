@@ -1,6 +1,5 @@
 #include "nvidia_device.h"
 
-#include <chrono>
 #include <cstdio>
 
 #include "ptx_kernel.h"
@@ -12,7 +11,11 @@ namespace gpu::nvidia {
 
 namespace {
 
-constexpr unsigned int kCtxFlagSchedSpin = 0x01;  // CU_CTX_SCHED_SPIN
+// CU_CTX_SCHED_BLOCKING_SYNC: cuCtxSynchronize() sleeps on an OS primitive
+// until the kernel finishes. The previous CU_CTX_SCHED_SPIN busy-polled,
+// burning a full host core per GPU for the whole kernel -- on top of (and
+// invisible to) the CPU module's own load target.
+constexpr unsigned int kCtxFlagSchedBlockingSync = 0x04;
 
 }  // namespace
 
@@ -91,7 +94,7 @@ bool NvidiaDevice::Init(int device_index) {
     name_.assign("NVIDIA GPU");
   }
 
-  rc = api_->cuCtxCreate(&context_, kCtxFlagSchedSpin, device_);
+  rc = api_->cuCtxCreate(&context_, kCtxFlagSchedBlockingSync, device_);
   if (rc != CUDA_SUCCESS) {
     LOG_WARN("cuCtxCreate failed on device %d: %s", device_index, CudaErrorString(rc));
     return false;
@@ -191,61 +194,6 @@ bool NvidiaDevice::RunKernel(int loop_count) {
     return false;
   }
   return true;
-}
-
-int NvidiaDevice::ProbeBaseLoopCount(int target_ms) {
-  if (api_ == nullptr || busy_func_ == nullptr) {
-    return 1;
-  }
-  // Doubling-then-bisection: start small, double until we exceed target_ms,
-  // then a few iterations of bisection.
-  int low = 1;
-  int high = 1024;
-  for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(high)) {
-      return std::max(1, low);
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    if (elapsed_ms >= target_ms) {
-      break;
-    }
-    low = high;
-    if (high >= kGpuKernelLoopBaseMax / 2) {
-      high = kGpuKernelLoopBaseMax;
-      break;
-    }
-    high *= 2;
-  }
-
-  int best = low;
-  int64_t best_diff = static_cast<int64_t>(target_ms);
-  for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
-    const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(mid)) {
-      break;
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    const int64_t diff =
-        elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);
-    if (diff < best_diff) {
-      best = mid;
-      best_diff = diff;
-    }
-    if (elapsed_ms > target_ms) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-  LOG_DEBUG("NvidiaDevice #%d probed base_loop_count=%d (target=%dms)", device_index_, best,
-            target_ms);
-  return std::max(1, best);
 }
 
 }  // namespace gpu::nvidia

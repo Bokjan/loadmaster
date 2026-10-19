@@ -26,6 +26,10 @@
 
 namespace gpu::opencl {
 
+// The function-pointer types below omit CL_API_CALL (__stdcall), which only
+// differs from the default convention on 32-bit Windows.
+static_assert(sizeof(void *) == 8, "the OpenCL bindings assume a 64-bit target");
+
 // ---- Opaque handles ------------------------------------------------------
 using cl_int = int32_t;
 using cl_uint = uint32_t;
@@ -53,6 +57,12 @@ constexpr cl_uint CL_DEVICE_NAME = 0x102B;
 constexpr cl_uint CL_DEVICE_VENDOR = 0x102C;
 constexpr cl_uint CL_PLATFORM_NAME = 0x0902;
 constexpr cl_uint CL_PROGRAM_BUILD_LOG = 0x1183;
+constexpr cl_uint CL_DEVICE_MAX_MEM_ALLOC_SIZE = 0x1010;   // cl_ulong
+constexpr cl_uint CL_KERNEL_WORK_GROUP_SIZE = 0x11B0;      // size_t
+// Device identity, used to spot one GPU exposed by two ICDs. Both are
+// extensions; drivers without them return an error and we skip the check.
+constexpr cl_uint CL_DEVICE_UUID_KHR = 0x106A;          // cl_uchar[16], cl_khr_device_uuid
+constexpr cl_uint CL_DEVICE_PCI_BUS_INFO_KHR = 0x410F;  // 4 x cl_uint, cl_khr_pci_bus_info
 
 // ---- Function pointer table ---------------------------------------------
 struct ClApi {
@@ -100,6 +110,9 @@ struct ClApi {
   cl_int (*clReleaseKernel)(cl_kernel kernel);
   cl_int (*clSetKernelArg)(cl_kernel kernel, cl_uint arg_index, std::size_t arg_size,
                            const void *arg_value);
+  cl_int (*clGetKernelWorkGroupInfo)(cl_kernel kernel, cl_device_id device, cl_uint param_name,
+                                     std::size_t param_size, void *param_value,
+                                     std::size_t *param_size_ret);
 
   cl_int (*clEnqueueNDRangeKernel)(cl_command_queue queue, cl_kernel kernel, cl_uint work_dim,
                                    const std::size_t *global_work_offset,

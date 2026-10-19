@@ -29,7 +29,6 @@ class OpenClDevice final : public GpuDevice {
   bool AllocateMemory(std::size_t bytes) override;
   void ReleaseMemory() override;
   bool RunKernel(int loop_count) override;
-  int ProbeBaseLoopCount(int target_ms) override;
 
   // Number of OpenCL GPU devices visible across all platforms. Returns 0
   // if the loader can't be opened (factory uses this to decide whether
@@ -46,15 +45,22 @@ class OpenClDevice final : public GpuDevice {
   cl_kernel kernel_;
   cl_mem out_buf_;
   std::size_t out_bytes_;
-  cl_mem mem_load_buf_;
+  // Work-group size used for launches: kGpuKernelBlockSize, or less if
+  // the device / compiled kernel can't take that many work-items.
+  std::size_t local_size_;
+  // `-gm` block, split into chunks of at most CL_DEVICE_MAX_MEM_ALLOC_SIZE
+  // (often only a quarter of VRAM).
+  std::vector<cl_mem> mem_load_bufs_;
   std::size_t mem_load_bytes_;
   std::string name_;
   int device_index_;
 
   void Destroy();
   // Walk every platform's GPU device list and return them flattened
-  // (platform, device) in stable order. Used both by Init() and by the
-  // static DeviceCount() probe.
+  // (platform, device) in stable order, skipping a device that a previous
+  // platform already exposed (same PCI address or UUID -- e.g. Mesa
+  // rusticl next to ROCm or NEO), so `-gi all` doesn't drive one GPU
+  // twice. Used both by Init() and by the static DeviceCount() probe.
   static std::vector<std::pair<cl_platform_id, cl_device_id>> CollectGpuDevices(const ClApi *api);
 };
 

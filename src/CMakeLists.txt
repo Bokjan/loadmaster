@@ -56,6 +56,7 @@ target_sources(loadmaster PRIVATE
     util/log.cc
     util/clock.cc
     util/normal_dist.cc
+    util/normal_schedule.cc
     util/proc_stat.cc
 )
 

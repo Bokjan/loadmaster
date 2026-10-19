@@ -1,6 +1,5 @@
 #include "amd_device.h"
 
-#include <chrono>
 #include <cstdio>
 
 #include "hip_kernel.h"
@@ -132,7 +131,9 @@ bool AmdDevice::Init(int device_index) {
     name_.assign("AMD GPU");
   }
 
-  rc = api_->hipCtxCreate(&context_, 0, device_);
+  // hipDeviceScheduleBlockingSync: same reasoning as the CUDA backend --
+  // flags = 0 ("auto") may spin a host core while waiting for the kernel.
+  rc = api_->hipCtxCreate(&context_, kHipDeviceScheduleBlockingSync, device_);
   if (rc != hipSuccess) {
     LOG_WARN("hipCtxCreate failed on device %d: %s", device_index, HipErrorString(rc));
     return false;
@@ -227,59 +228,6 @@ bool AmdDevice::RunKernel(int loop_count) {
     return false;
   }
   return true;
-}
-
-int AmdDevice::ProbeBaseLoopCount(int target_ms) {
-  if (api_ == nullptr || busy_func_ == nullptr) {
-    return 1;
-  }
-  int low = 1;
-  int high = 1024;
-  for (int probe = 0; probe < 24; ++probe) {
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(high)) {
-      return std::max(1, low);
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    if (elapsed_ms >= target_ms) {
-      break;
-    }
-    low = high;
-    if (high >= kGpuKernelLoopBaseMax / 2) {
-      high = kGpuKernelLoopBaseMax;
-      break;
-    }
-    high *= 2;
-  }
-
-  int best = low;
-  int64_t best_diff = static_cast<int64_t>(target_ms);
-  for (int i = 0; i < kGpuKernelLoopBaseTestIteration && low + 1 < high; ++i) {
-    const int mid = low + (high - low) / 2;
-    const auto start = std::chrono::steady_clock::now();
-    if (!RunKernel(mid)) {
-      break;
-    }
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::steady_clock::now() - start)
-                                .count();
-    const int64_t diff =
-        elapsed_ms > target_ms ? (elapsed_ms - target_ms) : (target_ms - elapsed_ms);
-    if (diff < best_diff) {
-      best = mid;
-      best_diff = diff;
-    }
-    if (elapsed_ms > target_ms) {
-      high = mid;
-    } else {
-      low = mid;
-    }
-  }
-  LOG_DEBUG("AmdDevice #%d probed base_loop_count=%d (target=%dms)", device_index_, best,
-            target_ms);
-  return std::max(1, best);
 }
 
 }  // namespace gpu::amd

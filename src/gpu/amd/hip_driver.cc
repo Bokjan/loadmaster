@@ -56,6 +56,17 @@ bool IsRunningInsideWsl() {
 }
 #endif
 
+// Close both libraries and forget every resolved symbol. Used on every
+// failure path after the dlopen()s succeeded -- including the device-count
+// probe, which used to return with both handles still open.
+void Unload() {
+  util::Dlclose(g_rtc_handle);
+  util::Dlclose(g_hip_handle);
+  g_rtc_handle = nullptr;
+  g_hip_handle = nullptr;
+  std::memset(&g_api, 0, sizeof(g_api));
+}
+
 template <typename Fn>
 bool Resolve(util::DlHandle handle, const char *name, Fn &slot, bool required = true) {
   void *sym = util::Dlsym(handle, name);
@@ -82,16 +93,22 @@ bool DoLoad() {
 
   // Library candidates by platform.
   //   * Linux:   ROCm ships libamdhip64.so.<ver> + libhiprtc.so.<ver>
-  //   * Windows: HIP SDK for Windows ships amdhip64_<ver>.dll + hiprtc<ver>.dll
-  //              and historically also plain amdhip64.dll. We try multiple
-  //              versioned names that have shipped in HIP SDK 5.x and 6.x.
+  //   * Windows: HIP SDK for Windows ships amdhip64_<major>.dll (plain
+  //              amdhip64.dll before 6.x) + hiprtc<MMmm>.dll, the latter
+  //              named after the exact SDK minor (hiprtc0602.dll for 6.2).
+  //              Newest first, so a machine with several SDKs picks the
+  //              runtime / RTC pair from the same release where possible.
+  //   * Linux:   the unversioned .so symlink only exists with the -dev
+  //              packages, so the SONAMEs are listed too.
   static const char *const kHipCandidates[] = {
 #if IS_WINDOWS
+      "amdhip64_7.dll",
       "amdhip64_6.dll",
       "amdhip64_5.dll",
       "amdhip64.dll",
 #else
       "libamdhip64.so",
+      "libamdhip64.so.7",
       "libamdhip64.so.6",
       "libamdhip64.so.5",
 #endif
@@ -99,9 +116,12 @@ bool DoLoad() {
   };
   static const char *const kRtcCandidates[] = {
 #if IS_WINDOWS
-      "hiprtc0606.dll", "hiprtc0605.dll", "hiprtc0604.dll", "hiprtc0507.dll", "hiprtc.dll",
+      "hiprtc0702.dll", "hiprtc0701.dll", "hiprtc0700.dll", "hiprtc0606.dll", "hiprtc0605.dll",
+      "hiprtc0604.dll", "hiprtc0603.dll", "hiprtc0602.dll", "hiprtc0601.dll", "hiprtc0600.dll",
+      "hiprtc0507.dll", "hiprtc0505.dll", "hiprtc.dll",
 #else
       "libhiprtc.so",
+      "libhiprtc.so.7",
       "libhiprtc.so.6",
       "libhiprtc.so.5",
 #endif
@@ -152,11 +172,7 @@ bool DoLoad() {
 
   if (!ok) {
     LOG_WARN("failed to resolve all HIP/hipRTC symbols");
-    util::Dlclose(g_rtc_handle);
-    util::Dlclose(g_hip_handle);
-    g_rtc_handle = nullptr;
-    g_hip_handle = nullptr;
-    std::memset(&g_api, 0, sizeof(g_api));
+    Unload();
     return false;
   }
 
@@ -175,10 +191,12 @@ bool DoLoad() {
     LOG_INFO(
         "Hint: on Linux check /dev/kfd permissions and that the GPU's gfx "
         "arch is supported; on Windows ensure HIP SDK is installed and on PATH.");
+    Unload();
     return false;
   }
   if (probe_count <= 0) {
     LOG_INFO("HIP runtime reports 0 devices");
+    Unload();
     return false;
   }
   LOG_DEBUG("HIP runtime probe: %d device(s) visible", probe_count);
