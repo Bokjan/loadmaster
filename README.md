@@ -13,6 +13,11 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
   tests with warnings as errors; `ctest --preset <name>` runs the tests).
 - The scripts in `scripts/` use Ninja for new build trees when it is
   installed, and CMake uses `ccache` when it is installed.
+- CI (`.github/workflows/ci.yml`) runs the unit tests on Linux (GCC,
+  Clang, ASan + UBSan; x86_64 and aarch64), macOS, Windows and FreeBSD
+  with warnings as errors, builds the release artifacts below, and checks
+  them with `scripts/check_obfuscation.sh`. Pushing a `v<version>` tag
+  attaches them to a draft GitHub release.
 - libstdc++/libgcc are linked statically by default so the binary is portable
   across distros; libc and libdl remain dynamic so the GPU module can `dlopen`
   the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
@@ -31,7 +36,7 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 | `LOADMASTER_SYSTEM_GTEST` | `ON` | Use an installed GoogleTest when CMake finds one instead of downloading it (not for sanitizer or MSVC builds). |
 | `LOADMASTER_HARDEN` | `ON` | Exploit mitigations, each used where the toolchain supports it: PIE, `-fstack-protector-strong`, `-fstack-clash-protection`, CET (`-fcf-protection`, x86) / PAC+BTI (`-mbranch-protection`, AArch64), `_FORTIFY_SOURCE=2` (optimised, non-sanitizer builds), full RELRO on ELF; `/guard:cf` and `/CETCOMPAT` on MSVC. PIE is dropped (with a configure message) when the toolchain's static `libstdc++` isn't position-independent. |
 | `LOADMASTER_GC_SECTIONS` | `ON` | In optimised builds, let the linker drop unreferenced functions and data (`--gc-sections`, `-dead_strip`, `/OPT:REF,ICF`). |
-| `LOADMASTER_LTO` | `OFF` | Link-time optimisation. Off because it barely shrinks this binary and widens what the optimiser can constant-fold across files, which the XOR obfuscation has to survive; if you enable it, check the stripped binary with `strings`. |
+| `LOADMASTER_LTO` | `OFF` | Link-time optimisation. Off because it barely shrinks this binary and widens what the optimiser can constant-fold across files, which the XOR obfuscation has to survive; if you enable it, run `scripts/check_obfuscation.sh` on the stripped binary. |
 | `LOADMASTER_WERROR` | `OFF` | Treat warnings in loadmaster's own code and tests as errors (`-Werror` / `/WX`). CI turns it on. |
 | `LOADMASTER_CCACHE` | `ON` | Use `ccache` as the compiler launcher when it is installed (Makefile / Ninja generators). |
 

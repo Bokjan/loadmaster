@@ -1,0 +1,164 @@
+# Unit tests on every supported platform, portable release builds, and a
+# draft GitHub release when a v* tag is pushed.
+#
+# GPU backends need drivers and devices that hosted runners don't have,
+# so they are compiled everywhere but only their device-independent logic
+# is tested (see tests/README.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux-tests:
+    name: Linux tests (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # libgtest-dev: also covers the installed-GoogleTest path.
+          - { name: gcc, os: ubuntu-24.04, cxx: g++, args: --werror, packages: ninja-build libgtest-dev }
+          - { name: clang release, os: ubuntu-24.04, cxx: clang++, args: --werror --release, packages: ninja-build }
+          - { name: asan+ubsan, os: ubuntu-24.04, cxx: clang++, args: --sanitize, packages: ninja-build }
+          - { name: gcc aarch64, os: ubuntu-24.04-arm, cxx: g++, args: --werror, packages: ninja-build }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packages
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ${{ matrix.packages }}
+      # ASan's shadow memory layout breaks with the 32-bit mmap
+      # randomisation some runner kernels use.
+      - name: Limit mmap randomisation for the sanitizers
+        if: contains(matrix.args, '--sanitize')
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Build and run tests
+        run: scripts/run_tests.sh ${{ matrix.args }}
+        env:
+          CXX: ${{ matrix.cxx }}
+
+  linux-release:
+    name: Linux release (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, os: ubuntu-24.04 }
+          - { arch: aarch64, os: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in manylinux2014
+        run: scripts/build_linux.sh --arch ${{ matrix.arch }}
+      - name: Check obfuscation
+        run: scripts/check_obfuscation.sh dist/loadmaster-*-linux-${{ matrix.arch }}
+      - name: Smoke test
+        run: dist/loadmaster-*-linux-${{ matrix.arch }} -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loadmaster-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS tests + release
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run tests
+        run: scripts/run_tests.sh --werror
+      - name: Build releases
+        run: |
+          scripts/build_macos.sh --arch arm64
+          scripts/build_macos.sh --arch x86_64
+      - name: Check obfuscation
+        run: scripts/check_obfuscation.sh dist/loadmaster-*-macos-arm64 dist/loadmaster-*-macos-x86_64
+      - name: Smoke test
+        run: dist/loadmaster-*-macos-arm64 -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loadmaster-macos
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows tests + release
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run tests
+        run: scripts\run_tests.ps1 -Werror
+      - name: Build release
+        run: scripts\build_windows.ps1
+      - name: Check obfuscation and smoke test
+        run: |
+          $exe = Get-ChildItem dist\loadmaster-*-windows-x86_64.exe | Select-Object -First 1
+          # Same markers as scripts/check_obfuscation.sh.
+          $text = [IO.File]::ReadAllText($exe.FullName, [Text.Encoding]::ASCII)
+          if ($text -match 'target CPU usage|\.entry busy|void busy') {
+            throw "$($exe.Name) contains plaintext that should be obfuscated: $($Matches[0])"
+          }
+          & $exe.FullName -v
+          if ($LASTEXITCODE -ne 0) { throw "$($exe.Name) -v failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loadmaster-windows
+          path: dist/*
+          if-no-files-found: error
+
+  freebsd:
+    name: FreeBSD tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run tests in a FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y bash cmake ninja
+          run: bash scripts/run_tests.sh --werror
+
+  release:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-tests, linux-release, macos, windows, freebsd]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Check artifacts match the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ls -l dist
+          for f in dist/*; do
+            case "${f}" in
+              dist/loadmaster-"${version}"-*) ;;
+              *) echo "::error::${f} does not match tag ${GITHUB_REF_NAME} (bump src/core/version.h?)"; exit 1 ;;
+            esac
+          done
+          (cd dist && sha256sum -c ./*.sha256)
+      # A draft, so the notes and assets can be reviewed before publishing.
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" \
+            --draft --generate-notes

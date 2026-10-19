@@ -423,7 +423,7 @@ option(LOADMASTER_GC_SECTIONS "Drop unreferenced functions / data at link time i
 # Off by default: the XOR obfuscation relies on the decoder not being
 # constant-folded with the encoded data (see util/obfuscate.h), and LTO
 # widens the optimiser's view across translation units. If you turn it on,
-# check the stripped binary with `strings` for the help text.
+# run scripts/check_obfuscation.sh on the stripped binary.
 option(LOADMASTER_LTO "Link-time optimisation (interprocedural)" OFF)
 
 set_target_properties(loadmaster_core loadmaster PROPERTIES POSITION_INDEPENDENT_CODE ON)
