@@ -19,6 +19,14 @@
 # work transparently if qemu-user-static binfmt is registered with
 # Docker, but are much slower than native. Run on a native host of the
 # target arch when possible.
+#
+# The container runs as the invoking user, so the build tree and the
+# binary stay owned by you, and `strip` runs inside the container (a
+# native-only host binutils can't read a foreign-arch ELF).
+#
+# Reproducibility: the default image is the floating manylinux2014 tag.
+# The digest actually used is printed after each build; to pin it, set
+#     MANYLINUX_IMAGE=quay.io/pypa/manylinux2014_<arch>@sha256:<digest>
 
 set -o errexit
 set -o pipefail
@@ -65,8 +73,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${ARCH}" in
-    x86_64)  IMAGE="quay.io/pypa/manylinux2014_x86_64"  ;;
-    aarch64) IMAGE="quay.io/pypa/manylinux2014_aarch64" ;;
+    x86_64)  IMAGE="${MANYLINUX_IMAGE:-quay.io/pypa/manylinux2014_x86_64}"  ;;
+    aarch64) IMAGE="${MANYLINUX_IMAGE:-quay.io/pypa/manylinux2014_aarch64}" ;;
     "")
         echo "error: could not auto-detect host arch ($(uname -m)); pass --arch explicitly" >&2
         exit 2
@@ -98,21 +106,34 @@ if [[ "${HOST_ARCH}" != "${ARCH}" ]]; then
     echo "      than native). Run on a native ${ARCH} host when possible." >&2
 fi
 
-mkdir -p "${DIST_DIR}"
-rm -rf "${BUILD_DIR}"
+readonly BUILD_REL="${BUILD_DIR#"${REPO_ROOT}"/}"
 
+mkdir -p "${DIST_DIR}"
+if ! rm -rf "${BUILD_DIR}" 2>/dev/null; then
+    # Older versions of this script ran the container as root and left a
+    # root-owned build tree behind; remove it from inside the container.
+    echo "note: removing root-owned ${BUILD_REL} via the container" >&2
+    docker run --rm -v "${REPO_ROOT}:/work" -w /work "${IMAGE}" rm -rf "/work/${BUILD_REL}"
+fi
+
+# LOADMASTER_LINK_COMPILE_COMMANDS=OFF: the container sees the repo at
+# /work, so a compile_commands.json symlink created there would dangle on
+# the host (and clobber the developer's own link).
 docker run --rm \
+    -u "$(id -u):$(id -g)" \
+    -e HOME=/tmp \
     -v "${REPO_ROOT}:/work" \
     -w /work \
     "${IMAGE}" \
     bash -c "
         set -e
-        cmake -B '${BUILD_DIR##${REPO_ROOT}/}' -DCMAKE_BUILD_TYPE=Release
-        cmake --build '${BUILD_DIR##${REPO_ROOT}/}' -j
+        cmake -B '${BUILD_REL}' -DCMAKE_BUILD_TYPE=Release -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF
+        cmake --build '${BUILD_REL}' -j \"\$(nproc)\"
+        cp '${BUILD_REL}/src/loadmaster' 'dist/loadmaster-${ARCH}'
+        strip 'dist/loadmaster-${ARCH}'
     "
 
-cp "${BUILD_DIR}/src/loadmaster" "${OUTPUT}"
-strip "${OUTPUT}"
 file "${OUTPUT}"
 echo
 echo "Built: ${OUTPUT}"
+echo "Image: $(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE}" 2>/dev/null || echo "${IMAGE}")"

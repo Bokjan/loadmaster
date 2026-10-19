@@ -32,8 +32,9 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-mkdir -p "$build_dir" && cd "$build_dir"
-cmake .. -DCMAKE_BUILD_TYPE=Release
+# -S/-B instead of `cd build && cmake ..`, so an absolute or nested
+# build_dir works too.
+cmake -S "${REPO_ROOT}" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
 # Compute an explicit jobs count and pass it to `cmake --build`. We
 # cannot use `cmake --build . -j` (without a number): CMake 3.x simply
 # forwards a bare `-j` to the underlying build tool, which works for
@@ -44,8 +45,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 # safe (slow but correct) on the off chance _NPROCESSORS_ONLN is
 # unavailable.
 jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
-cmake --build . -j "$jobs"
-cd ..
+cmake --build "$build_dir" -j "$jobs"
 cp "$build_dir/src/loadmaster" "./$binary_name"
 strip "$binary_name"
 file "$binary_name"

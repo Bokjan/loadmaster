@@ -125,8 +125,8 @@ Write-Host "==> building (-j $Jobs, $BuildType)"
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 
 Write-Host "==> running tests"
+# Push-Location rather than `ctest --test-dir`, which needs CMake 3.20.
 $ctestArgs = @(
-    '--test-dir', $BuildDir,
     '-C', $BuildType,
     '--output-on-failure',
     '-j', $Jobs
@@ -134,5 +134,11 @@ $ctestArgs = @(
 if (-not [string]::IsNullOrEmpty($Filter)) {
     $ctestArgs += @('--tests-regex', $Filter)
 }
-& ctest @ctestArgs
-if ($LASTEXITCODE -ne 0) { throw "ctest reported failures" }
+Push-Location $BuildDir
+try {
+    & ctest @ctestArgs
+    $ctestExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($ctestExit -ne 0) { throw "ctest reported failures" }

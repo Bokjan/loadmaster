@@ -24,7 +24,23 @@ cmake_policy(SET CMP0091 NEW)
 # compile_commands.json file. That's why the mirror logic below is also
 # gated on the generator: trying to symlink/copy a file that's never
 # going to exist would just make the build fail spuriously on Windows.
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+#
+# A cache default rather than a plain set(): a normal variable would
+# shadow -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF from the command line.
+# CMake itself pre-creates the cache entry with an empty value (seeded
+# from the environment variable of the same name), so "empty" is treated
+# as "not set by the user".
+if("${CMAKE_EXPORT_COMPILE_COMMANDS}" STREQUAL "")
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Emit compile_commands.json" FORCE)
+endif()
+
+# Whether to mirror compile_commands.json into the source root (below).
+# Containerised / throwaway builds should turn this off: the mirror step
+# replaces whatever the developer's root compile_commands.json pointed at,
+# and a link created inside a container points at a path (/work/...) that
+# doesn't exist on the host.
+option(LOADMASTER_LINK_COMPILE_COMMANDS
+       "Mirror compile_commands.json from the build dir into the source root" ON)
 
 if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
     set(_loadmaster_cc_supported TRUE)
@@ -56,6 +72,7 @@ endif()
 #     project's compile_commands.json.
 if(_loadmaster_cc_supported AND
    CMAKE_EXPORT_COMPILE_COMMANDS AND
+   LOADMASTER_LINK_COMPILE_COMMANDS AND
    NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND
    CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # Eagerly refresh the symlink at *configure* time too, not just at
@@ -118,6 +135,28 @@ if(_loadmaster_cc_supported AND
         COMMENT "Mirroring compile_commands.json to project root for IDE / clangd"
         VERBATIM
     )
+endif()
+
+# Sanitizers for debugging / CI, e.g. -DLOADMASTER_SANITIZE=address,undefined
+# (GCC/Clang; MSVC only supports `address`). Applied to every target,
+# including GoogleTest, so instrumented and plain code never mix. Several
+# unit tests (allocator, dl, obfuscate) only catch their bug class under a
+# sanitizer; scripts/run_tests.sh --sanitize turns this on.
+set(LOADMASTER_SANITIZE "" CACHE STRING
+    "Comma-separated sanitizers to build with (address, undefined, thread, ...)")
+if(LOADMASTER_SANITIZE)
+    if(MSVC)
+        if(LOADMASTER_SANITIZE STREQUAL "address")
+            add_compile_options(/fsanitize=address)
+        else()
+            message(FATAL_ERROR "MSVC only supports LOADMASTER_SANITIZE=address")
+        endif()
+    else()
+        add_compile_options(-fsanitize=${LOADMASTER_SANITIZE} -fno-omit-frame-pointer
+                            -fno-sanitize-recover=all)
+        add_link_options(-fsanitize=${LOADMASTER_SANITIZE})
+    endif()
+    message(STATUS "Sanitizers: ${LOADMASTER_SANITIZE}")
 endif()
 
 add_subdirectory(src)

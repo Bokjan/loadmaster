@@ -7,9 +7,10 @@
 #
 # Usage:
 #     scripts/run_tests.sh                # Debug build, full test run
-#     scripts/run_tests.sh --release      # Release-with-asserts build
+#     scripts/run_tests.sh --release      # Release build (NDEBUG: asserts off)
 #     scripts/run_tests.sh --filter Foo*  # Run only tests matching pattern
 #     scripts/run_tests.sh --clean        # Wipe build dir before configuring
+#     scripts/run_tests.sh --sanitize     # ASan + UBSan build (own build dir)
 #     scripts/run_tests.sh --help
 #
 # Output:
@@ -32,6 +33,8 @@ Options:
   --release           Configure with CMAKE_BUILD_TYPE=Release (default: Debug)
   --filter <pattern>  Pass --tests-regex <pattern> to ctest, e.g. 'Cli.*'
   --clean             Remove the build directory before configuring
+  --sanitize [list]   Build with sanitizers (default: address,undefined) in
+                      build_tests_sanitize/
   -j <N>              Parallel build/test jobs (default: nproc)
   -h, --help          Show this message
 
@@ -43,9 +46,10 @@ EOF
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
-readonly BUILD_DIR="${REPO_ROOT}/build_tests"
+BUILD_DIR="${REPO_ROOT}/build_tests"
 
 BUILD_TYPE="Debug"
+SANITIZE=""
 FILTER=""
 CLEAN=0
 # Default to host CPU count; fall back to 4 if nproc isn't available
@@ -70,6 +74,15 @@ while [[ $# -gt 0 ]]; do
             CLEAN=1
             shift
             ;;
+        --sanitize)
+            if [[ -n "${2:-}" && "${2}" != -* ]]; then
+                SANITIZE="$2"
+                shift 2
+            else
+                SANITIZE="address,undefined"
+                shift
+            fi
+            ;;
         -j)
             JOBS="${2:-}"
             if [[ -z "${JOBS}" ]]; then
@@ -90,6 +103,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -n "${SANITIZE}" ]]; then
+    # Separate tree: switching instrumentation in place would rebuild
+    # everything twice and leave the IDE's compile_commands link pointing
+    # at a sanitizer build.
+    BUILD_DIR="${REPO_ROOT}/build_tests_sanitize"
+fi
+readonly BUILD_DIR
+
 if ! command -v cmake >/dev/null 2>&1; then
     echo "error: cmake is required" >&2
     exit 1
@@ -101,9 +122,12 @@ if [[ "${CLEAN}" -eq 1 ]]; then
 fi
 
 echo "==> configuring (${BUILD_TYPE})"
-cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
-    -DLOADMASTER_BUILD_TESTS=ON \
-    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
+CMAKE_ARGS=(-DLOADMASTER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
+            -DLOADMASTER_SANITIZE="${SANITIZE}")
+if [[ -n "${SANITIZE}" ]]; then
+    CMAKE_ARGS+=(-DLOADMASTER_LINK_COMPILE_COMMANDS=OFF)
+fi
+cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" "${CMAKE_ARGS[@]}"
 
 echo "==> building (-j ${JOBS})"
 cmake --build "${BUILD_DIR}" -j "${JOBS}"
@@ -113,4 +137,6 @@ CTEST_ARGS=(--output-on-failure -j "${JOBS}")
 if [[ -n "${FILTER}" ]]; then
     CTEST_ARGS+=(--tests-regex "${FILTER}")
 fi
-ctest --test-dir "${BUILD_DIR}" "${CTEST_ARGS[@]}"
+# `cd` rather than `ctest --test-dir`, which needs CMake 3.20.
+cd "${BUILD_DIR}"
+ctest "${CTEST_ARGS[@]}"

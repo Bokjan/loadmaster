@@ -3,7 +3,7 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 
 # Prerequisites
 - C++ compiler with C++20 support
-- CMake >= 3.12
+- CMake >= 3.15
 
 # Build & Run
 - Typical CMake building routine (see `scripts/build_local.sh` for a
@@ -20,6 +20,9 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 | `LOADMASTER_STATIC_LINK` | `ON` | Statically link the C++ / runtime into the executable so it has no `vcredist` / `libstdc++`-version dependency. On Linux this is **semi-static** (`-static-libstdc++ -static-libgcc`): `libc` / `libdl` / `libpthread` stay dynamic because the GPU module needs `dlopen` to load the vendor drivers, which is incompatible with a fully-`-static` glibc binary. Cross-distro portability there is achieved by building inside the manylinux2014 container (see `scripts/build_linux.sh`) rather than by full static linking. |
 | `LOADMASTER_OBFUSCATE` | `ON` | XOR-mask embedded GPU kernel sources, the SPIR-V module, and the CLI version / help text in `.rodata` so `strings` and AV heuristics don't trip on them. Runtime output is unchanged. Turn off when bisecting a kernel build / JIT failure. |
 | `LOADMASTER_LOG_MIN_LEVEL` | `trace` | Strips `LOG_*` sites below this level at preprocessor time. Lower-priority sites expand to `((void)0)`, so their format strings, `__FILE__` paths, and helper code never enter the binary. Bump to `info` / `warn` for a quieter, leaner release; `LOG_FATAL` is never compiled out. |
+| `LOADMASTER_SANITIZE` | *(empty)* | Comma-separated sanitizers for every target, tests included, e.g. `address,undefined` (GCC / Clang) or `address` (MSVC). Disables `LOADMASTER_STATIC_LINK`. `scripts/run_tests.sh --sanitize` builds the test suite this way in `build_tests_sanitize/`. |
+| `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; `scripts/build_linux.sh` does. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
+| `LOADMASTER_BUILD_TESTS` | `OFF` | Build the GoogleTest suite (`scripts/run_tests.sh` / `run_tests.ps1` turn it on). |
 
 
 ## Portable release builds
@@ -38,8 +41,11 @@ virtually any distro from the last decade, use the helper scripts in
 | macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (Apple Silicon or Intel host) | `dist/loadmaster-macos-x86_64`       |
 
 The Linux script only requires Docker. It builds inside the
-manylinux2014 image (CentOS 7 / glibc 2.17), strips the result, and
-drops it into `dist/`. By default it targets the host's architecture
+manylinux2014 image (CentOS 7 / glibc 2.17) as the invoking user (so
+the build tree stays yours), strips the result inside the container,
+and drops it into `dist/`. It prints the image digest it used; set
+`MANYLINUX_IMAGE=quay.io/pypa/manylinux2014_<arch>@sha256:<digest>` to
+pin it for reproducible builds. By default it targets the host's architecture
 (`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture
 builds (e.g. arm64 from x86_64) work via qemu-user-static binfmt but
 are much slower; running on a native host of the target arch is
@@ -68,7 +74,8 @@ memory modules behave the same as on Linux/Windows.
 ## FreeBSD / DragonFly
 Source builds work out of the box: install `cmake` from `pkg`
 (`pkg install cmake`; the base system already ships `clang` + `libc++`)
-and run the standard `cmake -S . -B build && cmake --build build -j`,
+and run the standard `cmake -S . -B build && cmake --build build -j 4`
+(bmake needs an explicit job count),
 or use `scripts/build_local.sh`. The CPU + memory modules work
 identically to Linux; the GPU module's `dlopen`-based backends will
 all self-disable (no ROCm / Level Zero / CUDA on BSD), with OpenCL the

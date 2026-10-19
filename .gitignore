@@ -37,6 +37,7 @@ build
 rel_build
 build_release_*
 build_tests
+build_tests_sanitize
 dist
 .vscode
 .vs/

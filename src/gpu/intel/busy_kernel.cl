@@ -19,7 +19,16 @@
 //   llvm-spirv busy_kernel.bc -o busy_kernel.spv
 //
 // Drop the resulting `busy_kernel.spv` next to this .cl file. CMake
-// embeds it via file(READ ... HEX) at configure time.
+// embeds it via file(READ ... HEX) at configure time (and re-configures
+// automatically when the file changes).
+//
+// With clang + llvm-spirv on PATH, `cmake --build <dir> --target
+// regen_spirv` runs Option B and overwrites the committed .spv.
+//
+// Provenance of the committed busy_kernel.spv (from its header): SPIR-V
+// 1.4, generator 0x0006000e = Khronos LLVM/SPIR-V Translator, translator
+// version 14 -- i.e. Option B. Exact clang / llvm-spirv versions were not
+// recorded; when regenerating, note them here.
 
 __kernel void busy(__global uint *out, int loop_count) {
     int tid = (int)get_global_id(0);

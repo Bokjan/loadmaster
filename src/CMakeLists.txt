@@ -202,6 +202,9 @@ set(INTEL_SPIRV_GEN_HEADER "${INTEL_SPIRV_GEN_DIR}/intel_spirv_data.h")
 # name in src/gpu/intel/spirv_kernel.h.
 set(INTEL_SPIRV_KEY "0xB52E4C8D")
 file(MAKE_DIRECTORY "${INTEL_SPIRV_GEN_DIR}")
+# Re-run the configure step when the .spv changes (or appears), so a
+# regenerated kernel is actually picked up by the next build.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${INTEL_SPIRV_FILE}")
 if(EXISTS "${INTEL_SPIRV_FILE}")
     file(READ "${INTEL_SPIRV_FILE}" INTEL_SPIRV_HEX HEX)
     string(LENGTH "${INTEL_SPIRV_HEX}" INTEL_SPIRV_HEX_LEN)
@@ -278,9 +281,31 @@ inline constexpr std::size_t kBusyKernelSpirvSize = 0;
     message(STATUS "Intel backend: no busy_kernel.spv found; backend will be disabled "
                    "at runtime (OpenCL fallback still covers Intel iGPU)")
 endif()
-file(WRITE "${INTEL_SPIRV_GEN_HEADER}" "${INTEL_SPIRV_HEADER_CONTENT}")
+# Write via a scratch file + configure_file(COPYONLY), which leaves the
+# header untouched when the content is unchanged -- file(WRITE) bumped its
+# mtime on every configure and forced intel_device.cc to recompile.
+file(WRITE "${INTEL_SPIRV_GEN_HEADER}.tmp" "${INTEL_SPIRV_HEADER_CONTENT}")
+configure_file("${INTEL_SPIRV_GEN_HEADER}.tmp" "${INTEL_SPIRV_GEN_HEADER}" COPYONLY)
 target_include_directories(loadmaster PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+# Optional: rebuild busy_kernel.spv from busy_kernel.cl (recipe "Option B"
+# in that file). Never part of the default build -- the .spv stays
+# committed so builders need no SPIR-V toolchain -- but it makes the
+# binary reproducible from source for anyone who has one:
+#     cmake --build <dir> --target regen_spirv
+find_program(LOADMASTER_CLANG_FOR_SPIRV NAMES clang)
+find_program(LOADMASTER_LLVM_SPIRV NAMES llvm-spirv)
+if(LOADMASTER_CLANG_FOR_SPIRV AND LOADMASTER_LLVM_SPIRV)
+    set(_lm_spirv_bc "${CMAKE_CURRENT_BINARY_DIR}/busy_kernel.bc")
+    add_custom_target(regen_spirv
+        COMMAND "${LOADMASTER_CLANG_FOR_SPIRV}" -cc1 -triple spir64-unknown-unknown -O2
+                -emit-llvm-bc -finclude-default-header
+                "${CMAKE_CURRENT_SOURCE_DIR}/gpu/intel/busy_kernel.cl" -o "${_lm_spirv_bc}"
+        COMMAND "${LOADMASTER_LLVM_SPIRV}" "${_lm_spirv_bc}" -o "${INTEL_SPIRV_FILE}"
+        COMMENT "Regenerating src/gpu/intel/busy_kernel.spv from busy_kernel.cl"
+        VERBATIM)
+endif()
 
 target_compile_features(loadmaster PRIVATE cxx_std_20)
 
@@ -349,7 +374,10 @@ endif()
 # (Apple libc++ 17+ on macOS 14+ ships it directly; older Xcodes are
 # already below the project's tested baseline). Both would also reject
 # or no-op the flag in less than ideal ways.
-if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+#
+# The flag is Clang-only (GCC rejects it); a GCC-from-ports build uses
+# libstdc++, which has no such gate in the first place.
+if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(loadmaster PRIVATE -fexperimental-library)
     target_link_options(loadmaster PRIVATE -fexperimental-library)
 endif()
@@ -389,7 +417,11 @@ target_link_libraries(loadmaster PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
 #     machine.
 option(LOADMASTER_STATIC_LINK
        "Statically link the C++/runtime into the loadmaster executable" ON)
-if(LOADMASTER_STATIC_LINK)
+if(LOADMASTER_STATIC_LINK AND LOADMASTER_SANITIZE)
+    # The sanitizer runtimes expect the shared C++ runtime; a static
+    # libstdc++ / CRT gives link errors or duplicate interceptors.
+    message(STATUS "LOADMASTER_SANITIZE is set: ignoring LOADMASTER_STATIC_LINK")
+elseif(LOADMASTER_STATIC_LINK)
     if(MSVC)
         # CMake 3.15+: pick the static runtime via this property.
         set_property(TARGET loadmaster PROPERTY

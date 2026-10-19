@@ -7,15 +7,19 @@
 
 include(FetchContent)
 
+# Use extraction time as the timestamp of unpacked files so that changing
+# the URL forces a rebuild. Set via the policy rather than the
+# DOWNLOAD_EXTRACT_TIMESTAMP keyword, which only exists since CMake 3.24
+# and would be mis-parsed as part of URL_HASH by older versions.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 # Pin to a known-good GoogleTest release. Update deliberately.
 FetchContent_Declare(
     googletest
     URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
     URL_HASH SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
-    # Use extraction time as the timestamp of unpacked files so that
-    # changing the URL forces a rebuild (CMP0135 NEW behavior). Older
-    # CMake silently ignores this option.
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 
 # Make sure GoogleTest links against the same CRT we use on MSVC. The
