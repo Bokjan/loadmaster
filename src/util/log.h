@@ -49,7 +49,6 @@ class Logger {
     kLevelWarn,
     kLevelError,
     kLevelFatal,
-    kLevelAll,
     kLevelOff
   };
 
@@ -148,14 +147,6 @@ void SetDefaultLogger(Logger *ptr);
     LOG_DEFAULT_FORWARD(::util::Logger::kLevelError, fmt __VA_OPT__(, ) __VA_ARGS__)
 #else
 #  define LOG_ERROR(fmt, ...) ((void)0)
-#endif
-// LOG_ALL is a debugging-time facility; it shares LOG_TRACE's threshold
-// because it's never used to communicate user-visible information.
-#if LOADMASTER_LOG_MIN_LEVEL <= LOADMASTER_LOG_LEVEL_TRACE
-#  define LOG_ALL(fmt, ...) \
-    LOG_DEFAULT_FORWARD(::util::Logger::kLevelAll, fmt __VA_OPT__(, ) __VA_ARGS__)
-#else
-#  define LOG_ALL(fmt, ...) ((void)0)
 #endif
 // LOG_FATAL logs and aborts immediately. Use it ONLY for unrecoverable bugs.
 // For "startup failed, exit cleanly" cases, log at ERROR/WARN and return a

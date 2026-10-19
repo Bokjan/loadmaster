@@ -12,7 +12,10 @@
 #include <cstdlib>
 #include <vector>
 
+#include "core/constants.h"
 #include "core/options.h"
+#include "cpu/constants.h"
+#include "cpu/stat.h"
 #include "util/log.h"
 
 #include <gtest/gtest.h>
@@ -52,6 +55,9 @@ class CliTest : public ::testing::Test {
 // ---- Basic shapes --------------------------------------------------------
 
 TEST_F(CliTest, NoArgumentsContinuesWithDefaults) {
+  if (cpu::CoreCount() * kCpuMaxLoadPerCore < kDefaultCpuLoad) {
+    GTEST_SKIP() << "default -l is unreachable on this host";
+  }
   Options opts;
   auto a = MakeArgv({"loadmaster"});
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
@@ -94,11 +100,11 @@ TEST_F(CliTest, VersionRequestsCleanExit) {
 
 TEST_F(CliTest, CpuLoadFlagParsed) {
   Options opts;
-  auto a = MakeArgv({"loadmaster", "-l", "120"});
+  auto a = MakeArgv({"loadmaster", "-l", "80"});
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
   ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
   EXPECT_FALSE(r.should_exit);
-  EXPECT_EQ(opts.GetCpuLoad(), 120);
+  EXPECT_EQ(opts.GetCpuLoad(), 80);
 }
 
 TEST_F(CliTest, MissingValueAfterFlagFails) {
@@ -112,6 +118,34 @@ TEST_F(CliTest, MissingValueAfterFlagFails) {
 TEST_F(CliTest, NonIntegerValueRejected) {
   Options opts;
   auto a = MakeArgv({"loadmaster", "-l", "abc"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  EXPECT_EQ(r.exit_code, EXIT_FAILURE);
+}
+
+TEST_F(CliTest, TrailingGarbageAfterIntegerRejected) {
+  // sscanf("%d") used to accept these as 12 / 1 / 5.
+  for (const char *value : {"12abc", "1e3", "5.5", "", " 7"}) {
+    Options opts;
+    auto a = MakeArgv({"loadmaster", "-m", value});
+    const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+    EXPECT_EQ(r.exit_code, EXIT_FAILURE) << "value=`" << value << "`";
+  }
+}
+
+TEST_F(CliTest, OutOfRangeIntegerRejected) {
+  // Used to be UB in sscanf; glibc wrapped 4294967297 to 1.
+  for (const char *value : {"4294967297", "99999999999999999999", "-2147483649"}) {
+    Options opts;
+    auto a = MakeArgv({"loadmaster", "-gm", value});
+    const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+    EXPECT_EQ(r.exit_code, EXIT_FAILURE) << "value=" << value;
+  }
+}
+
+TEST_F(CliTest, NegativeIntegerIsParsedThenValidated) {
+  // The lexer accepts a leading '-'; Options then rejects the value.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-l", "-50"});
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
   EXPECT_EQ(r.exit_code, EXIT_FAILURE);
 }
@@ -193,7 +227,7 @@ TEST_F(CliTest, FullArgumentSet) {
   auto a = MakeArgv({
       "loadmaster",
       "-l",
-      "150",
+      "80",
       "-c",
       "1",
       "-ca",
@@ -213,7 +247,7 @@ TEST_F(CliTest, FullArgumentSet) {
   ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
   EXPECT_FALSE(r.should_exit);
 
-  EXPECT_EQ(opts.GetCpuLoad(), 150);
+  EXPECT_EQ(opts.GetCpuLoad(), 80);
   EXPECT_EQ(opts.GetCpuCount(), 1);
   EXPECT_EQ(opts.GetCpuAlgorithm(), Options::CpuAlgorithm::kRandomNormal);
   EXPECT_EQ(opts.GetMemoryBytes(), int64_t{32} * 1024 * 1024);
@@ -230,10 +264,10 @@ TEST_F(CliTest, LaterFlagOverridesEarlierFlag) {
   // future "duplicate flag is an error" rework is an intentional
   // breaking change.
   Options opts;
-  auto a = MakeArgv({"loadmaster", "-l", "100", "-l", "200"});
+  auto a = MakeArgv({"loadmaster", "-l", "100", "-l", "50"});
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
   ASSERT_EQ(r.exit_code, EXIT_SUCCESS);
-  EXPECT_EQ(opts.GetCpuLoad(), 200);
+  EXPECT_EQ(opts.GetCpuLoad(), 50);
 }
 
 TEST_F(CliTest, ValidationFailureBubblesUp) {
@@ -254,6 +288,17 @@ TEST_F(CliTest, LogLevelFlagAccepted) {
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
   EXPECT_EQ(r.exit_code, EXIT_SUCCESS);
   EXPECT_FALSE(r.should_exit);
+}
+
+TEST_F(CliTest, LogLevelAllEnablesEveryLevel) {
+  // "all" used to map to a level above fatal, which suppressed everything.
+  Options opts;
+  auto a = MakeArgv({"loadmaster", "-L", "all"});
+  const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
+  EXPECT_EQ(r.exit_code, EXIT_SUCCESS);
+  auto *logger = util::logger_internal::g_default_logger;
+  EXPECT_TRUE(logger->WillPrint(util::Logger::kLevelTrace));
+  EXPECT_TRUE(logger->WillPrint(util::Logger::kLevelFatal));
 }
 
 TEST_F(CliTest, LogLevelInvalidRejected) {

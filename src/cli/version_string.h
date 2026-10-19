@@ -2,21 +2,16 @@
 
 // Compile-time-built version string of the loadmaster binary.
 //
-// The string assembled here ("loadmaster X.Y.Z[-suffix]") is materialized
-// entirely at compile time. Two layout variants exist depending on the
-// LOADMASTER_OBFUSCATE build option (see util/obfuscate.h):
+// The string assembled here ("loadmaster X.Y.Z[-suffix]") is built
+// entirely at compile time and stored XOR-encoded via
+// util::obfuscate::Encode, so the plaintext never appears in .rodata and
+// `strings ./loadmaster | grep loadmaster` does not immediately identify
+// the binary. VersionString() decodes it into a small thread_local buffer
+// on each thread's first call.
 //
-//   * Obfuscation OFF (debug bisecting): the string lives verbatim in
-//     a static-storage `std::array<char, N>` in the binary's read-only
-//     data segment. There is no runtime allocation, no first-call
-//     initialization, and no global ctor.
-//
-//   * Obfuscation ON (default): the string is XOR-encoded into a
-//     `Holder<>` byte array via util::obfuscate::Encode at compile
-//     time, and decoded into a function-local `static` buffer the
-//     first time VersionString() is invoked. The plaintext never
-//     appears in .rodata, so `strings ./loadmaster | grep loadmaster`
-//     does not immediately identify the binary.
+// With LOADMASTER_OBFUSCATE=0 (see util/obfuscate.h) the very same code
+// path runs, but Encode / Decode are the identity, so the stored bytes
+// are the plaintext -- handy when debugging.
 //
 // In either mode the public entry point keeps the original
 // `const char *` signature so existing callers (cli/cli.cc, tests)

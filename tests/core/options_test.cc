@@ -13,6 +13,7 @@
 
 #include "cli/cli_argument.h"
 #include "core/constants.h"
+#include "cpu/constants.h"
 #include "cpu/stat.h"
 #include "gpu/constants.h"
 #include "util/log.h"
@@ -58,6 +59,9 @@ TEST_F(OptionsTest, DefaultsMatchConstants) {
 }
 
 TEST_F(OptionsTest, EmptyArgumentsAreNoop) {
+  if (cpu::CoreCount() * kCpuMaxLoadPerCore < kDefaultCpuLoad) {
+    GTEST_SKIP() << "default -l is unreachable on this host";
+  }
   Options opts;
   CliArgument args;  // all std::optional are empty
   EXPECT_TRUE(opts.ProcessCliArguments(args));
@@ -68,24 +72,74 @@ TEST_F(OptionsTest, EmptyArgumentsAreNoop) {
 
 // ---- CPU ------------------------------------------------------------------
 
-TEST_F(OptionsTest, CpuLoadIsForwardedRawWithoutBoundsCheck) {
-  // The current implementation does NOT clamp cpu_load; it trusts the
-  // value. This test pins that behavior so a future change becomes a
-  // deliberate decision rather than an accidental tightening.
+TEST_F(OptionsTest, CpuLoadWithinOneCoreAccepted) {
   Options opts;
   CliArgument args;
-  args.cpu_load = 350;
+  args.cpu_load = 75;
   EXPECT_TRUE(opts.ProcessCliArguments(args));
-  EXPECT_EQ(opts.GetCpuLoad(), 350);
+  EXPECT_EQ(opts.GetCpuLoad(), 75);
+}
+
+TEST_F(OptionsTest, CpuLoadZeroAccepted) {
+  // -l 0 is valid: it disables the CPU module.
+  Options opts;
+  CliArgument args;
+  args.cpu_load = 0;
+  EXPECT_TRUE(opts.ProcessCliArguments(args));
+  EXPECT_EQ(opts.GetCpuLoad(), 0);
+}
+
+TEST_F(OptionsTest, CpuLoadNegativeRejected) {
+  Options opts;
+  CliArgument args;
+  args.cpu_load = -50;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuLoadAboveAllCoresRejected) {
+  // One worker thread burns at most one core, so anything above
+  // 100 x CoreCount() can never be reached.
+  Options opts;
+  CliArgument args;
+  args.cpu_load = cpu::CoreCount() * kCpuMaxLoadPerCore + 1;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuLoadAboveRequestedThreadsRejected) {
+  // -l 150 -c 1: the single thread can deliver at most 100.
+  Options opts;
+  CliArgument args;
+  args.cpu_load = 150;
+  args.cpu_count = 1;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuLoadHugeValueRejectedWithoutOverflow) {
+  Options opts;
+  CliArgument args;
+  args.cpu_load = 2147483647;
+  EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 
 TEST_F(OptionsTest, CpuCountAcceptsBelowHardwareLimit) {
   Options opts;
   CliArgument args;
   // 1 thread is universally available on any host that can run gtest.
+  args.cpu_load = 100;
   args.cpu_count = 1;
   EXPECT_TRUE(opts.ProcessCliArguments(args));
   EXPECT_EQ(opts.GetCpuCount(), 1);
+}
+
+TEST_F(OptionsTest, CpuCountZeroOrNegativeRejected) {
+  // Used to silently mean "auto"; now an explicit error.
+  for (int count : {0, -5}) {
+    Options opts;
+    CliArgument args;
+    args.cpu_load = 50;
+    args.cpu_count = count;
+    EXPECT_FALSE(opts.ProcessCliArguments(args)) << "count=" << count;
+  }
 }
 
 TEST_F(OptionsTest, CpuCountRejectsAboveHardwareLimit) {
@@ -345,7 +399,7 @@ TEST_F(OptionsTest, GpuAlgorithmUnknownRejected) {
 TEST_F(OptionsTest, AllFieldsTogether) {
   Options opts;
   CliArgument args;
-  args.cpu_load = 150;
+  args.cpu_load = 80;
   args.cpu_count = 1;
   args.cpu_algorithm = std::string_view("rand_normal");
   args.memory_mb = 64;
@@ -355,7 +409,7 @@ TEST_F(OptionsTest, AllFieldsTogether) {
   args.gpu_vendor = std::string_view("nvidia");
 
   ASSERT_TRUE(opts.ProcessCliArguments(args));
-  EXPECT_EQ(opts.GetCpuLoad(), 150);
+  EXPECT_EQ(opts.GetCpuLoad(), 80);
   EXPECT_EQ(opts.GetCpuCount(), 1);
   EXPECT_EQ(opts.GetCpuAlgorithm(), Options::CpuAlgorithm::kRandomNormal);
   EXPECT_EQ(opts.GetMemoryBytes(), int64_t{64} * kMebiByte);

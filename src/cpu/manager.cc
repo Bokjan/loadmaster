@@ -109,7 +109,8 @@ int CpuResourceManager::FindAccurateBaseLoopCount(int max_iteration) {
     } else {
       min = base_loop_count;
     }
-    LOG_TRACE("iteration=%d, diff=%ld, min=%d, max=%d, mid=%d", iteration, elapsed, min, max,
+    LOG_TRACE("iteration=%d, diff=%lld, min=%d, max=%d, mid=%d", iteration,
+              static_cast<long long>(elapsed), min, max,
               base_loop_count);
     if (std::abs(elapsed - kCpuSchedulingGranularityNS) <
         std::abs(accurate_elapsed - kCpuSchedulingGranularityNS)) {

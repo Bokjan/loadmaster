@@ -4,14 +4,11 @@
 
 namespace cli {
 
-// Parses CLI arguments into `options`. Returns the desired process exit
-// code: EXIT_SUCCESS to continue running, otherwise the caller should exit
-// with that code immediately.
-//
-// Special return values:
-//   * EXIT_SUCCESS, ran_help = true  -> -h/-v printed, exit cleanly
-//   * EXIT_SUCCESS, ran_help = false -> normal run
-//   * EXIT_FAILURE                   -> parse/validation error
+// Parses CLI arguments into `options`. When `should_exit` is set the caller
+// must exit immediately with `exit_code`:
+//   * EXIT_SUCCESS, should_exit = true  -> -h/-v printed, exit cleanly
+//   * EXIT_SUCCESS, should_exit = false -> normal run
+//   * EXIT_FAILURE, should_exit = true  -> parse/validation error
 struct ParseResult {
   int exit_code;
   bool should_exit;

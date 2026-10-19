@@ -33,7 +33,11 @@ class Runtime final {
   // Run all 5 lifecycle stages back-to-back and return when a quit
   // signal (SIGINT/SIGTERM) has been observed and every worker thread
   // has been joined. Safe to call exactly once per Runtime instance.
-  void Run();
+  //
+  // Returns false when no module could be enabled (every factory
+  // returned nullptr or every manager failed Init()), so the process can
+  // exit with a failure status instead of quietly succeeding.
+  bool Run();
 
  private:
   bool running_flag_;

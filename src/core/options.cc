@@ -8,6 +8,7 @@
 #include "constants.h"
 
 #include "cli/cli_argument.h"
+#include "cpu/constants.h"
 #include "cpu/stat.h"
 #include "gpu/constants.h"
 #include "util/log.h"
@@ -67,16 +68,35 @@ Options::Options()
 bool Options::ProcessCliArguments(const cli::CliArgument &args) {
   // CPU load
   if (args.cpu_load) {
+    if (args.cpu_load.value() < 0) {
+      LOG_ERROR("invalid CPU load: %d (expect >= 0)", args.cpu_load.value());
+      return false;
+    }
     cpu_load_ = args.cpu_load.value();
   }
   // CPU count
   if (args.cpu_count) {
+    if (args.cpu_count.value() < 1) {
+      LOG_ERROR("invalid CPU thread count: %d (expect >= 1)", args.cpu_count.value());
+      return false;
+    }
     if (args.cpu_count.value() > cpu::CoreCount()) {
-      LOG_ERROR("hardware CPU count: %u, you require %d, abort", cpu::CoreCount(),
+      LOG_ERROR("hardware CPU count: %d, you require %d, abort", cpu::CoreCount(),
                 args.cpu_count.value());
       return false;
     }
     cpu_count_ = args.cpu_count.value();
+  }
+  // Each worker thread can burn at most one core, so the target must fit
+  // into the threads we are allowed to use: `-c` if given, else every core.
+  {
+    const int threads = (cpu_count_ > 0) ? cpu_count_ : cpu::CoreCount();
+    const int64_t max_load = static_cast<int64_t>(threads) * kCpuMaxLoadPerCore;
+    if (cpu_load_ > max_load) {
+      LOG_ERROR("CPU load %d is unreachable with %d thread(s) (max %lld)", cpu_load_, threads,
+                static_cast<long long>(max_load));
+      return false;
+    }
   }
   // CPU scheduling algorithm
   if (args.cpu_algorithm) {

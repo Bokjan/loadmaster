@@ -34,8 +34,8 @@ bool GpuResourceManager::Init() {
     const int64_t mem_bytes = options_.GetGpuMemoryBytes();
     if (mem_bytes > 0) {
       if (!dev->AllocateMemory(static_cast<size_t>(mem_bytes))) {
-        LOG_WARN("GPU device #%d memory allocation failed (%ld bytes); continuing", idx,
-                 static_cast<long>(mem_bytes));
+        LOG_WARN("GPU device #%d memory allocation failed (%lld bytes); continuing", idx,
+                 static_cast<long long>(mem_bytes));
       }
     }
 

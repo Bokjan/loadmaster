@@ -19,6 +19,10 @@ CpuResourceManagerRandomNormal::CpuResourceManagerRandomNormal(const core::Optio
 }
 
 bool CpuResourceManagerRandomNormal::Init() {
+  if (options_.GetCpuLoad() <= 0) {
+    LOG_INFO("CPU module disabled (-l 0)");
+    return false;
+  }
   // Find max load in normal distribution
   int max_load = 0;
   for (const auto load : schedule_points_) {

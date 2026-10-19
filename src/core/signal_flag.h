@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cassert>
 #include <csignal>
 #include <cstdint>
@@ -27,12 +28,18 @@ namespace core {
 // subset of low-numbered signals; see RegisterSignalHandlers in
 // main.cc). If a future caller starts passing higher-numbered
 // real-time signals, the bitmap width must grow first.
+//
+// The instance is a `constinit` namespace-scope object rather than a
+// function-local static: a function-local static with a non-constant
+// initializer is lazily constructed behind __cxa_guard_acquire, and a
+// signal arriving before the first Get() (e.g. during CPU calibration or
+// GPU kernel JIT) would run that guard -- which is not async-signal-safe
+// -- inside the handler. Constant initialization needs no guard at all.
 class SignalFlag final {
  public:
-  static SignalFlag &Get() {
-    static SignalFlag instance;
-    return instance;
-  }
+  constexpr SignalFlag() = default;
+
+  static SignalFlag &Get();
 
   bool Has(int signal) const {
     assert(signal >= 0 && signal < 64);
@@ -56,7 +63,16 @@ class SignalFlag final {
     return uint64_t{1} << signal;
   }
 
+  // Signal handlers may only touch lock-free atomics.
+  static_assert(std::atomic<uint64_t>::is_always_lock_free,
+                "SignalFlag needs a lock-free 64-bit atomic to be async-signal-safe");
   util::AtomicBitmap<uint64_t> bitmap_;
 };
+
+namespace signal_flag_internal {
+inline constinit SignalFlag g_instance;
+}  // namespace signal_flag_internal
+
+inline SignalFlag &SignalFlag::Get() { return signal_flag_internal::g_instance; }
 
 }  // namespace core

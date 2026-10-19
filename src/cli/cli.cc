@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include <algorithm>
+#include <charconv>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -33,8 +34,8 @@ constexpr auto kUsage = util::obfuscate::Make(
 OPTIONS:
     -v                      print version info and quit
     -h                      print this message and quit
-    -l  <load>              target CPU usage (100 each core), default: 200
-    -L  <log_level>         log level (trace/debug/info/warn/error/fatal/off), default: warn
+    -l  <load>              target CPU usage (100 each core, max 100 x threads), default: 200
+    -L  <log_level>         log level (all/trace/debug/info/warn/error/fatal/off), default: warn
     -c  <thread_count>      worker thread (CPU) count, default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0
@@ -73,13 +74,17 @@ bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
     return false;
   }
   const char *int_str = argv[++idx];
+  // std::from_chars rather than sscanf("%d"): the whole token must be a
+  // decimal integer (sscanf accepted "12abc" as 12 and "1e3" as 1), and
+  // out-of-range input is reported instead of being undefined behaviour.
+  const std::string_view sv(int_str);
   int target = 0;
-#ifdef _MSC_VER
-  int affected = sscanf_s(int_str, "%d", &target);
-#else
-  int affected = std::sscanf(int_str, "%d", &target);
-#endif
-  if (affected != 1) {
+  const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), target);
+  if (ec == std::errc::result_out_of_range) {
+    LOG_ERROR("[%s] failed to read option, integer out of range: `%s`", prompt, int_str);
+    return false;
+  }
+  if (ec != std::errc{} || ptr != sv.data() + sv.size()) {
     LOG_ERROR("[%s] failed to read option, expect an integer, have: `%s`", prompt, int_str);
     return false;
   }

@@ -26,12 +26,17 @@ Runtime::Runtime(const Options &options, std::vector<FnCreateResourceManager> cr
   CreateSignalHandlerFunctors();
 }
 
-void Runtime::Run() {
+bool Runtime::Run() {
   Init();
+  if (managers_.empty()) {
+    LOG_ERROR("no module is enabled, quit");
+    return false;
+  }
   CreateWorkers();
   MainLoop();
   StopWorkers();
   JoinWorkers();
+  return true;
 }
 
 void Runtime::Init() {
@@ -62,10 +67,6 @@ void Runtime::CreateWorkers() {
 }
 
 void Runtime::MainLoop() {
-  if (managers_.empty()) {
-    LOG_WARN("no module is enabled, quit");
-    return;
-  }
   [[likely]] while (running_flag_) {
     DealSignals();
     const auto start = std::chrono::steady_clock::now();

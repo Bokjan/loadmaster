@@ -48,7 +48,7 @@ namespace logger_internal {
 StderrLogger g_default_stderr_logger;
 Logger *g_default_logger = &g_default_stderr_logger;
 const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", "<WARN> ",
-                                  "<ERROR>",   "<FATAL>", "<ALL>  ", "<OFF>  "};
+                                  "<ERROR>",   "<FATAL>", "<OFF>  "};
 
 void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 
@@ -100,7 +100,10 @@ bool Logger::SetLevel(const char *target) {
   using SvLevelPair = std::pair<std::string_view, LogLevel>;
   static const SvLevelPair level_pairs[] = {
       {"trace", kLevelTrace}, {"debug", kLevelDebug}, {"info", kLevelInfo}, {"warn", kLevelWarn},
-      {"error", kLevelError}, {"fatal", kLevelFatal}, {"all", kLevelAll},   {"off", kLevelOff}};
+      {"error", kLevelError}, {"fatal", kLevelFatal}, {"off", kLevelOff},
+      // "all" = print everything. It used to map to a level numerically
+      // above fatal, which made WillPrint() reject every message.
+      {"all", kLevelTrace}};
   const std::string_view sv(target);
   auto find = std::find_if(std::begin(level_pairs), std::end(level_pairs),
                            [&sv](const SvLevelPair &pair) { return pair.first == sv; });

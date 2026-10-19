@@ -13,6 +13,10 @@ CpuResourceManagerDefault::CpuResourceManagerDefault(const core::Options &option
     : CpuResourceManager(options) {}
 
 bool CpuResourceManagerDefault::Init() {
+  if (options_.GetCpuLoad() <= 0) {
+    LOG_INFO("CPU module disabled (-l 0)");
+    return false;
+  }
   int count;
   if (options_.GetCpuCount() > 0) {
     count = options_.GetCpuCount();
