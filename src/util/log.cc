@@ -48,8 +48,8 @@ namespace logger_internal {
 
 StderrLogger g_default_stderr_logger;
 Logger *g_default_logger = &g_default_stderr_logger;
-const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ", "<WARN> ",
-                                  "<ERROR>",   "<FATAL>", "<OFF>  "};
+const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ",
+                                  "<WARN> ",   "<ERROR>", "<FATAL>", "<OFF>  "};
 
 void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 
@@ -100,8 +100,13 @@ const char *Logger::GetTimeCString(LogLevel level) {
 bool Logger::SetLevel(const char *target) {
   using SvLevelPair = std::pair<std::string_view, LogLevel>;
   static const SvLevelPair level_pairs[] = {
-      {"trace", kLevelTrace}, {"debug", kLevelDebug}, {"info", kLevelInfo}, {"warn", kLevelWarn},
-      {"error", kLevelError}, {"fatal", kLevelFatal}, {"off", kLevelOff},
+      {"trace", kLevelTrace},
+      {"debug", kLevelDebug},
+      {"info", kLevelInfo},
+      {"warn", kLevelWarn},
+      {"error", kLevelError},
+      {"fatal", kLevelFatal},
+      {"off", kLevelOff},
       // "all" = print everything. It used to map to a level numerically
       // above fatal, which made WillPrint() reject every message.
       {"all", kLevelTrace}};

@@ -114,9 +114,7 @@ TEST(BusyJiffiesTest, HandlesLargeUnsignedValues) {
 // property) but lock in the structural properties: zero maps to zero,
 // monotonicity, linearity, constant scaling, and the exact factor.
 
-TEST(JiffiesToNsTest, ZeroMapsToZero) {
-  EXPECT_EQ(JiffiesToNs(0), 0u);
-}
+TEST(JiffiesToNsTest, ZeroMapsToZero) { EXPECT_EQ(JiffiesToNs(0), 0u); }
 
 TEST(JiffiesToNsTest, MatchesExpectedFactor) {
   const uint64_t hz = util::GetClockTicksPerSecond();

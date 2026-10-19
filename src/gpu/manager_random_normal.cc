@@ -84,10 +84,9 @@ void GpuResourceManagerRandomNormal::GenerateBaseSchedulePoints() {
   // Same construction as the CPU rand_normal scheduler, but every point is
   // capped at 100% of the device; the excess clipped off the peaks is
   // redistributed so the period average still equals options_.GetGpuLoad().
-  base_schedule_points_ =
-      util::BuildNormalSchedulePoints(dist_, kGpuRandNormalSchedulePointCount,
-                                      kGpuRandNormalCdfTarget, options_.GetGpuLoad(),
-                                      kGpuMaxLoadPerDevice);
+  base_schedule_points_ = util::BuildNormalSchedulePoints(
+      dist_, kGpuRandNormalSchedulePointCount, kGpuRandNormalCdfTarget, options_.GetGpuLoad(),
+      kGpuMaxLoadPerDevice);
 }
 
 std::vector<int> GpuResourceManagerRandomNormal::ShuffledPoints() {

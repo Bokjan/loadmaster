@@ -67,10 +67,10 @@ std::optional<uint64_t> ReadBusyJiffies(FILE *fp, const std::vector<bool> *allow
     if (!is_aggregate && std::sscanf(line, "cpu%d", &cpu_id) != 1) {
       return std::nullopt;
     }
-    if (allowed == nullptr ? !is_aggregate
-                           : (is_aggregate || cpu_id < 0 ||
-                              static_cast<size_t>(cpu_id) >= allowed->size() ||
-                              !(*allowed)[cpu_id])) {
+    if (allowed == nullptr
+            ? !is_aggregate
+            : (is_aggregate || cpu_id < 0 || static_cast<size_t>(cpu_id) >= allowed->size() ||
+               !(*allowed)[cpu_id])) {
       continue;
     }
     ProcStatFields f{};
@@ -80,8 +80,8 @@ std::optional<uint64_t> ReadBusyJiffies(FILE *fp, const std::vector<bool> *allow
     // guest / guest_nice may be absent on old kernels; the first eight
     // fields are always present.
     if (fields == nullptr ||
-        std::sscanf(fields, kFieldsFormat, &f.user, &f.nice, &f.system, &f.idle, &f.iowait,
-                    &f.irq, &f.softirq, &f.steal, &f.guest, &f.guest_nice) < 8) {
+        std::sscanf(fields, kFieldsFormat, &f.user, &f.nice, &f.system, &f.idle, &f.iowait, &f.irq,
+                    &f.softirq, &f.steal, &f.guest, &f.guest_nice) < 8) {
       return std::nullopt;
     }
     total += BusyJiffies(f);

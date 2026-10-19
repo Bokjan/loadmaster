@@ -54,7 +54,9 @@ class FakeDevice final : public GpuDevice {
 
 class GpuWorkerTest : public ::testing::Test {
  protected:
-  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff); }
+  void SetUp() override {
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff);
+  }
   void TearDown() override {
     util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelWarn);
   }
@@ -97,8 +99,8 @@ TEST_F(GpuWorkerTest, WorkerGivesUpAfterConsecutiveFailures) {
   ctx.SetLoadSet(1);
   ctx.Start();
   // kGpuMaxConsecutiveFailures retries, one per period, then it stops.
-  std::this_thread::sleep_for(std::chrono::milliseconds(
-      (kGpuMaxConsecutiveFailures + 10) * kScheduleIntervalMS));
+  std::this_thread::sleep_for(
+      std::chrono::milliseconds((kGpuMaxConsecutiveFailures + 10) * kScheduleIntervalMS));
   const int failures = raw->failures_.load();
   std::this_thread::sleep_for(std::chrono::milliseconds(3 * kScheduleIntervalMS));
   EXPECT_EQ(raw->failures_.load(), failures) << "worker kept retrying";

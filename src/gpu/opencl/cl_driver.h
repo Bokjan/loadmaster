@@ -57,8 +57,8 @@ constexpr cl_uint CL_DEVICE_NAME = 0x102B;
 constexpr cl_uint CL_DEVICE_VENDOR = 0x102C;
 constexpr cl_uint CL_PLATFORM_NAME = 0x0902;
 constexpr cl_uint CL_PROGRAM_BUILD_LOG = 0x1183;
-constexpr cl_uint CL_DEVICE_MAX_MEM_ALLOC_SIZE = 0x1010;   // cl_ulong
-constexpr cl_uint CL_KERNEL_WORK_GROUP_SIZE = 0x11B0;      // size_t
+constexpr cl_uint CL_DEVICE_MAX_MEM_ALLOC_SIZE = 0x1010;  // cl_ulong
+constexpr cl_uint CL_KERNEL_WORK_GROUP_SIZE = 0x11B0;     // size_t
 // Device identity, used to spot one GPU exposed by two ICDs. Both are
 // extensions; drivers without them return an error and we skip the check.
 constexpr cl_uint CL_DEVICE_UUID_KHR = 0x106A;          // cl_uchar[16], cl_khr_device_uuid

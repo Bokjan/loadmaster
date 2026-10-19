@@ -49,8 +49,8 @@ bool CpuResourceManagerRandomNormal::Init() {
   if (max_load > count * kCpuMaxLoadPerCore) {
     // Explicit -c too small for the peaks: they would be silently capped
     // and the period average would fall short of -l.
-    LOG_ERROR("rand_normal peak load=%d is unreachable with -c %d (avg target=%d)", max_load,
-              count, options_.GetCpuLoad());
+    LOG_ERROR("rand_normal peak load=%d is unreachable with -c %d (avg target=%d)", max_load, count,
+              options_.GetCpuLoad());
     return false;
   }
   // Shuffle once before the first scheduling tick so the first 10-minute
@@ -89,9 +89,9 @@ void CpuResourceManagerRandomNormal::IncreasePointIndex() {
 
 void CpuResourceManagerRandomNormal::UpdateLoadTarget(TimePoint time_point) {
   if (load_target_started_) {
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                time_point - last_load_target_change_)
-                                .count();
+    const auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point - last_load_target_change_)
+            .count();
     if (elapsed_ms < kCpuRandNormalScheduleIntervalMS) {
       return;
     }

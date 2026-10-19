@@ -106,15 +106,9 @@ bool DoLoad() {
   //              packages, so the SONAMEs are listed too.
   static const char *const kHipCandidates[] = {
 #if IS_WINDOWS
-      "amdhip64_7.dll",
-      "amdhip64_6.dll",
-      "amdhip64_5.dll",
-      "amdhip64.dll",
+      "amdhip64_7.dll", "amdhip64_6.dll", "amdhip64_5.dll", "amdhip64.dll",
 #else
-      "libamdhip64.so",
-      "libamdhip64.so.7",
-      "libamdhip64.so.6",
-      "libamdhip64.so.5",
+      "libamdhip64.so", "libamdhip64.so.7", "libamdhip64.so.6", "libamdhip64.so.5",
 #endif
       nullptr,
   };
@@ -124,10 +118,7 @@ bool DoLoad() {
       "hiprtc0604.dll", "hiprtc0603.dll", "hiprtc0602.dll", "hiprtc0601.dll", "hiprtc0600.dll",
       "hiprtc0507.dll", "hiprtc0505.dll", "hiprtc.dll",
 #else
-      "libhiprtc.so",
-      "libhiprtc.so.7",
-      "libhiprtc.so.6",
-      "libhiprtc.so.5",
+      "libhiprtc.so", "libhiprtc.so.7", "libhiprtc.so.6", "libhiprtc.so.5",
 #endif
       nullptr,
   };

@@ -69,8 +69,7 @@ std::string DeviceIdentity(const ClApi *api, cl_device_id device) {
     return buf;
   }
   unsigned char uuid[16] = {};
-  if (api->clGetDeviceInfo(device, CL_DEVICE_UUID_KHR, sizeof(uuid), uuid, nullptr) ==
-      CL_SUCCESS) {
+  if (api->clGetDeviceInfo(device, CL_DEVICE_UUID_KHR, sizeof(uuid), uuid, nullptr) == CL_SUCCESS) {
     std::string id = "uuid:";
     for (unsigned char b : uuid) {
       char hex[3];
@@ -264,8 +263,7 @@ bool OpenClDevice::AllocateMemory(std::size_t bytes) {
   // large `-gm` used to fail outright; allocate it in chunks instead.
   std::size_t remaining = bytes;
   while (remaining > 0) {
-    const std::size_t chunk =
-        static_cast<std::size_t>(std::min<cl_ulong>(remaining, max_alloc));
+    const std::size_t chunk = static_cast<std::size_t>(std::min<cl_ulong>(remaining, max_alloc));
     cl_int rc = CL_SUCCESS;
     cl_mem buf = api_->clCreateBuffer(context_, CL_MEM_READ_WRITE, chunk, nullptr, &rc);
     if (rc != CL_SUCCESS || buf == nullptr) {

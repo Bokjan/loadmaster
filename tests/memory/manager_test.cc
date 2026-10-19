@@ -30,7 +30,9 @@ using std::chrono::seconds;
 
 class MemoryManagerTest : public ::testing::Test {
  protected:
-  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff); }
+  void SetUp() override {
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff);
+  }
   void TearDown() override {
     util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelWarn);
   }

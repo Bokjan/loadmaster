@@ -121,10 +121,9 @@ DlHandle DlopenAny(const char *const *names) {
     // room left means the path was truncated, so don't load it.
     char abs_path[MAX_PATH];
     const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));
-    const int written =
-        (n > 0 && n < sizeof(abs_path))
-            ? std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name)
-            : -1;
+    const int written = (n > 0 && n < sizeof(abs_path))
+                            ? std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name)
+                            : -1;
     if (written > 0 && static_cast<size_t>(written) < sizeof(abs_path) - n) {
       h = ::LoadLibraryExA(abs_path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
       if (h != nullptr) {

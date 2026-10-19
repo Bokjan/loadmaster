@@ -124,7 +124,8 @@ void GpuWorkerContext::AdaptBaseLoopCount(int target_ms, double elapsed_ms) {
   if (std::abs(ratio - 1.0) < kGpuAdaptDeadband) {
     return;
   }
-  const double next = static_cast<double>(base_loop_count_) * (1.0 + kGpuAdaptSmoothing * (ratio - 1.0));
+  const double next =
+      static_cast<double>(base_loop_count_) * (1.0 + kGpuAdaptSmoothing * (ratio - 1.0));
   const int new_count =
       static_cast<int>(std::clamp(next, 1.0, static_cast<double>(kGpuKernelLoopBaseMax)));
   LOG_TRACE("gpu worker id=%d: %.1f ms for a %d ms budget, base_loop_count %d -> %d", id_,

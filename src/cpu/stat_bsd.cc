@@ -64,7 +64,7 @@ namespace {
 // changing it would break every existing top(1) / vmstat(1) / etc.
 constexpr std::size_t kCpStateUser = 0;
 constexpr std::size_t kCpStateNice = 1;
-constexpr std::size_t kCpStateSys  = 2;
+constexpr std::size_t kCpStateSys = 2;
 constexpr std::size_t kCpStateIntr = 3;
 constexpr std::size_t kCpStateIdle = 4;
 constexpr std::size_t kCpuStateCount = 5;
@@ -120,10 +120,8 @@ std::optional<uint64_t> ReadSystemBusyTicks() {
   // the others makes the layout self-documenting.
   (void)kCpStateIdle;
   const uint64_t busy_jiffies =
-      static_cast<uint64_t>(cp_time[kCpStateUser]) +
-      static_cast<uint64_t>(cp_time[kCpStateNice]) +
-      static_cast<uint64_t>(cp_time[kCpStateSys])  +
-      static_cast<uint64_t>(cp_time[kCpStateIntr]);
+      static_cast<uint64_t>(cp_time[kCpStateUser]) + static_cast<uint64_t>(cp_time[kCpStateNice]) +
+      static_cast<uint64_t>(cp_time[kCpStateSys]) + static_cast<uint64_t>(cp_time[kCpStateIntr]);
   return busy_jiffies;
 }
 
