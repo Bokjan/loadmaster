@@ -14,6 +14,14 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   explicit MemoryResourceManagerDefault(const core::Options &options);
   ~MemoryResourceManagerDefault() override;
 
+  // Observers for logging and tests. Main thread only, and only meaningful
+  // while no background allocation is in flight.
+  size_t BlockBytes() const { return allocator_.Size(); }
+  int ScheduledAllocations() const { return scheduled_allocations_; }
+  // True from spawning a background allocation until a later Schedule()
+  // tick has reaped (joined) it.
+  bool AllocationInFlight() const { return bg_alloc_thread_.joinable(); }
+
  protected:
   void Schedule(TimePoint time_point) override;
 
@@ -34,6 +42,7 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   // first tick allocates immediately; afterwards every reschedule (also a
   // retry after a failed allocation) waits kMemoryScheduleIntervalSecond.
   bool has_scheduled_ = false;
+  int scheduled_allocations_ = 0;
   TimePoint last_scheduling_;
 
   // Returns true once a background fill has finished (and joins it), or

@@ -50,6 +50,22 @@ endif()
 
 include(GoogleTest)
 
+# The platform process-stat backend (util::ProcStat) plus its helpers.
+if(WIN32)
+    set(LOADMASTER_TEST_PROC_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_windows.cc)
+elseif(APPLE)
+    set(LOADMASTER_TEST_PROC_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_macos.cc)
+elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+    set(LOADMASTER_TEST_PROC_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_bsd.cc)
+else()
+    set(LOADMASTER_TEST_PROC_STAT_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/util/proc_stat_linux.cc
+        ${CMAKE_SOURCE_DIR}/src/util/clock.cc)
+endif()
+
 # The platform CPU-stat backend (cpu::CoreCount / ReadSystemBusyNs) plus
 # what it depends on, for tests whose code under test calls CoreCount().
 if(WIN32)
@@ -140,6 +156,14 @@ loadmaster_add_test(util_normal_schedule_test
 loadmaster_add_test(util_obfuscate_test
     util/obfuscate_test.cc
 )
+target_compile_definitions(util_obfuscate_test PRIVATE LOADMASTER_OBFUSCATE=1)
+
+# Same source with obfuscation disabled (-DLOADMASTER_OBFUSCATE=OFF builds):
+# Encode / Decode must degrade to the identity and still round-trip.
+loadmaster_add_test(util_obfuscate_off_test
+    util/obfuscate_test.cc
+)
+target_compile_definitions(util_obfuscate_off_test PRIVATE LOADMASTER_OBFUSCATE=0)
 
 # util::TicksToNs (all platforms, pure arithmetic) and the POSIX-only
 # util::GetClockTicksPerSecond; the latter's cases are guarded by
@@ -179,6 +203,14 @@ loadmaster_add_test(util_proc_stat_internal_test
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
+# util::ProcStat against this process's real CPU time (burn, then idle).
+loadmaster_add_test(util_proc_stat_test
+    util/proc_stat_test.cc
+    ${CMAKE_SOURCE_DIR}/src/util/proc_stat.cc
+    ${CMAKE_SOURCE_DIR}/src/util/log.cc
+    ${LOADMASTER_TEST_PROC_STAT_SOURCES}
+)
+
 # ---- core ----
 loadmaster_add_test(core_options_test
     core/options_test.cc
@@ -189,9 +221,10 @@ loadmaster_add_test(core_options_test
 
 # SignalFlag is a header-only singleton wrapper around AtomicBitmap.
 # AtomicBitmap's bit-level semantics are covered separately; this test
-# pins the singleton contract and that Set/Has/Reset forward the
-# signal *number* as a mask (not a bit index) -- the invariant the
-# main loop relies on when polling for SIGINT / SIGTERM.
+# pins the singleton contract and that each signal number maps to its own
+# bit (1 << signal), so handling one signal never clears another's
+# pending bit -- the invariant the main loop relies on when polling for
+# SIGINT / SIGTERM.
 loadmaster_add_test(core_signal_flag_test
     core/signal_flag_test.cc
 )
@@ -267,13 +300,41 @@ loadmaster_add_test(gpu_worker_test
     ${CMAKE_SOURCE_DIR}/src/util/log.cc
 )
 
+# The CMake-side XOR encoder for busy_kernel.spv must agree with
+# util::obfuscate and with the key in spirv_kernel.h. Compiled with the
+# same LOADMASTER_OBFUSCATE value and generated include dir as the binary.
+loadmaster_add_test(gpu_spirv_embed_test
+    gpu/spirv_embed_test.cc
+)
+target_include_directories(gpu_spirv_embed_test PRIVATE ${CMAKE_BINARY_DIR}/src/generated)
+if(LOADMASTER_OBFUSCATE)
+    target_compile_definitions(gpu_spirv_embed_test PRIVATE LOADMASTER_OBFUSCATE=1)
+else()
+    target_compile_definitions(gpu_spirv_embed_test PRIVATE LOADMASTER_OBFUSCATE=0)
+endif()
+target_compile_definitions(gpu_spirv_embed_test PRIVATE
+    LOADMASTER_SPIRV_SOURCE="${CMAKE_SOURCE_DIR}/src/gpu/intel/busy_kernel.spv")
+
 # ---- memory ----
 # Allocator is the RAII block holder used by the memory subsystem.
 # We pin the externally observable contract (empty / non-empty
-# transitions, move semantics, FillXor guard); byte-level FillXor
-# correctness is left to ASAN/UBSAN runs of the suite since the
+# transitions, move semantics, Fill guard); out-of-bounds / leak checks
+# of the byte loop come from `run_tests.sh --sanitize` runs, since the
 # class exposes no buffer getter to peek at.
 loadmaster_add_test(memory_allocator_test
     memory/allocator_test.cc
     ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
+)
+
+# MemoryResourceManagerDefault scheduling: block size range / alignment,
+# the 45 s cadence, and that it keeps rescheduling after a background
+# (>= 32 MiB) allocation. Time is injected; no 45 s waits.
+loadmaster_add_test(memory_manager_test
+    memory/manager_test.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/manager_default.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/manager.cc
+    ${CMAKE_SOURCE_DIR}/src/memory/allocator.cc
+    ${CMAKE_SOURCE_DIR}/src/core/options.cc
+    ${CMAKE_SOURCE_DIR}/src/util/log.cc
+    ${LOADMASTER_TEST_CPU_STAT_SOURCES}
 )

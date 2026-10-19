@@ -21,8 +21,8 @@
 // minutes of static analysis", which is exactly what we want.
 //
 // Toggle: define LOADMASTER_OBFUSCATE to 0 at build time (CMake
-// `-DLOADMASTER_OBFUSCATE_KERNELS=OFF`, kept under the historical
-// option name for backwards compatibility) to make Encode / Decode /
+// `-DLOADMASTER_OBFUSCATE=OFF`; the historical name
+// LOADMASTER_OBFUSCATE_KERNELS is still accepted) to make Encode / Decode /
 // DecodeBytes behave as the identity. Useful when bisecting a kernel
 // build / JIT failure: the embedded strings are then identical to
 // what you see in the .h file, so `cuobjdump` / `spirv-dis` / Metal
@@ -167,7 +167,10 @@ inline void DecodeBytes(const std::uint8_t *src, std::size_t size, std::uint32_t
   }
 #else
   (void)key;
-  std::memcpy(dst, src, size);
+  // memcpy with null pointers is UB even for size 0.
+  if (size > 0) {
+    std::memcpy(dst, src, size);
+  }
 #endif
 }
 

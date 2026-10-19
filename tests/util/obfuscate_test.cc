@@ -20,6 +20,12 @@
 //     pattern spotting on long stretches of repeated characters in
 //     PTX / SPIR-V sources.
 //   * Scoped / ScopedHolder hand back the plaintext via `c_str()`.
+//
+// This file is built twice: util_obfuscate_test with the default
+// LOADMASTER_OBFUSCATE=1 and util_obfuscate_off_test with
+// LOADMASTER_OBFUSCATE=0, so the identity configuration used for kernel
+// debugging is compiled and checked too. The "ciphertext differs" cases
+// only apply to the first.
 
 #include "util/obfuscate.h"
 
@@ -70,6 +76,7 @@ TEST(MixByteTest, IsSelfInverse) {
   }
 }
 
+#if LOADMASTER_OBFUSCATE
 TEST(MixByteTest, DependsOnIndex) {
   // Index-mixing must actually contribute. Two adjacent indices with
   // the same input and same key should produce different output for
@@ -88,7 +95,9 @@ TEST(MixByteTest, DependsOnIndex) {
   // every byte differs; require at least most of them.
   EXPECT_GE(differ, 200);
 }
+#endif  // LOADMASTER_OBFUSCATE
 
+#if LOADMASTER_OBFUSCATE
 TEST(MixByteTest, DependsOnKey) {
   // Different keys must produce different ciphertext for at least
   // some bytes at the same index. Otherwise per-payload keys are
@@ -102,6 +111,19 @@ TEST(MixByteTest, DependsOnKey) {
   }
   EXPECT_EQ(differ, 256);  // 0xAA ^ 0x55 = 0xFF -> every byte flips
 }
+#endif  // LOADMASTER_OBFUSCATE
+
+#if !LOADMASTER_OBFUSCATE
+TEST(MixByteTest, IsIdentityWhenDisabled) {
+  for (std::size_t i = 0; i < 8; ++i) {
+    for (int b = 0; b < 256; ++b) {
+      EXPECT_EQ(MixByte(static_cast<std::uint8_t>(b), 0xDEADBEEFu, i), b);
+    }
+  }
+  constexpr auto encoded = Encode("loadmaster", 0xA8B14F62u);
+  EXPECT_EQ(std::string(encoded.begin(), encoded.end()), "loadmaster");
+}
+#endif  // !LOADMASTER_OBFUSCATE
 
 // ---- Encode / Decode round-trip ------------------------------------------
 
@@ -112,6 +134,7 @@ TEST(EncodeDecodeTest, RoundTripsAsciiLiteral) {
   EXPECT_EQ(DecodeToString(encoded, kKey), "hello");
 }
 
+#if LOADMASTER_OBFUSCATE
 TEST(EncodeDecodeTest, EncodedDiffersFromPlaintext) {
   // The whole point of the layer: encoded bytes must NOT match the
   // plaintext byte-for-byte. If they do, the build flipped
@@ -130,6 +153,7 @@ TEST(EncodeDecodeTest, EncodedDiffersFromPlaintext) {
   // bytes identical" -- that's the identity transform.
   EXPECT_LT(same, static_cast<int>(encoded.size()));
 }
+#endif  // LOADMASTER_OBFUSCATE
 
 TEST(EncodeDecodeTest, RoundTripsAcrossManyKeys) {
   // Sample a spread of keys; for each, encode + decode and check
@@ -143,6 +167,7 @@ TEST(EncodeDecodeTest, RoundTripsAcrossManyKeys) {
   }
 }
 
+#if LOADMASTER_OBFUSCATE
 TEST(EncodeDecodeTest, WrongKeyDoesNotRecoverPlaintext) {
   constexpr std::uint32_t kRight = 0x12345678u;
   constexpr std::uint32_t kWrong = 0x12345679u;  // differ in low byte
@@ -151,7 +176,9 @@ TEST(EncodeDecodeTest, WrongKeyDoesNotRecoverPlaintext) {
   Decode(encoded, kWrong, decoded);
   EXPECT_STRNE(decoded, "loadmaster");
 }
+#endif  // LOADMASTER_OBFUSCATE
 
+#if LOADMASTER_OBFUSCATE
 TEST(EncodeDecodeTest, IndexMixingBreaksIdenticalByteRuns) {
   // A long run of identical bytes should NOT encode to a long run of
   // identical ciphertext bytes. This is the property that makes a
@@ -172,6 +199,7 @@ TEST(EncodeDecodeTest, IndexMixingBreaksIdenticalByteRuns) {
   // exact key.
   EXPECT_GE(distinct, 4);
 }
+#endif  // LOADMASTER_OBFUSCATE
 
 // ---- Empty / single-byte payloads ----------------------------------------
 
@@ -235,9 +263,13 @@ TEST(MakeHolderTest, ProducesEncodedBytesAndKey) {
   static_assert(h.data.size() == 10, "10 chars without NUL");
   static_assert(h.kSize == 10);
   EXPECT_EQ(h.key, 0xA8B14F62u);
+#if LOADMASTER_OBFUSCATE
   // The encoded data should differ from the literal (same property
   // as EncodedDiffersFromPlaintext above; locks in the bundling).
   EXPECT_NE(std::memcmp(h.data.data(), "loadmaster", 10), 0);
+#else
+  EXPECT_EQ(std::memcmp(h.data.data(), "loadmaster", 10), 0);
+#endif
 }
 
 TEST(ScopedTest, DecodesAndExposesCString) {

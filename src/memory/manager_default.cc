@@ -61,6 +61,7 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
   }
 
   has_scheduled_ = true;
+  ++scheduled_allocations_;
   last_scheduling_ = time_point;
 }
 

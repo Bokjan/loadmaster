@@ -92,19 +92,28 @@ same MIBs but their `kinfo_proc` layout differs; see comments in
 
 # Workload
 ## CPU
-- Load range is [0, 100] (each core)
+- Load is in "percent of one core" units: 100 per core, so a fully busy
+  4-core machine is 400. Valid range is `0` to `100 x threads`, where threads
+  is `-c` or, without it, the number of CPUs this process may use (on Linux
+  this honours `taskset` / cpusets and a cgroup v2 `cpu.max` quota). `-l 0`
+  disables the CPU module.
 - Scheduling interval is 100 milliseconds (`kScheduleIntervalMS`)
 - Each scheduling tick estimates the load contributed by *other* processes and
-  adjusts our target so the *total* system load tends toward the requested value.
+  adjusts ours so the *total* load tends toward the requested value (a
+  feedforward term plus a small integral correction, see
+  `src/cpu/load_controller.h`). On Linux, when the process is restricted to a
+  subset of CPUs, "total" means the total over those CPUs.
 - Specify target load by `-l <load>`; default: 200 (`kDefaultCpuLoad`)
 - Specify target worker thread number by `-c <count>`; default: minimum required by load
 - Specify target scheduling algorithm (described below) by `-ca <algorithm>`
 ### Default Scheduler
 - Try to dispatch target load to each worker thread uniformly
 ### Random Normal Scheduler
-- Worker thread load changes every 10 seconds
-- Average load over 5 minutes is the specified value
-- Normal distribution is used in load calculation
+- Target load changes every 10 seconds
+- Average load over each 10-minute period (60 points) is exactly the specified
+  value
+- The points follow a normal distribution (the central 95%, about 0.24x to
+  1.65x of the average); `-c` must leave room for the peak
 
 ## Memory
 This module is disabled by default. Use `-m <memory_mib>` to specify an extra
@@ -112,7 +121,7 @@ memory usage, then this process won't look so weird.
 ### Default Scheduler
 - Memory usage changes every 45 seconds (`kMemoryScheduleIntervalSecond`)
 - Range: `memory_mib` * `rand(kMemoryMinimumRatio, 1.0)`, 4 KiB aligned
-- Each new block is overwritten (XOR-fill) to force physical commit.
+- Each new block is fully written once to force physical commit.
 - When the new block size is >= 32 MiB (`kMemoryNoThreadSpawnThresholdMiB`), the
   allocate-and-fill work is done in a one-shot background thread so the main
   scheduling loop never blocks on a large `memset`/page-fault storm.
@@ -123,25 +132,33 @@ Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 - `-g  <load>`     per-device compute load in `[0, 100]`. 0 means disabled.
 - `-gm <mib>`      per-device device-memory load in MiB. 0 means no extra memory.
 - `-gi <indices>`  comma-separated device indices, e.g. `0`, `0,2,3`, or `all`
-                   (default).
+                   (default). Indices are local to the backend in use;
+                   indices that don't exist are reported.
 - `-gv <vendor>`   `auto` (default), `nvidia`, `amd`, `intel`, `opencl`,
                    or `apple`. `auto` prefers Apple Metal on macOS,
                    otherwise tries NVIDIA -> AMD (HIP) -> Intel
-                   (Level Zero) -> OpenCL. The OpenCL fallback is what
-                   covers Intel iGPUs without Level Zero and AMD APU
-                   iGPUs (which ROCm/HIP can't drive).
+                   (Level Zero) -> OpenCL and uses the first backend that
+                   has any device (even if `-gi` selects none of them).
+                   The OpenCL fallback is what covers Intel iGPUs without
+                   Level Zero and AMD APU iGPUs (which ROCm/HIP can't
+                   drive).
 - `-ga <algo>`     `default` (default) or `rand_normal`. With `rand_normal`
                    each device independently walks a shuffled
                    normal-distribution-shaped load schedule, so the
-                   *5-minute average* matches `-g <load>` while the
+                   *10-minute average* matches `-g <load>` while the
                    instantaneous load fluctuates and multi-GPU hosts
-                   don't all spike in lockstep.
+                   don't all spike in lockstep. Points are capped at
+                   100%; what the cap clips off the peaks is spread over
+                   the other points, so the average still holds.
 
 Each selected device gets its own worker thread that runs the same busy/sleep
 pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker
 launches a busy kernel sized to occupy `load%` of the period, then sleeps for
-the remainder. A one-time calibration probe at startup tunes the per-thread
-loop count to the actual device.
+the remainder (the host thread sleeps while the kernel runs; it does not spin).
+A calibration at startup tunes the per-thread loop count to the actual device
+and is then continuously corrected for clock boost / throttling. A device whose
+kernel can't run is dropped at startup, and one that fails 50 launches in a
+row is given up.
 
 ### Runtime dependencies
 On Linux and Windows the GPU module is fully **runtime-loaded** via
@@ -178,7 +195,13 @@ itself; other modules (CPU/memory) still run normally.
   tested by us.
 - On Windows, vendor-specific DLLs ship with the corresponding driver
   install (`nvcuda.dll`, `amdhip64*.dll` + `hiprtc*.dll`,
-  `ze_loader.dll`); `OpenCL.dll` is part of the OS itself.
+  `ze_loader.dll`); `OpenCL.dll` is part of the OS itself. They are looked up
+  in `System32` and then in the absolute directories on `PATH` (HIP SDK) --
+  never in the current directory or next to `loadmaster.exe`.
+- A GPU exposed by two OpenCL drivers (e.g. Mesa rusticl alongside ROCm or
+  Intel NEO) is only used once, when the drivers report its PCI address or
+  UUID. Large `-gm` values are allocated in chunks on OpenCL and Level Zero,
+  whose single allocations are capped (often to a quarter of VRAM / ~4 GiB).
 - On macOS the only supported GPU backend is Apple Metal (`-gv apple`,
   also picked by `-gv auto`). NVIDIA / AMD compute stacks have never
   been or are no longer available on Darwin. The Metal backend works on
@@ -187,6 +210,17 @@ itself; other modules (CPU/memory) still run normally.
 - On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>`
   reserves that many MiB of physical memory rather than dedicated VRAM.
   Plan accordingly when running with `-gm` and a large `-m`.
+
+# Exit status & signals
+- Exit status is `0` after a normal run stopped by a signal (or `-h` / `-v`),
+  and non-zero for invalid arguments or when no module could be enabled (for
+  example `-l 0` without `-m` / `-g`, or a GPU-only run on a host without a
+  usable GPU).
+- `SIGINT` / `SIGTERM` stop loadmaster cleanly on POSIX. On Windows, Ctrl-C,
+  Ctrl-Break, closing the console window, logoff and shutdown all request a
+  clean stop.
+- `-L <level>` picks the log level: `trace`, `debug`, `info`, `warn` (default),
+  `error`, `fatal`, `off`; `all` is an alias for `trace`.
 
 # Usage Sample
 ```bash

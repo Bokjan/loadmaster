@@ -16,6 +16,7 @@ class Allocator final {
   // seed-derived pattern. No-op on an empty allocator.
   void Fill(std::byte seed);
   bool IsEmpty() const { return size_ == 0 && block_ptr_ == nullptr; }
+  size_t Size() const { return size_; }
 
  private:
   size_t size_;

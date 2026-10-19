@@ -15,6 +15,7 @@ scripts/run_tests.sh                  # Debug build, all tests
 scripts/run_tests.sh --filter 'Cli.*' # narrow to a subset
 scripts/run_tests.sh --release        # Release build
 scripts/run_tests.sh --clean          # wipe build_tests/ first
+scripts/run_tests.sh --sanitize       # ASan + UBSan, in build_tests_sanitize/
 scripts/run_tests.sh --help           # full option list
 ```
 
@@ -36,8 +37,8 @@ cmake -S . -B build_tests -DLOADMASTER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
 # 2. Build.
 cmake --build build_tests -j
 
-# 3. Run via CTest.
-ctest --test-dir build_tests --output-on-failure
+# 3. Run via CTest (from the build dir; `--test-dir` needs CMake 3.20).
+cd build_tests && ctest --output-on-failure
 ```
 
 GoogleTest itself is fetched and built on the first configure via
@@ -59,19 +60,35 @@ GoogleTest flags:
 
 ```
 tests/
-├── CMakeLists.txt              # one entry point, declares every test binary
-├── README.md                   # this file
+├── CMakeLists.txt                  # one entry point, declares every test binary
+├── README.md                       # this file
 ├── cli/
-│   └── cli_test.cc             # argv -> Options end-to-end
+│   ├── cli_test.cc                 # argv -> Options end-to-end, strict integers
+│   └── version_string_test.cc      # compile-time version string
 ├── core/
-│   └── options_test.cc         # CLI argument validation matrix
+│   ├── options_test.cc             # CLI argument validation matrix
+│   └── signal_flag_test.cc         # one bit per signal, singleton
 ├── cpu/
-│   └── stat_test.cc            # GetBusyTicks / TicksToMilliseconds
+│   ├── critical_loop_test.cc       # busy loop is not optimised away
+│   ├── load_controller_test.cc     # controller vs. a simulated system
+│   └── stat_test.cc                # Linux: busy jiffies, per-CPU /proc/stat, cgroup cpu.max
+├── gpu/
+│   ├── spirv_embed_test.cc         # CMake SPIR-V encoder vs. util::obfuscate
+│   └── worker_test.cc              # calibration / failure handling, fake device
+├── memory/
+│   ├── allocator_test.cc           # RAII block holder
+│   └── manager_test.cc             # size range, 45 s cadence, background path
 └── util/
     ├── atomic_bitmap_test.cc
-    ├── rolling_sampler_test.cc
+    ├── clock_test.cc               # TicksToNs, GetClockTicksPerSecond
+    ├── dl_test.cc                  # loader failure paths
     ├── normal_dist_test.cc
-    └── proc_stat_internal_test.cc   # Linux-only; fmemopen-backed fixtures
+    ├── normal_schedule_test.cc     # rand_normal points: exact average, 100% cap
+    ├── obfuscate_test.cc           # built twice: obfuscation on and off
+    ├── proc_stat_internal_test.cc  # Linux: /proc/<pid>/stat parser
+    ├── proc_stat_test.cc           # this process's real CPU time
+    ├── rolling_sampler_test.cc
+    └── win_util_test.cc            # Windows: FILETIME helper
 ```
 
 The directory structure mirrors `src/`: a test for `src/<module>/foo.h`
@@ -81,30 +98,31 @@ lives at `tests/<module>/foo_test.cc`.
 
 This project is a workload generator, so most code is intentionally
 side-effectful (busy loops, allocations, `dlopen` of vendor drivers).
-The test suite deliberately focuses on the **pure-logic core** that is
-deterministic, hardware-independent, and runnable on any CI worker:
+The suite covers the logic that decides *how much* load to generate and
+the parsing / unit conversion it depends on, using injected time,
+simulated systems and fake devices where real ones would be slow or
+unavailable:
 
 **In scope**
 
-- `util/`: math, ring buffers, bitmaps, parsing helpers
-- `core/options`: CLI argument validation and translation
-- `cli/cli`: top-level argument parser
-- `cpu/stat`: `/proc/stat`-style delta computation, fed with synthetic
-  snapshots
-- `cpu/manager_random_normal`: load-distribution math built on top of
-  `util::NormalDistribution`
+- `util/`: math, ring buffers, bitmaps, unit conversion, parsing helpers,
+  the rand_normal schedule, obfuscation, the shared-library loader's
+  failure paths, process CPU accounting
+- `core/options`, `cli/cli`: CLI parsing and validation
+- `cpu/`: system-stat parsing, the load controller, the busy loop
+- `memory/`: the allocator and the manager's scheduling
+- `gpu/`: the worker's calibration / failure handling and the SPIR-V
+  embedding
 
 **Out of scope (by design)**
 
-- The actual CPU busy loops (`cpu/critical_loop`, `cpu/worker`): timing
-  sensitive, not meaningfully testable without flakiness.
-- Real memory allocation / XOR-fill (`memory/`): integration territory.
-- GPU backends (`gpu/nvidia`, `gpu/amd`, `gpu/apple`): require vendor
-  drivers and physical devices; CI workers do not have these. If
-  needed, mock the `gpu::Device` interface and test `gpu::Manager` in
-  isolation.
-- Logger and dynamic-loader plumbing (`util/log`, `util/dl`): pure
-  side effects, low regression risk.
+- End-to-end load accuracy on real hardware (it depends on the host);
+  check it manually, e.g. by comparing `-l` with `/proc/stat`.
+- The vendor GPU backends themselves (`gpu/nvidia`, `gpu/amd`,
+  `gpu/intel`, `gpu/opencl`, `gpu/apple`): they need drivers and
+  physical devices that CI workers don't have.
+- Platform stat backends other than the host's: each platform's
+  `ReadSystemBusyNs` / `ProcStat` only builds there.
 
 ## Adding a new test
 
@@ -124,9 +142,8 @@ deterministic, hardware-independent, and runnable on any CI worker:
 3. Inside the test file, include the header by its in-`src/` path
    (e.g. `#include "util/my_thing.h"`); the test target already adds
    `src/` to its include directories.
-4. Reconfigure (`cmake -B build_tests ...`) once so CMake picks up the
-   new file, then `cmake --build build_tests -j && ctest --test-dir
-   build_tests`.
+4. Re-run `scripts/run_tests.sh` (it re-configures, so CMake picks up
+   the new file).
 
 ## Style
 
@@ -152,13 +169,17 @@ deterministic, hardware-independent, and runnable on any CI worker:
   complicate the FetchContent cache. If you need to test code that is
   sensitive to CRT flavor, build the test binary separately with the
   matching runtime.
-- Tests that touch Linux-specific surfaces (e.g. `/proc/stat` parsing)
-  are guarded with `#if defined(__linux__)` so non-Linux CI workers
-  silently skip them.
+- Tests that touch platform-specific surfaces (e.g. `/proc/stat` parsing)
+  are guarded with `#if IS_LINUX` / `IS_WINDOWS` from `core/platform.h`.
+  Include that header explicitly: an undefined `IS_*` macro evaluates to 0
+  and would silently compile the suite away, which is why the build uses
+  `-Werror=undef`.
 
 ## IDE setup
 
-The top-level `CMakeLists.txt` sets `CMAKE_EXPORT_COMPILE_COMMANDS=ON`,
+The top-level `CMakeLists.txt` defaults `CMAKE_EXPORT_COMPILE_COMMANDS` to `ON`
+(and mirrors the file into the source root unless
+`LOADMASTER_LINK_COMPILE_COMMANDS=OFF`),
 so configuring with `LOADMASTER_BUILD_TESTS=ON` produces
 `build_tests/compile_commands.json` that includes GoogleTest's header
 paths. Point your editor at it (VSCode C/C++: `"compileCommands":
