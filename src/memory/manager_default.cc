@@ -24,12 +24,14 @@ MemoryResourceManagerDefault::~MemoryResourceManagerDefault() {
 }
 
 void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
-  if (!WillSchedule(time_point)) {
+  // Skip scheduling if a previous background fill is still in flight. This
+  // must come before WillSchedule() so the main thread never inspects state
+  // the background thread may be writing.
+  if (!ReapBackgroundThread()) {
+    LOG_TRACE("background allocate-and-fill still running, skipping this tick");
     return;
   }
-  // Skip scheduling if a previous background fill is still in flight.
-  if (bg_alloc_thread_.joinable()) {
-    LOG_TRACE("background allocate-and-fill still running, skipping this tick");
+  if (!WillSchedule(time_point)) {
     return;
   }
 
@@ -49,17 +51,34 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
     // Spawn a one-shot background thread to allocate + fill the block,
     // so the main scheduling loop is not blocked on a potentially long
     // memset/page-fault storm.
-    bg_alloc_thread_ = std::jthread(
-        [this, byte_count, seed](std::stop_token) { AllocateAndFill(byte_count, seed); });
+    bg_alloc_done_.store(false, std::memory_order_relaxed);
+    bg_alloc_thread_ = std::jthread([this, byte_count, seed](std::stop_token) {
+      AllocateAndFill(byte_count, seed);
+      bg_alloc_done_.store(true, std::memory_order_release);
+    });
   } else {
     AllocateAndFill(byte_count, seed);
   }
 
+  has_scheduled_ = true;
   last_scheduling_ = time_point;
 }
 
-bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) {
-  if (allocator_.IsEmpty()) {
+bool MemoryResourceManagerDefault::ReapBackgroundThread() {
+  if (!bg_alloc_thread_.joinable()) {
+    return true;
+  }
+  if (!bg_alloc_done_.load(std::memory_order_acquire)) {
+    return false;
+  }
+  // The worker has already returned from AllocateAndFill; join() only
+  // waits for the thread's exit epilogue.
+  bg_alloc_thread_.join();
+  return true;
+}
+
+bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) const {
+  if (!has_scheduled_) {
     LOG_INFO("memory block is empty, will allocate");
     return true;
   }

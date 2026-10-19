@@ -122,27 +122,57 @@ const char *ZeResultString(ze_result_t err) {
   switch (err) {
     case ZE_RESULT_SUCCESS:
       return "ZE_RESULT_SUCCESS";
-    case 0x70000001:
+    case 0x1:
       return "ZE_RESULT_NOT_READY";
-    case 0x70000002:
-      return "ZE_RESULT_ERROR_UNINITIALIZED";
-    case 0x70000003:
+    case 0x70000001:
       return "ZE_RESULT_ERROR_DEVICE_LOST";
-    case 0x70000004:
-      return "ZE_RESULT_ERROR_INVALID_ARGUMENT";
-    case 0x70000005:
+    case 0x70000002:
       return "ZE_RESULT_ERROR_OUT_OF_HOST_MEMORY";
-    case 0x70000006:
+    case 0x70000003:
       return "ZE_RESULT_ERROR_OUT_OF_DEVICE_MEMORY";
-    case 0x70000007:
+    case 0x70000004:
       return "ZE_RESULT_ERROR_MODULE_BUILD_FAILURE";
-    case 0x70000010:
+    case 0x70000005:
+      return "ZE_RESULT_ERROR_MODULE_LINK_FAILURE";
+    case 0x70000006:
+      return "ZE_RESULT_ERROR_DEVICE_REQUIRES_RESET";
+    case 0x70000007:
+      return "ZE_RESULT_ERROR_DEVICE_IN_LOW_POWER_STATE";
+    case 0x70010000:
       return "ZE_RESULT_ERROR_INSUFFICIENT_PERMISSIONS";
-    case 0x70000011:
+    case 0x70010001:
       return "ZE_RESULT_ERROR_NOT_AVAILABLE";
-    case 0x70000018:
+    case 0x70020000:
       return "ZE_RESULT_ERROR_DEPENDENCY_UNAVAILABLE";
     case 0x78000001:
+      return "ZE_RESULT_ERROR_UNINITIALIZED";
+    case 0x78000002:
+      return "ZE_RESULT_ERROR_UNSUPPORTED_VERSION";
+    case 0x78000003:
+      return "ZE_RESULT_ERROR_UNSUPPORTED_FEATURE";
+    case 0x78000004:
+      return "ZE_RESULT_ERROR_INVALID_ARGUMENT";
+    case 0x78000005:
+      return "ZE_RESULT_ERROR_INVALID_NULL_HANDLE";
+    case 0x78000007:
+      return "ZE_RESULT_ERROR_INVALID_NULL_POINTER";
+    case 0x78000008:
+      return "ZE_RESULT_ERROR_INVALID_SIZE";
+    case 0x78000009:
+      return "ZE_RESULT_ERROR_UNSUPPORTED_SIZE";
+    case 0x7800000c:
+      return "ZE_RESULT_ERROR_INVALID_ENUMERATION";
+    case 0x7800000f:
+      return "ZE_RESULT_ERROR_INVALID_NATIVE_BINARY";
+    case 0x78000011:
+      return "ZE_RESULT_ERROR_INVALID_KERNEL_NAME";
+    case 0x78000013:
+      return "ZE_RESULT_ERROR_INVALID_GROUP_SIZE_DIMENSION";
+    case 0x78000015:
+      return "ZE_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_INDEX";
+    case 0x78000016:
+      return "ZE_RESULT_ERROR_INVALID_KERNEL_ARGUMENT_SIZE";
+    case 0x7ffffffe:
       return "ZE_RESULT_ERROR_UNKNOWN";
     default:
       return "<level zero error>";

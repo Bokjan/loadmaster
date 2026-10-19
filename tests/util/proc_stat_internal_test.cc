@@ -11,7 +11,7 @@
 // Linux-only: the entire helper compiles out on macOS / Windows and
 // `fmemopen` is glibc-specific.
 
-#include "core/constants.h"
+#include "core/platform.h"
 
 #if IS_LINUX
 

@@ -19,8 +19,11 @@ void Allocator::ReleaseBlock() {
 
 void Allocator::AllocateBlock(size_t target_size) {
   ReleaseBlock();
+  // Allocate before touching the fields: if `new` throws, the allocator
+  // must stay in the consistent empty state rather than claim a size with
+  // a null block.
+  block_ptr_ = new std::byte[target_size];
   size_ = target_size;
-  block_ptr_ = new std::byte[size_];
 }
 
 void Allocator::FillXor(std::byte seed) {

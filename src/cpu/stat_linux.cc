@@ -41,8 +41,8 @@ uint64_t BusyJiffies(const ProcStatFields &f) {
 }
 
 uint64_t JiffiesToNs(uint64_t jiffies) {
-  // jiffy -> ns: jiffies * (ms per jiffy) * 1e6 ns/ms.
-  return jiffies * static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  // /proc/stat counts in USER_HZ units, i.e. sysconf(_SC_CLK_TCK).
+  return util::TicksToNs(jiffies, util::GetClockTicksPerSecond());
 }
 
 }  // namespace internal

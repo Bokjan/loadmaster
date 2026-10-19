@@ -94,9 +94,8 @@ std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
   const int64_t jiffies = static_cast<int64_t>(stat.utime) + static_cast<int64_t>(stat.stime) +
                           stat.cutime + stat.cstime;
   const int64_t clamped = jiffies < 0 ? 0 : jiffies;
-  // jiffy -> ns.
-  return static_cast<uint64_t>(clamped) * static_cast<uint64_t>(GetJiffyMillisecond()) *
-         1'000'000ULL;
+  // jiffy (USER_HZ) -> ns.
+  return TicksToNs(static_cast<uint64_t>(clamped), GetClockTicksPerSecond());
 }
 
 }  // namespace util

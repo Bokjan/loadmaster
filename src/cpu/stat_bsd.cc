@@ -5,6 +5,7 @@
 #  include "stat.h"
 
 #  include <sys/sysctl.h>
+#  include <sys/time.h>
 #  include <sys/types.h>
 
 #  include <cstddef>
@@ -31,8 +32,14 @@ namespace cpu {
 // expose an iowait equivalent on BSD, so there is nothing analogous
 // to Linux's iowait-exclusion to worry about.
 //
-// Unit conversion uses util::GetJiffyMillisecond(), which is
-// sysconf(_SC_CLK_TCK)-based and works on BSD just as on Linux/macOS.
+// Unit: kern.cp_time is advanced by statclock(), so each count is one
+// tick of the *statistics* clock, kern.clockrate.stathz (typically 127
+// on FreeBSD amd64) -- NOT sysconf(_SC_CLK_TCK), which reports the
+// compile-time CLK_TCK constant (128). Using the latter under-reads busy
+// time by ~1%, and the old truncated "1000/128 = 7 ms per tick" factor
+// under-read it by ~11%, while the per-process side (ki_runtime, in
+// microseconds) stayed exact -- which skewed the "load from other
+// processes" estimate and made the controller overshoot its target.
 
 // Only FreeBSD and DragonFly are wired up for now. OpenBSD/NetBSD
 // share the same MIB shape but the rest of the ProcStat path differs
@@ -58,6 +65,25 @@ constexpr std::size_t kCpStateSys  = 2;
 constexpr std::size_t kCpStateIntr = 3;
 constexpr std::size_t kCpStateIdle = 4;
 constexpr std::size_t kCpuStateCount = 5;
+
+// Frequency of the clock that advances kern.cp_time. The kernel falls
+// back to `hz` when no separate statclock is configured (stathz == 0),
+// and so do we. Cached: the rate is fixed at boot.
+uint64_t StatClockHz() {
+  static const uint64_t kCached = []() -> uint64_t {
+    struct clockinfo ci{};
+    std::size_t len = sizeof(ci);
+    if (::sysctlbyname("kern.clockrate", &ci, &len, nullptr, 0) != 0 || len < sizeof(ci)) {
+      LOG_WARN("sysctlbyname(kern.clockrate) failed, assuming stathz=128");
+      return 128;
+    }
+    if (ci.stathz > 0) {
+      return static_cast<uint64_t>(ci.stathz);
+    }
+    return ci.hz > 0 ? static_cast<uint64_t>(ci.hz) : 128;
+  }();
+  return kCached;
+}
 
 }  // namespace
 
@@ -85,8 +111,8 @@ std::optional<uint64_t> ReadSystemBusyNs() {
       static_cast<uint64_t>(cp_time[kCpStateNice]) +
       static_cast<uint64_t>(cp_time[kCpStateSys])  +
       static_cast<uint64_t>(cp_time[kCpStateIntr]);
-  // jiffy -> ns. GetJiffyMillisecond() is sysconf(_SC_CLK_TCK)-based.
-  return busy_jiffies * static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  // statclock tick -> ns.
+  return util::TicksToNs(busy_jiffies, StatClockHz());
 }
 
 }  // namespace cpu

@@ -77,6 +77,9 @@ function(loadmaster_add_test name)
     else()
         target_compile_options(${name} PRIVATE
             -Wall -Wextra -Wpedantic -Wshadow -Wno-unused-parameter
+            # An undefined IS_* platform macro silently evaluates to 0 in
+            # `#if`, which once compiled a whole Linux-only suite out.
+            -Werror=undef
             "-ffile-prefix-map=${CMAKE_SOURCE_DIR}/="
             "-ffile-prefix-map=${CMAKE_BINARY_DIR}/="
         )
@@ -107,10 +110,9 @@ loadmaster_add_test(util_obfuscate_test
     util/obfuscate_test.cc
 )
 
-# POSIX-only: util::GetJiffyMillisecond. The TU is guarded by
-# !IS_WINDOWS and compiles to zero tests on Windows (matching the
-# guard inside clock.cc itself); the target is still registered
-# everywhere so the build doesn't bit-rot.
+# util::TicksToNs (all platforms, pure arithmetic) and the POSIX-only
+# util::GetClockTicksPerSecond; the latter's cases are guarded by
+# !IS_WINDOWS, matching the guard inside clock.cc itself.
 loadmaster_add_test(util_clock_test
     util/clock_test.cc
     ${CMAKE_SOURCE_DIR}/src/util/clock.cc

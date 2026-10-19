@@ -103,19 +103,19 @@ TEST(BusyJiffiesTest, HandlesLargeUnsignedValues) {
 
 // ---- JiffiesToNs ----------------------------------------------------------
 //
-// jiffies -> nanoseconds is a pure multiplication by
-// GetJiffyMillisecond() * 1e6. We don't hardcode the jiffy length (it's a
-// platform property) but lock in the structural properties: zero maps to
-// zero, monotonicity, linearity, constant scaling, and the exact factor.
+// jiffies -> nanoseconds goes through util::TicksToNs at USER_HZ
+// (GetClockTicksPerSecond()). We don't hardcode USER_HZ (it's a platform
+// property) but lock in the structural properties: zero maps to zero,
+// monotonicity, linearity, constant scaling, and the exact factor.
 
 TEST(JiffiesToNsTest, ZeroMapsToZero) {
   EXPECT_EQ(JiffiesToNs(0), 0u);
 }
 
 TEST(JiffiesToNsTest, MatchesExpectedFactor) {
-  const uint64_t factor = static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
-  EXPECT_EQ(JiffiesToNs(1), factor);
-  EXPECT_EQ(JiffiesToNs(123), 123u * factor);
+  const uint64_t hz = util::GetClockTicksPerSecond();
+  EXPECT_EQ(JiffiesToNs(hz), 1'000'000'000u);
+  EXPECT_EQ(JiffiesToNs(123), util::TicksToNs(123, hz));
 }
 
 TEST(JiffiesToNsTest, IsMonotonicallyNonDecreasing) {

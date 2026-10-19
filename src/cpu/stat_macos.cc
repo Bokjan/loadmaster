@@ -30,9 +30,9 @@ std::optional<uint64_t> ReadSystemBusyNs() {
   const uint64_t busy_jiffies = static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_USER]) +
                                 static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_NICE]) +
                                 static_cast<uint64_t>(load.cpu_ticks[CPU_STATE_SYSTEM]);
-  // jiffy -> ns. GetJiffyMillisecond() is available on macOS (clock.cc is
-  // compiled for every non-Windows platform).
-  return busy_jiffies * static_cast<uint64_t>(util::GetJiffyMillisecond()) * 1'000'000ULL;
+  // jiffy -> ns. GetClockTicksPerSecond() is available on macOS (clock.cc
+  // is compiled for every non-Windows platform).
+  return util::TicksToNs(busy_jiffies, util::GetClockTicksPerSecond());
 }
 
 }  // namespace cpu

@@ -39,7 +39,7 @@ struct ProcStatFields final {
 // kernel, so they are not added again. Pure: jiffies in, jiffies out.
 uint64_t BusyJiffies(const ProcStatFields &f);
 
-// Convert a jiffy count to nanoseconds using GetJiffyMillisecond(). Pure.
+// Convert a jiffy count to nanoseconds using GetClockTicksPerSecond(). Pure.
 uint64_t JiffiesToNs(uint64_t jiffies);
 
 }  // namespace cpu::internal

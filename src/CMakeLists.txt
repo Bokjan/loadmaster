@@ -315,6 +315,10 @@ else()
         -Wall -Wextra -Wpedantic
         -Wshadow
         -Wno-unused-parameter
+        # `#if IS_LINUX` with a missing core/platform.h include evaluates
+        # the undefined macro as 0 and silently drops the code: make
+        # that a hard error instead.
+        -Werror=undef
         -fPIC
         # Rewrite the source-path prefix baked into __FILE__ (and any
         # other compiler-emitted path strings) so the resulting binary
