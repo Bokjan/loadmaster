@@ -34,9 +34,9 @@ constexpr auto kUsage = util::obfuscate::Make(
 OPTIONS:
     -v                      print version info and quit
     -h                      print this message and quit
-    -l  <load>              target CPU usage (100 each core, max 100 x threads), default: 200
+    -l  <load>              target CPU usage (100 each core, max 100 x threads), default: min(200, max)
     -L  <log_level>         log level (all/trace/debug/info/warn/error/fatal/off), default: warn
-    -c  <thread_count>      worker thread (CPU) count, default: based on required load
+    -c  <thread_count>      worker thread (CPU) count, 0 or default: based on required load
     -ca <algorithm>         CPU schedule algorithm (default/rand_normal), default: default
     -m  <max_memory>        maximum memory (MiB) for wasting, default: 0
     -g  <gpu_load>          per-device GPU compute load (0..100), default: 0 (disabled)

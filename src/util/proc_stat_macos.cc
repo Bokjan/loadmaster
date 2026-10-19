@@ -36,18 +36,20 @@ const mach_timebase_info_data_t &Timebase() {
 }  // namespace
 
 // macOS has no /proc; query libproc for the absolute CPU time of this
-// process (user + system, all threads) and scale it to nanoseconds --
-// the common currency the rest of ProcStat speaks.
-std::optional<uint64_t> ProcStat::ReadProcessCpuNs() const {
+// process (user + system, all threads), in Mach absolute-time units.
+std::optional<uint64_t> ProcStat::ReadProcessCpuTicks() const {
   rusage_info_current rusage{};
   if (::proc_pid_rusage(pid_, RUSAGE_INFO_V2, reinterpret_cast<rusage_info_t *>(&rusage)) != 0) {
     LOG_ERROR("proc_pid_rusage failed for pid %d", pid_);
     return std::nullopt;
   }
-  const uint64_t mach_units = rusage.ri_user_time + rusage.ri_system_time;
+  return rusage.ri_user_time + rusage.ri_system_time;
+}
+
+uint64_t ProcessCpuTicksToNs(uint64_t tick_diff) {
   const mach_timebase_info_data_t &tb = Timebase();
   // Split like util::TicksToNs so `units * numer` cannot overflow.
-  return mach_units / tb.denom * tb.numer + mach_units % tb.denom * tb.numer / tb.denom;
+  return tick_diff / tb.denom * tb.numer + tick_diff % tb.denom * tb.numer / tb.denom;
 }
 
 }  // namespace util

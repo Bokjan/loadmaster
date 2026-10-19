@@ -1,4 +1,4 @@
-// Unit tests for the pure helpers behind cpu::ReadSystemBusyNs() on Linux:
+// Unit tests for the pure helpers behind cpu::ReadSystemBusyTicks() / BusyTicksToNs() on Linux:
 //   * internal::BusyJiffies  -- aggregates the /proc/stat cpu-line fields
 //     into a single "busy" (i.e. not-idle) jiffy count.
 //   * internal::JiffiesToNs  -- linear jiffy -> nanosecond conversion.

@@ -299,19 +299,43 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   cl_desc.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC;
   cl_desc.commandQueueGroupOrdinal = 0;
   ze_command_list_handle_t tmp = nullptr;
-  if (api_->zeCommandListCreate(context_, device_, &cl_desc, &tmp) == ZE_RESULT_SUCCESS) {
+  ze_result_t cl_rc = api_->zeCommandListCreate(context_, device_, &cl_desc, &tmp);
+  if (cl_rc != ZE_RESULT_SUCCESS) {
+    // Allocation itself succeeded, so the device memory is reserved and
+    // we still report success; but the pages are not pre-faulted, so log
+    // loudly rather than silently degrading the commit step.
+    LOG_WARN("zeCommandListCreate failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,
+             ZeResultString(cl_rc), cl_rc);
+  } else {
     const uint8_t pattern = 0xA5;
-    bool ok = true;
+    ze_result_t fill_rc = ZE_RESULT_SUCCESS;
     std::size_t left = bytes;
     for (void *ptr : mem_load_ptrs_) {
       const std::size_t chunk = std::min(left, max_chunk);
       left -= chunk;
-      ok = ok && api_->zeCommandListAppendMemoryFill(tmp, ptr, &pattern, sizeof(pattern), chunk,
-                                                     nullptr, 0, nullptr) == ZE_RESULT_SUCCESS;
+      fill_rc = api_->zeCommandListAppendMemoryFill(tmp, ptr, &pattern, sizeof(pattern), chunk,
+                                                    nullptr, 0, nullptr);
+      if (fill_rc != ZE_RESULT_SUCCESS) {
+        break;
+      }
     }
-    if (ok && api_->zeCommandListClose(tmp) == ZE_RESULT_SUCCESS) {
-      api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
-      api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
+    if (fill_rc == ZE_RESULT_SUCCESS) {
+      fill_rc = api_->zeCommandListClose(tmp);
+    }
+    if (fill_rc == ZE_RESULT_SUCCESS) {
+      const ze_result_t exec_rc = api_->zeCommandQueueExecuteCommandLists(queue_, 1, &tmp, nullptr);
+      ze_result_t sync_rc = ZE_RESULT_SUCCESS;
+      if (exec_rc == ZE_RESULT_SUCCESS) {
+        sync_rc = api_->zeCommandQueueSynchronize(queue_, UINT64_MAX);
+      }
+      if (exec_rc != ZE_RESULT_SUCCESS || sync_rc != ZE_RESULT_SUCCESS) {
+        LOG_WARN(
+            "memory commit execute/sync failed, %zu bytes left uncommitted: exec=0x%x sync=0x%x",
+            bytes, exec_rc, sync_rc);
+      }
+    } else {
+      LOG_WARN("memory fill/close failed, %zu bytes left uncommitted: %s (rc=0x%x)", bytes,
+               ZeResultString(fill_rc), fill_rc);
     }
     api_->zeCommandListDestroy(tmp);
   }

@@ -12,10 +12,7 @@
 #include <cstdlib>
 #include <vector>
 
-#include "core/constants.h"
 #include "core/options.h"
-#include "cpu/constants.h"
-#include "cpu/stat.h"
 #include "util/log.h"
 
 #include <gtest/gtest.h>
@@ -46,7 +43,9 @@ Argv MakeArgv(std::initializer_list<const char *> args) {
 
 class CliTest : public ::testing::Test {
  protected:
-  void SetUp() override { util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff); }
+  void SetUp() override {
+    util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelOff);
+  }
   void TearDown() override {
     util::logger_internal::g_default_logger->SetLevel(util::Logger::kLevelWarn);
   }
@@ -55,9 +54,7 @@ class CliTest : public ::testing::Test {
 // ---- Basic shapes --------------------------------------------------------
 
 TEST_F(CliTest, NoArgumentsContinuesWithDefaults) {
-  if (cpu::CoreCount() * kCpuMaxLoadPerCore < kDefaultCpuLoad) {
-    GTEST_SKIP() << "default -l is unreachable on this host";
-  }
+  // Also on a single-core host: the default load is capped, not rejected.
   Options opts;
   auto a = MakeArgv({"loadmaster"});
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
@@ -123,8 +120,8 @@ TEST_F(CliTest, NonIntegerValueRejected) {
 }
 
 TEST_F(CliTest, TrailingGarbageAfterIntegerRejected) {
-  // sscanf("%d") used to accept these as 12 / 1 / 5.
-  for (const char *value : {"12abc", "1e3", "5.5", "", " 7"}) {
+  // sscanf("%d") used to accept these as 12 / 1 / 5 / 0.
+  for (const char *value : {"12abc", "1e3", "5.5", "0x10", "", " 7"}) {
     Options opts;
     auto a = MakeArgv({"loadmaster", "-m", value});
     const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());

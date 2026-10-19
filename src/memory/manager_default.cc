@@ -46,14 +46,15 @@ void MemoryResourceManagerDefault::Schedule(TimePoint time_point) {
   std::uniform_int_distribution<int> byte_dis(0, 255);
   const auto seed = static_cast<std::byte>(byte_dis(generator_));
 
-  const size_t threshold_bytes = static_cast<size_t>(kMemoryNoThreadSpawnThresholdMiB) * kMebiByte;
+  const size_t threshold_bytes =
+      static_cast<size_t>(kMemoryBackgroundThreadThresholdMiB) * kMebiByte;
   if (byte_count >= threshold_bytes) {
     // Spawn a one-shot background thread to allocate + fill the block,
     // so the main scheduling loop is not blocked on a potentially long
     // memset/page-fault storm.
     bg_alloc_done_.store(false, std::memory_order_relaxed);
-    bg_alloc_thread_ = std::jthread([this, byte_count, seed](std::stop_token) {
-      AllocateAndFill(byte_count, seed);
+    bg_alloc_thread_ = std::jthread([this, byte_count, seed](std::stop_token stop) {
+      AllocateAndFill(byte_count, seed, stop);
       bg_alloc_done_.store(true, std::memory_order_release);
     });
   } else {
@@ -88,10 +89,11 @@ bool MemoryResourceManagerDefault::WillSchedule(TimePoint time_point) const {
   return time_diff.count() > kMemoryScheduleIntervalSecond;
 }
 
-void MemoryResourceManagerDefault::AllocateAndFill(size_t byte_count, std::byte seed) {
+void MemoryResourceManagerDefault::AllocateAndFill(size_t byte_count, std::byte seed,
+                                                   std::stop_token stop) {
   try {
     allocator_.AllocateBlock(byte_count);
-    allocator_.Fill(seed);
+    allocator_.Fill(seed, stop);
   } catch (const std::bad_alloc &e) {
     LOG_ERROR("memory allocation of %zu bytes failed: %s", byte_count, e.what());
   } catch (const std::exception &e) {

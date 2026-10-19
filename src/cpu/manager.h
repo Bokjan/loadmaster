@@ -47,9 +47,10 @@ class CpuResourceManager : public core::ResourceManager {
   // (std::atomic, std::jthread).
   std::vector<std::unique_ptr<CpuWorkerContext>> workers_;
   int base_loop_count_;
-  // System-wide cumulative busy time (ns) captured at the previous
-  // Schedule() tick. 0 means "no prior sample yet".
-  uint64_t prev_system_busy_ns_ = 0;
+  // System-wide cumulative busy time (native ticks, see cpu/stat.h)
+  // captured at the previous Schedule() tick.
+  uint64_t prev_busy_ticks_ = 0;
+  bool has_prev_busy_ticks_ = false;
   util::RollingSampler<double> system_sampler_;
   util::ProcStat proc_stat_;
   util::RollingSampler<double> process_sampler_;

@@ -9,6 +9,7 @@
 
 #include "core/options.h"
 
+#include <algorithm>
 #include <cstdint>
 
 #include "cli/cli_argument.h"
@@ -59,14 +60,12 @@ TEST_F(OptionsTest, DefaultsMatchConstants) {
 }
 
 TEST_F(OptionsTest, EmptyArgumentsAreNoop) {
-  if (cpu::CoreCount() * kCpuMaxLoadPerCore < kDefaultCpuLoad) {
-    GTEST_SKIP() << "default -l is unreachable on this host";
-  }
   Options opts;
   CliArgument args;  // all std::optional are empty
   EXPECT_TRUE(opts.ProcessCliArguments(args));
-  // Everything should still be at its constructor-set default.
-  EXPECT_EQ(opts.GetCpuLoad(), kDefaultCpuLoad);
+  // Everything should still be at its constructor-set default; the CPU load
+  // only drops below it on a host with fewer cores than the default needs.
+  EXPECT_EQ(opts.GetCpuLoad(), std::min(kDefaultCpuLoad, cpu::CoreCount() * kCpuMaxLoadPerCore));
   EXPECT_EQ(opts.GetGpuVendor(), Options::GpuVendor::kAuto);
 }
 
@@ -105,6 +104,24 @@ TEST_F(OptionsTest, CpuLoadAboveAllCoresRejected) {
   EXPECT_FALSE(opts.ProcessCliArguments(args));
 }
 
+TEST_F(OptionsTest, CpuLoadFullMachineBudgetAccepted) {
+  Options opts;
+  CliArgument args;
+  args.cpu_load = kCpuMaxLoadPerCore * cpu::CoreCount();
+  EXPECT_TRUE(opts.ProcessCliArguments(args));
+  EXPECT_EQ(opts.GetCpuLoad(), kCpuMaxLoadPerCore * cpu::CoreCount());
+}
+
+TEST_F(OptionsTest, DefaultCpuLoadCappedToRequestedThreads) {
+  // No -l: the default (200) is capped to what `-c 1` can deliver instead
+  // of being rejected, so a plain run also works on a single-core host.
+  Options opts;
+  CliArgument args;
+  args.cpu_count = 1;
+  EXPECT_TRUE(opts.ProcessCliArguments(args));
+  EXPECT_EQ(opts.GetCpuLoad(), kCpuMaxLoadPerCore);
+}
+
 TEST_F(OptionsTest, CpuLoadAboveRequestedThreadsRejected) {
   // -l 150 -c 1: the single thread can deliver at most 100.
   Options opts;
@@ -131,15 +148,13 @@ TEST_F(OptionsTest, CpuCountAcceptsBelowHardwareLimit) {
   EXPECT_EQ(opts.GetCpuCount(), 1);
 }
 
-TEST_F(OptionsTest, CpuCountZeroOrNegativeRejected) {
-  // Used to silently mean "auto"; now an explicit error.
-  for (int count : {0, -5}) {
-    Options opts;
-    CliArgument args;
-    args.cpu_load = 50;
-    args.cpu_count = count;
-    EXPECT_FALSE(opts.ProcessCliArguments(args)) << "count=" << count;
-  }
+TEST_F(OptionsTest, CpuCountZeroMeansAuto) {
+  Options opts;
+  CliArgument args;
+  args.cpu_load = 50;
+  args.cpu_count = 0;
+  EXPECT_TRUE(opts.ProcessCliArguments(args));
+  EXPECT_EQ(opts.GetCpuCount(), 0);
 }
 
 TEST_F(OptionsTest, CpuCountRejectsAboveHardwareLimit) {
@@ -149,6 +164,18 @@ TEST_F(OptionsTest, CpuCountRejectsAboveHardwareLimit) {
   // hosts; pick something that overflows any realistic CI machine.
   args.cpu_count = cpu::CoreCount() + 1000;
   EXPECT_FALSE(opts.ProcessCliArguments(args));
+}
+
+TEST_F(OptionsTest, CpuCountNegativeRejected) {
+  // A negative cpu_count used to be silently accepted; downstream it
+  // collapsed into "derive thread count from load" with no diagnostic.
+  for (int count : {-1, -5}) {
+    Options opts;
+    CliArgument args;
+    args.cpu_load = 50;
+    args.cpu_count = count;
+    EXPECT_FALSE(opts.ProcessCliArguments(args)) << "count=" << count;
+  }
 }
 
 TEST_F(OptionsTest, CpuAlgorithmDefault) {
@@ -331,12 +358,9 @@ TEST_F(OptionsTest, GpuVendorAllAcceptedTokens) {
     Options::GpuVendor expected;
   };
   const Case cases[] = {
-      {"auto", Options::GpuVendor::kAuto},
-      {"nvidia", Options::GpuVendor::kNvidia},
-      {"amd", Options::GpuVendor::kAmd},
-      {"apple", Options::GpuVendor::kApple},
-      {"intel", Options::GpuVendor::kIntel},
-      {"opencl", Options::GpuVendor::kOpenCL},
+      {"auto", Options::GpuVendor::kAuto},   {"nvidia", Options::GpuVendor::kNvidia},
+      {"amd", Options::GpuVendor::kAmd},     {"apple", Options::GpuVendor::kApple},
+      {"intel", Options::GpuVendor::kIntel}, {"opencl", Options::GpuVendor::kOpenCL},
   };
   for (const auto &c : cases) {
     Options opts;

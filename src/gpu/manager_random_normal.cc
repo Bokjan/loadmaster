@@ -44,6 +44,12 @@ void GpuResourceManagerRandomNormal::Schedule(TimePoint time_point) {
 }
 
 void GpuResourceManagerRandomNormal::AdvanceDevice(size_t worker_index, TimePoint time_point) {
+  // Schedule() only passes indices of workers_, which Init() sized together
+  // with states_; guard anyway so a desync is a quiet no-op rather than an
+  // out-of-bounds access.
+  if (worker_index >= states_.size()) {
+    return;
+  }
   auto &state = states_[worker_index];
   // The first tick fires immediately. (Not via a default-constructed
   // last_change: steady_clock's epoch is typically boot time, so "long

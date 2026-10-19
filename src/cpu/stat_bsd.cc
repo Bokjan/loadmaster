@@ -90,19 +90,29 @@ uint64_t StatClockHz() {
 
 }  // namespace
 
-std::optional<uint64_t> ReadSystemBusyNs() {
-  long cp_time[kCpuStateCount] = {0};
+std::optional<uint64_t> ReadSystemBusyTicks() {
+  // Sized above CPUSTATES (5) so a future kernel that grows the array does
+  // not make sysctlbyname fail with ENOMEM on every tick; only the four
+  // busy states we know are consumed.
+  long cp_time[8] = {0};
   std::size_t len = sizeof(cp_time);
   if (::sysctlbyname("kern.cp_time", cp_time, &len, nullptr, 0) != 0) {
     LOG_ERROR("sysctlbyname(kern.cp_time) failed");
     return std::nullopt;
   }
-  if (len < sizeof(cp_time)) {
+  constexpr std::size_t kExpectedLen = sizeof(long) * kCpuStateCount;
+  if (len < kExpectedLen) {
     // Defensive: a kernel returning fewer states than we expect would
     // leave the tail uninitialized. Treat as a hard read failure
     // rather than silently underreporting busy time.
-    LOG_ERROR("sysctlbyname(kern.cp_time) short read: %zu < %zu", len, sizeof(cp_time));
+    LOG_ERROR("sysctlbyname(kern.cp_time) short read: %zu < %zu", len, kExpectedLen);
     return std::nullopt;
+  }
+  if (static bool warned = false; len > kExpectedLen && !warned) {
+    // Unknown extra states can only be flagged, not folded in.
+    LOG_WARN("kern.cp_time returned %zu bytes (> %zu); extra CPU states ignored", len,
+             kExpectedLen);
+    warned = true;
   }
   // Suppress -Wunused-const-variable for kCpStateIdle. We deliberately
   // don't read idle here (busy = total - idle would just be a longer
@@ -114,8 +124,12 @@ std::optional<uint64_t> ReadSystemBusyNs() {
       static_cast<uint64_t>(cp_time[kCpStateNice]) +
       static_cast<uint64_t>(cp_time[kCpStateSys])  +
       static_cast<uint64_t>(cp_time[kCpStateIntr]);
+  return busy_jiffies;
+}
+
+uint64_t BusyTicksToNs(uint64_t tick_diff) {
   // statclock tick -> ns.
-  return util::TicksToNs(busy_jiffies, StatClockHz());
+  return util::TicksToNs(tick_diff, StatClockHz());
 }
 
 int CoreCount() {

@@ -42,22 +42,21 @@ void CpuResourceManager::JoinWorkerThreads() {
 }
 
 void CpuResourceManager::Schedule(TimePoint time_point) {
-  // Refresh system CPU snapshot (cumulative busy nanoseconds).
-  const std::optional<uint64_t> current_busy_ns = ReadSystemBusyNs();
-  if (!current_busy_ns) {
+  // Refresh system CPU snapshot (cumulative busy time, native ticks).
+  const std::optional<uint64_t> current_busy_ticks = ReadSystemBusyTicks();
+  if (!current_busy_ticks) {
     // Keep both the busy baseline and its timestamp, so the next
     // successful read diffs N intervals of busy time against N intervals
     // of elapsed time. (Advancing only the timestamp used to read ~2x the
     // real load on the following tick.)
-    LOG_ERROR("failed to ReadSystemBusyNs");
+    LOG_ERROR("failed to ReadSystemBusyTicks");
     return;
   }
 
   // First call: record the baseline and bail -- nothing to diff against yet.
-  // Unlike the old snapshot-member approach this MUST be stored explicitly,
-  // otherwise the next tick would diff against 0 and spike once.
-  if (prev_system_busy_ns_ == 0) {
-    prev_system_busy_ns_ = *current_busy_ns;
+  if (!has_prev_busy_ticks_) {
+    prev_busy_ticks_ = *current_busy_ticks;
+    has_prev_busy_ticks_ = true;
     SetLastScheduling(time_point);
     return;
   }
@@ -65,22 +64,23 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   // Update process snapshot/average.
   UpdateProcStat(time_point);
 
-  // Compute current system-wide CPU load (platform-agnostic, ns-based).
-  // Guard against a non-monotonic reading so a counter glitch can't
-  // underflow the unsigned diff.
-  const uint64_t busy_ns_diff =
-      (*current_busy_ns >= prev_system_busy_ns_) ? (*current_busy_ns - prev_system_busy_ns_) : 0;
+  // Compute current system-wide CPU load. The diff is taken in tick space
+  // and only then converted to ns (see cpu/stat.h). Guard against a
+  // non-monotonic reading so a counter glitch can't underflow the unsigned
+  // diff.
+  const uint64_t busy_ticks_diff =
+      (*current_busy_ticks >= prev_busy_ticks_) ? (*current_busy_ticks - prev_busy_ticks_) : 0;
   const auto elapsed_ns =
       std::chrono::duration_cast<std::chrono::nanoseconds>(time_point - GetLastScheduling())
           .count();
   if (elapsed_ns <= 0) {
-    prev_system_busy_ns_ = *current_busy_ns;
+    prev_busy_ticks_ = *current_busy_ticks;
     SetLastScheduling(time_point);
     return;
   }
   // load = busy_ns / elapsed_ns * 100 (per-core units, summed across cores).
-  const double system_load_exact =
-      static_cast<double>(busy_ns_diff) / static_cast<double>(elapsed_ns) * kCpuMaxLoadPerCore;
+  const double system_load_exact = static_cast<double>(BusyTicksToNs(busy_ticks_diff)) /
+                                   static_cast<double>(elapsed_ns) * kCpuMaxLoadPerCore;
   system_sampler_.InsertValue(system_load_exact);
   const int system_load = static_cast<int>(std::lround(system_load_exact));
   LOG_TRACE("cur_sys_load=%d, avg_sys_load=%.1f", system_load, system_sampler_.GetMean());
@@ -88,7 +88,7 @@ void CpuResourceManager::Schedule(TimePoint time_point) {
   // Invoke specified scheduler.
   AdjustWorkerLoad(time_point, system_load);
 
-  prev_system_busy_ns_ = *current_busy_ns;
+  prev_busy_ticks_ = *current_busy_ticks;
   SetLastScheduling(time_point);
 }
 

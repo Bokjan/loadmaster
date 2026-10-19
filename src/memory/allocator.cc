@@ -1,5 +1,7 @@
 #include "allocator.h"
 
+#include <algorithm>
+
 namespace memory::unsafe {
 
 Allocator::Allocator() : size_(0), block_ptr_(nullptr) {}
@@ -26,15 +28,22 @@ void Allocator::AllocateBlock(size_t target_size) {
   size_ = target_size;
 }
 
-void Allocator::Fill(std::byte seed) {
+void Allocator::Fill(std::byte seed, std::stop_token stop) {
   if (block_ptr_ == nullptr) {
     return;
   }
+  constexpr size_t kChunkBytes = 4 * 1024 * 1024;
   // Write-only: the block comes from `new std::byte[]` and is
   // uninitialized, so the old `block[i] ^= seed` read indeterminate
   // values (UB). Every byte is written, so every page gets committed.
-  for (size_t i = 0; i < size_; ++i) {
-    block_ptr_[i] = seed ^ static_cast<std::byte>(i);
+  for (size_t begin = 0; begin < size_; begin += kChunkBytes) {
+    if (stop.stop_requested()) {
+      return;
+    }
+    const size_t end = std::min(size_, begin + kChunkBytes);
+    for (size_t i = begin; i < end; ++i) {
+      block_ptr_[i] = seed ^ static_cast<std::byte>(i);
+    }
   }
 }
 

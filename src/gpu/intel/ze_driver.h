@@ -35,9 +35,11 @@ constexpr ze_result_t ZE_RESULT_SUCCESS = 0;
 constexpr uint32_t ZE_INIT_FLAG_GPU_ONLY = 1u;
 
 // ---- Structure types (subset; matches ze_structure_type_t in spec) -------
-// Values copied from ze_api.h (spec v1.x). Note 0x1 is DRIVER_PROPERTIES,
-// not DEVICE_PROPERTIES: drivers / the validation layer that check `stype`
-// reject a mislabeled descriptor.
+// Values copied verbatim from the official oneAPI Level Zero ze_api.h
+// (tag v1.17.39). Note 0x1 is DRIVER_PROPERTIES, not DEVICE_PROPERTIES: the
+// loader validates stype on every desc, so a wrong value here silently
+// disables the whole Intel backend (ZE_RESULT_ERROR_INVALID_ARGUMENT during
+// enumeration).
 constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES = 0x3;
 constexpr uint32_t ZE_STRUCTURE_TYPE_CONTEXT_DESC = 0xd;
 constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC = 0xe;

@@ -117,10 +117,15 @@ DlHandle DlopenAny(const char *const *names) {
     }
     // Absolute path under %SystemRoot%\System32, for environments where
     // the search-flag variant above is unavailable or redirected.
+    // snprintf returns the length it *would* have written; a value >= the
+    // room left means the path was truncated, so don't load it.
     char abs_path[MAX_PATH];
     const UINT n = ::GetSystemDirectoryA(abs_path, sizeof(abs_path));
-    if (n > 0 && n < sizeof(abs_path) &&
-        std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name) > 0) {
+    const int written =
+        (n > 0 && n < sizeof(abs_path))
+            ? std::snprintf(abs_path + n, sizeof(abs_path) - n, "\\%s", name)
+            : -1;
+    if (written > 0 && static_cast<size_t>(written) < sizeof(abs_path) - n) {
       h = ::LoadLibraryExA(abs_path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
       if (h != nullptr) {
         return reinterpret_cast<DlHandle>(h);
@@ -140,7 +145,13 @@ void *Dlsym(DlHandle handle, const char *name) {
     return nullptr;
   }
   FARPROC p = ::GetProcAddress(reinterpret_cast<HMODULE>(handle), name);
-  return reinterpret_cast<void *>(p);
+  // FARPROC (function pointer) -> void* (object pointer): a direct
+  // reinterpret_cast is conditionally-supported / implementation-defined
+  // per the C++ standard, so copy the bytes for a well-defined conversion.
+  void *sym = nullptr;
+  static_assert(sizeof(sym) == sizeof(p), "pointer size mismatch");
+  std::memcpy(&sym, &p, sizeof(sym));
+  return sym;
 }
 
 void Dlclose(DlHandle handle) {

@@ -38,8 +38,7 @@ using util::internal::StatFields;
 class StatStream final {
  public:
   explicit StatStream(std::string content)
-      : buf_(std::move(content)),
-        fp_(::fmemopen(buf_.data(), buf_.size(), "r")) {}
+      : buf_(std::move(content)), fp_(::fmemopen(buf_.data(), buf_.size(), "r")) {}
   ~StatStream() {
     if (fp_ != nullptr) {
       std::fclose(fp_);
@@ -68,8 +67,8 @@ std::string MakeStatLine(int pid, const std::string &comm) {
   // priority nice num_threads itrealvalue starttime
   char buf[1024];
   std::snprintf(buf, sizeof(buf),
-                "%d (%s) R 1 1 1 0 -1 0 100 0 5 0 1234 5678 0 0 20 0 1 0 999999\n",
-                pid, comm.c_str());
+                "%d (%s) R 1 1 1 0 -1 0 100 0 5 0 1234 5678 0 0 20 0 1 0 999999\n", pid,
+                comm.c_str());
   return std::string(buf);
 }
 
@@ -103,9 +102,7 @@ TEST(ParseProcPidStatTest, SimpleCommNoSpaces) {
 TEST(ParseProcPidStatTest, SignedFieldsCarryNegativeValues) {
   // Build a line where `nice` is negative (-5) and cutime is too.
   char buf[1024];
-  std::snprintf(buf, sizeof(buf),
-                "%d (proc) S 1 1 1 0 -1 0 0 0 0 0 0 0 -10 0 20 -5 4 0 0\n",
-                42);
+  std::snprintf(buf, sizeof(buf), "%d (proc) S 1 1 1 0 -1 0 0 0 0 0 0 0 -10 0 20 -5 4 0 0\n", 42);
   StatStream stream(buf);
   ASSERT_NE(stream.get(), nullptr);
 

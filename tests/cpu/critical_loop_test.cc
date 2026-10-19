@@ -77,10 +77,8 @@ TEST(CriticalLoopTest, ActuallyBurnsCyclesForLargeCount) {
   const auto t1 = std::chrono::steady_clock::now();
   (void)sink;
 
-  const auto elapsed_us =
-      std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-  EXPECT_GT(elapsed_us, 1) << "CriticalLoop(" << kLargeCount
-                           << ") returned in " << elapsed_us
+  const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+  EXPECT_GT(elapsed_us, 1) << "CriticalLoop(" << kLargeCount << ") returned in " << elapsed_us
                            << "us -- the multiply chain may have been elided";
 }
 

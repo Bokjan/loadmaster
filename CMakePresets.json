@@ -3,70 +3,135 @@
   "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
   "configurePresets": [
     {
-      "name": "dev",
-      "displayName": "Debug + unit tests (same tree as scripts/run_tests.sh)",
-      "binaryDir": "${sourceDir}/build_tests",
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
+      }
+    },
+    {
+      "name": "ci",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
         "LOADMASTER_BUILD_TESTS": "ON"
       }
     },
     {
-      "name": "sanitize",
-      "displayName": "Debug + unit tests under ASan/UBSan (same tree as run_tests.sh --sanitize)",
-      "binaryDir": "${sourceDir}/build_tests_sanitize",
+      "name": "unix-debug",
+      "hidden": true,
+      "inherits": "ci",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "unix-release",
+      "hidden": true,
+      "inherits": "ci",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "unix-sanitize",
+      "hidden": true,
+      "inherits": "ci",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "LOADMASTER_BUILD_TESTS": "ON",
-        "LOADMASTER_SANITIZE": "address,undefined",
-        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
+        "LOADMASTER_SANITIZE": "address,undefined"
       }
+    },
+    {
+      "name": "unix-tsan",
+      "hidden": true,
+      "inherits": "ci",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LOADMASTER_SANITIZE": "thread"
+      }
+    },
+    {
+      "name": "macos-base",
+      "hidden": true,
+      "inherits": "ci",
+      "cacheVariables": { "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0" }
+    },
+    {
+      "name": "macos-arm64-base",
+      "hidden": true,
+      "inherits": "macos-base",
+      "cacheVariables": { "CMAKE_OSX_ARCHITECTURES": "arm64" }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "ci",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug + tests (Linux/macOS, host arch); mirrors compile_commands.json for clangd",
+      "inherits": "unix-debug",
+      "cacheVariables": { "LOADMASTER_LINK_COMPILE_COMMANDS": "ON" }
     },
     {
       "name": "release",
-      "displayName": "Release binary for this host (not portable; see scripts/build_*)",
-      "binaryDir": "${sourceDir}/build_release_local",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
-      }
-    },
-    {
-      "name": "ci",
-      "displayName": "Release + unit tests, warnings as errors",
-      "binaryDir": "${sourceDir}/build_ci",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "LOADMASTER_BUILD_TESTS": "ON",
-        "LOADMASTER_WERROR": "ON",
-        "LOADMASTER_LINK_COMPILE_COMMANDS": "OFF"
-      }
-    }
-  ],
-  "buildPresets": [
-    { "name": "dev", "configurePreset": "dev", "configuration": "Debug" },
-    { "name": "sanitize", "configurePreset": "sanitize", "configuration": "Debug" },
-    { "name": "release", "configurePreset": "release", "configuration": "Release" },
-    { "name": "ci", "configurePreset": "ci", "configuration": "Release" }
-  ],
-  "testPresets": [
-    {
-      "name": "dev",
-      "configurePreset": "dev",
-      "configuration": "Debug",
-      "output": { "outputOnFailure": true }
+      "displayName": "Release + tests (Linux/macOS, host arch; not portable, see scripts/build_*)",
+      "inherits": "unix-release"
     },
     {
       "name": "sanitize",
-      "configurePreset": "sanitize",
-      "configuration": "Debug",
-      "output": { "outputOnFailure": true }
+      "displayName": "AddressSanitizer + UBSan (Linux/macOS, host arch)",
+      "inherits": "unix-sanitize"
     },
     {
-      "name": "ci",
-      "configurePreset": "ci",
-      "configuration": "Release",
-      "output": { "outputOnFailure": true }
+      "name": "tsan",
+      "displayName": "ThreadSanitizer (Linux/macOS, host arch)",
+      "inherits": "unix-tsan"
+    },
+    {
+      "name": "macos-arm64-debug",
+      "displayName": "macOS arm64 Debug",
+      "inherits": "macos-arm64-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "macos-arm64-release",
+      "displayName": "macOS arm64 Release",
+      "inherits": "macos-arm64-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows x64 Debug",
+      "inherits": "windows-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 Release",
+      "inherits": "windows-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "sanitize", "configurePreset": "sanitize" },
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "macos-arm64-debug", "configurePreset": "macos-arm64-debug" },
+    { "name": "macos-arm64-release", "configurePreset": "macos-arm64-release" },
+    { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug" },
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "sanitize", "configurePreset": "sanitize", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "macos-arm64-debug", "configurePreset": "macos-arm64-debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "macos-arm64-release", "configurePreset": "macos-arm64-release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
   ]
 }

@@ -24,7 +24,11 @@ bool Resolve(util::DlHandle handle, const char *name, Fn &slot) {
     LOG_WARN("Dlsym(ze_loader, %s) failed: %s", name, util::Dlerror());
     return false;
   }
-  slot = reinterpret_cast<Fn>(sym);
+  // void* -> function pointer: reinterpret_cast is conditionally-supported
+  // (implementation-defined) per the C++ standard, so the conversion is
+  // not portable well-formed; copy the bytes for a defined conversion.
+  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
+  std::memcpy(&slot, &sym, sizeof(slot));
   return true;
 }
 
@@ -118,7 +122,13 @@ const ZeApi *LoadZeApi() {
 const char *ZeResultString(ze_result_t err) {
   // Level Zero doesn't expose a public string-from-result helper in the
   // loader ABI, so we map only the codes we expect to see and fall back
-  // to a hex dump otherwise. Mirrors the spec values from ze_api.h.
+  // to a hex dump otherwise. Values copied verbatim from the official
+  // ze_api.h (tag v1.17.39). NOTE: ze_result_t is NOT a dense sequential
+  // enum -- the codes are spread across 0x1, 0x7000000x, 0x7001xxxx,
+  // 0x7002xxxx and 0x78xxxxxx prefix bands. Earlier code filled them in
+  // by declaration order (0x70000001..0x70000007), which mismatched every
+  // entry; functional checks use `rc != ZE_RESULT_SUCCESS` and were
+  // unaffected, but the log strings were all wrong.
   switch (err) {
     case ZE_RESULT_SUCCESS:
       return "ZE_RESULT_SUCCESS";

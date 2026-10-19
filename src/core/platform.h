@@ -29,8 +29,7 @@
 // below, so IS_MACOS and IS_BSD are mutually exclusive without further
 // gating.
 #ifndef IS_BSD
-#  if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || \
-      defined(__NetBSD__)
+#  if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #    define IS_BSD (1)
 #  else
 #    define IS_BSD (0)

@@ -248,7 +248,8 @@ loadmaster_add_test(memory_allocator_test
 
 # MemoryResourceManagerDefault scheduling: block size range / alignment,
 # the 45 s cadence, and that it keeps rescheduling after a background
-# (>= 32 MiB) allocation. Time is injected; no 45 s waits.
+# (>= 32 MiB) allocation, and that destroying it mid-fill joins promptly.
+# Time is injected; no 45 s waits.
 loadmaster_add_test(memory_manager_test
     memory/manager_test.cc
 )

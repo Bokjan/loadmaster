@@ -1,8 +1,8 @@
-// Linux-only internals of cpu::ReadSystemBusyNs(), exposed in a dedicated
-// header so the pure busy-aggregation and unit-conversion logic can be
-// exercised directly from unit tests. Do NOT include this from production
-// code outside of stat_linux.cc; the public surface is `cpu::ReadSystemBusyNs`
-// in stat.h.
+// Linux-only internals of cpu::ReadSystemBusyTicks() / BusyTicksToNs(),
+// exposed in a dedicated header so the pure busy-aggregation and
+// unit-conversion logic can be exercised directly from unit tests. Do NOT
+// include this from production code outside of stat_linux.cc; the public
+// surface is in stat.h.
 //
 // The entire header is compiled out on non-Linux platforms so it cannot
 // accidentally be referenced from portable code.

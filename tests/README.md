@@ -43,8 +43,8 @@ cmake --build build_tests -j
 cd build_tests && ctest --output-on-failure
 ```
 
-With CMake 3.21+, `cmake --preset dev && cmake --build --preset dev &&
-ctest --preset dev` does the same (see `CMakePresets.json`).
+With CMake 3.21+, `cmake --preset debug && cmake --build --preset debug &&
+ctest --preset debug` does the same (see `CMakePresets.json`).
 
 An installed GoogleTest (e.g. Debian's `libgtest-dev`, Homebrew's
 `googletest`, or one on `CMAKE_PREFIX_PATH`) is used when CMake finds one,
@@ -129,7 +129,7 @@ unavailable:
   `gpu/intel`, `gpu/opencl`, `gpu/apple`): they need drivers and
   physical devices that CI workers don't have.
 - Platform stat backends other than the host's: each platform's
-  `ReadSystemBusyNs` / `ProcStat` only builds there.
+  `ReadSystemBusyTicks` / `ProcStat` only builds there.
 
 ## Adding a new test
 

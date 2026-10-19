@@ -135,7 +135,7 @@ const std::vector<bool> *AffinityMask() {
 
 }  // namespace
 
-std::optional<uint64_t> ReadSystemBusyNs() {
+std::optional<uint64_t> ReadSystemBusyTicks() {
   UniqueFile fp(std::fopen("/proc/stat", "r"));
   if (!fp) {
     LOG_ERROR("failed to open /proc/stat");
@@ -146,8 +146,10 @@ std::optional<uint64_t> ReadSystemBusyNs() {
     LOG_ERROR("failed to parse /proc/stat");
     return std::nullopt;
   }
-  return internal::JiffiesToNs(*busy);
+  return busy;
 }
+
+uint64_t BusyTicksToNs(uint64_t tick_diff) { return internal::JiffiesToNs(tick_diff); }
 
 int CoreCount() {
   static const int kCached = []() {

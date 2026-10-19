@@ -12,10 +12,17 @@ namespace cpu {
 // always >= 1.
 int CoreCount();
 
-// Read the system-wide cumulative "busy" CPU time, in nanoseconds, summed
-// across all cores and accumulated since boot. The value is monotonically
-// non-decreasing between successive calls on the same machine; callers diff
-// two readings to derive a load over an interval.
+// Read the system-wide cumulative "busy" CPU time, in platform-native
+// ticks, summed across all cores and accumulated since boot. The value is
+// monotonically non-decreasing between successive calls on the same
+// machine; callers diff two readings to derive a load over an interval.
+//
+// Native ticks (Linux/macOS jiffies, BSD statclock ticks, Windows 100ns
+// ticks) are coarse enough that the cumulative counter does not wrap in
+// any realistic uptime, so the diff is taken in tick space and only the
+// small diff is converted to nanoseconds via BusyTicksToNs(). A cumulative
+// *nanosecond* count overflows uint64_t after ~584 core-years of busy time
+// (~9 years of uptime on 64 cores) and would then read as zero load.
 //
 // "Busy" means "not idle". Each platform converges on that single intent --
 // everything the kernel was NOT idle for counts as busy -- even though the
@@ -31,6 +38,13 @@ int CoreCount();
 //
 // Returns std::nullopt on hard failure (e.g. /proc/stat unreadable,
 // host_statistics64 / GetSystemTimes failed). Never throws.
-std::optional<uint64_t> ReadSystemBusyNs();
+std::optional<uint64_t> ReadSystemBusyTicks();
+
+// Convert a native tick DIFF to nanoseconds. Safe only for diffs (one
+// scheduling interval, or a stalled gap of minutes at most) -- never for
+// cumulative values, whose conversion is exactly what overflows. On tick
+// platforms this is util::TicksToNs(diff, hz); on Windows `diff * 100`.
+// Pure: tick diff in, ns out.
+uint64_t BusyTicksToNs(uint64_t tick_diff);
 
 }  // namespace cpu

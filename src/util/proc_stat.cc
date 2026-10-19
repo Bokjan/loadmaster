@@ -30,8 +30,8 @@ void ProcStat::UpdateCpuStat(TimePoint now, ForceUpdate force) {
     return;
   }
 
-  const std::optional<uint64_t> cpu_ns = ReadProcessCpuNs();
-  if (!cpu_ns) {
+  const std::optional<uint64_t> cpu_ticks = ReadProcessCpuTicks();
+  if (!cpu_ticks) {
     // Transient read failure: keep the last cached load rather than
     // pretending the process went idle.
     return;
@@ -42,11 +42,12 @@ void ProcStat::UpdateCpuStat(TimePoint now, ForceUpdate force) {
   const auto elapsed_ns =
       std::chrono::duration_cast<std::chrono::nanoseconds>(now - time_point_).count();
   if (has_baseline_ && elapsed_ns > 0) {
-    const uint64_t diff = (*cpu_ns >= prev_cpu_ns_) ? (*cpu_ns - prev_cpu_ns_) : 0;
-    cpu_load_cached_ = static_cast<double>(diff) / static_cast<double>(elapsed_ns) * 100.0;
+    const uint64_t diff = (*cpu_ticks >= prev_cpu_ticks_) ? (*cpu_ticks - prev_cpu_ticks_) : 0;
+    cpu_load_cached_ =
+        static_cast<double>(ProcessCpuTicksToNs(diff)) / static_cast<double>(elapsed_ns) * 100.0;
   }
   time_point_ = now;
-  prev_cpu_ns_ = *cpu_ns;
+  prev_cpu_ticks_ = *cpu_ticks;
   has_baseline_ = true;
 }
 

@@ -2,7 +2,7 @@
 //
 // The manager re-sizes its block every kMemoryScheduleIntervalSecond to a
 // random size in [kMemoryMinimumRatio, 1] x `-m`, aligned down to 4 KiB.
-// Blocks of kMemoryNoThreadSpawnThresholdMiB or more are allocated on a
+// Blocks of kMemoryBackgroundThreadThresholdMiB or more are allocated on a
 // background thread. A regression we pin here: the background thread was
 // detected with jthread::joinable(), which stays true after the thread
 // finished, so after the first large block the size never changed again.
@@ -105,6 +105,21 @@ TEST_F(MemoryManagerTest, KeepsReschedulingAfterABackgroundAllocation) {
   Tick(m, t2);
   EXPECT_EQ(m.ScheduledAllocations(), 3);
   SettleAt(m, t2);
+}
+
+TEST_F(MemoryManagerTest, DestroyingMidBackgroundFillJoinsCleanly) {
+  // The destructor of the background jthread requests stop and joins; the
+  // chunked fill checks the token between 4 MiB chunks, so this returns
+  // without waiting for the whole block. Under ASAN it also catches a
+  // missing join or a race on the allocator between the two threads.
+  const auto options = OptionsWithMiB(64);
+  {
+    MemoryResourceManagerDefault m(options);
+    ASSERT_TRUE(m.Init());
+    Tick(m, TimePoint{seconds(1000)});
+    EXPECT_TRUE(m.AllocationInFlight());
+  }
+  SUCCEED();
 }
 
 }  // namespace

@@ -32,7 +32,7 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   // The main thread must not touch it while `bg_alloc_thread_` is alive
   // and `bg_alloc_done_` is still false.
   unsafe::Allocator allocator_;
-  // Optional background thread used when block size >= kMemoryNoThreadSpawnThresholdMiB.
+  // Optional background thread used when block size >= kMemoryBackgroundThreadThresholdMiB.
   std::jthread bg_alloc_thread_;
   // Set (release) by `bg_alloc_thread_` as its very last action, so the
   // main thread can tell "finished but not yet joined" apart from "still
@@ -49,9 +49,10 @@ class MemoryResourceManagerDefault final : public MemoryResourceManager {
   // when none was ever started. False while one is still in flight.
   bool ReapBackgroundThread();
   bool WillSchedule(TimePoint time_point) const;
-  // Perform allocate + fill. May be invoked inline or from `bg_alloc_thread_`.
+  // Perform allocate + fill. May be invoked inline or from `bg_alloc_thread_`,
+  // whose stop token (requested by its destructor) cuts a long fill short.
   // Catches std::bad_alloc so a failed allocation doesn't take the process down.
-  void AllocateAndFill(size_t byte_count, std::byte seed);
+  void AllocateAndFill(size_t byte_count, std::byte seed, std::stop_token stop = {});
 };
 
 }  // namespace memory

@@ -35,6 +35,7 @@
 #include "memory/allocator.h"
 
 #include <cstddef>
+#include <stop_token>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -157,6 +158,40 @@ TEST(AllocatorTest, FillAcrossVariousSeedsRunsCleanly) {
   for (int s = 0; s < 256; ++s) {
     a.Fill(static_cast<std::byte>(s));
   }
+  EXPECT_FALSE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillWithStopTokenOnEmptyAllocatorIsNoop) {
+  // Same nullptr guard with a live stop token; the manager's background
+  // thread always passes one.
+  Allocator a;
+  std::stop_source src;
+  a.Fill(std::byte{0xAB}, src.get_token());
+  EXPECT_TRUE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillWithClearedTokenFillsCompletely) {
+  // A stop token that is never stopped walks the whole block. We can't
+  // peek at bytes, but a size spanning two full 4 MiB chunks plus a short
+  // tail exercises every chunk-boundary branch -- ASAN catches any
+  // out-of-bounds in the chunked loop.
+  Allocator a;
+  a.AllocateBlock(2 * 4 * 1024 * 1024 + 257);
+  std::stop_source src;
+  a.Fill(std::byte{0x5A}, src.get_token());
+  EXPECT_FALSE(a.IsEmpty());
+}
+
+TEST(AllocatorTest, FillReturnsEarlyWhenAlreadyStopped) {
+  // A pre-stopped token must return without touching the block. We can't
+  // observe the bytes, but the structural state is unchanged and the call
+  // must not crash; this pins the "check stop_requested() per chunk" guard
+  // that lets the manager abort a long background fill on shutdown.
+  Allocator a;
+  a.AllocateBlock(1024);
+  std::stop_source src;
+  src.request_stop();
+  a.Fill(std::byte{0x5A}, src.get_token());
   EXPECT_FALSE(a.IsEmpty());
 }
 

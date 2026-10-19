@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cmath>
 #include <numeric>
+#include <type_traits>
 #include <vector>
 
 namespace util {
@@ -37,7 +39,14 @@ class RollingSampler final {
         index_ = 0;
       }
     }
-    mean_cached_ = sum_ / static_cast<T>(values_.size());
+    if constexpr (std::is_integral_v<T>) {
+      // Round to nearest rather than truncating toward zero: the integer
+      // division `sum / count` introduced a persistent <=1 low bias.
+      mean_cached_ = static_cast<T>(
+          std::round(static_cast<double>(sum_) / static_cast<double>(values_.size())));
+    } else {
+      mean_cached_ = sum_ / static_cast<T>(values_.size());
+    }
   }
 
  private:
