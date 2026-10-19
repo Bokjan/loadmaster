@@ -438,6 +438,10 @@ if(LOADMASTER_HARDEN AND MSVC)
         target_link_options(loadmaster PRIVATE /CETCOMPAT)
     endif()
 elseif(LOADMASTER_HARDEN)
+    # Probed with -Werror: AppleClang accepts -fstack-clash-protection on
+    # arm64 with only an "argument unused during compilation" warning, which
+    # a plain probe takes for support and LOADMASTER_WERROR then fails on.
+    set(CMAKE_REQUIRED_FLAGS -Werror)
     foreach(_lm_flag -fstack-protector-strong -fstack-clash-protection
                      -fcf-protection=full -mbranch-protection=standard)
         string(MAKE_C_IDENTIFIER "LOADMASTER_HAS${_lm_flag}" _lm_var)
@@ -446,6 +450,7 @@ elseif(LOADMASTER_HARDEN)
             target_compile_options(loadmaster_build_flags INTERFACE ${_lm_flag})
         endif()
     endforeach()
+    unset(CMAKE_REQUIRED_FLAGS)
     if(NOT LOADMASTER_SANITIZE)
         target_compile_options(loadmaster_build_flags INTERFACE
             $<${_lm_not_debug}:-U_FORTIFY_SOURCE>
