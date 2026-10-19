@@ -24,6 +24,9 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 | `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; `scripts/build_linux.sh` does. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
 | `LOADMASTER_BUILD_TESTS` | `OFF` | Build the GoogleTest suite (`scripts/run_tests.sh` / `run_tests.ps1` turn it on). |
 | `LOADMASTER_SYSTEM_GTEST` | `ON` | Use an installed GoogleTest when CMake finds one instead of downloading it (not for sanitizer or MSVC builds). |
+| `LOADMASTER_HARDEN` | `ON` | Exploit mitigations, each used where the toolchain supports it: PIE, `-fstack-protector-strong`, `-fstack-clash-protection`, CET (`-fcf-protection`, x86) / PAC+BTI (`-mbranch-protection`, AArch64), `_FORTIFY_SOURCE=2` (optimised, non-sanitizer builds), full RELRO on ELF; `/guard:cf` and `/CETCOMPAT` on MSVC. PIE is dropped (with a configure message) when the toolchain's static `libstdc++` isn't position-independent. |
+| `LOADMASTER_GC_SECTIONS` | `ON` | In optimised builds, let the linker drop unreferenced functions and data (`--gc-sections`, `-dead_strip`, `/OPT:REF,ICF`). |
+| `LOADMASTER_LTO` | `OFF` | Link-time optimisation. Off because it barely shrinks this binary and widens what the optimiser can constant-fold across files, which the XOR obfuscation has to survive; if you enable it, check the stripped binary with `strings`. |
 | `LOADMASTER_WERROR` | `OFF` | Treat warnings in loadmaster's own code and tests as errors (`-Werror` / `/WX`). CI turns it on. |
 | `LOADMASTER_CCACHE` | `ON` | Use `ccache` as the compiler launcher when it is installed (Makefile / Ninja generators). |
 

@@ -359,7 +359,6 @@ else()
         # the undefined macro as 0 and silently drops the code: make
         # that a hard error instead.
         -Werror=undef
-        -fPIC
         # Rewrite the source-path prefix baked into __FILE__ (and any
         # other compiler-emitted path strings) so the resulting binary
         # does not leak the absolute build path -- which on developer
@@ -401,6 +400,120 @@ endif()
 if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(loadmaster_build_flags INTERFACE -fexperimental-library)
     target_link_options(loadmaster_build_flags INTERFACE -fexperimental-library)
+endif()
+
+# ---- Hardening, size, LTO --------------------------------------------------
+# Exploit mitigations for a binary that dlopen()s / LoadLibrary()s vendor
+# libraries into its address space. Each flag is probed so an older
+# toolchain (e.g. the manylinux image's) just goes without it.
+#   * PIE (ASLR for the executable itself). The C++ runtime is linked
+#     statically on Linux, so PIE also needs a position-independent
+#     libstdc++.a; not every toolchain ships one, hence the link probe.
+#   * -fstack-protector-strong, -fstack-clash-protection, CET on x86
+#     (-fcf-protection) and PAC/BTI on AArch64 (-mbranch-protection).
+#   * _FORTIFY_SOURCE=2 in optimised builds (it needs -O, and it would
+#     hide the libc calls from the sanitizers' interceptors). Undefined
+#     first because some distro compilers predefine a different level.
+#   * Full RELRO (-z relro -z now) on ELF; Control Flow Guard and CET
+#     shadow-stack compatibility on MSVC.
+option(LOADMASTER_HARDEN "Build with exploit mitigations (PIE, stack protector, FORTIFY, RELRO, CFG)" ON)
+# Section-level dead-code removal for optimised builds; Debug keeps
+# everything so the debugger can still find it.
+option(LOADMASTER_GC_SECTIONS "Drop unreferenced functions / data at link time in optimised builds" ON)
+# Off by default: the XOR obfuscation relies on the decoder not being
+# constant-folded with the encoded data (see util/obfuscate.h), and LTO
+# widens the optimiser's view across translation units. If you turn it on,
+# check the stripped binary with `strings` for the help text.
+option(LOADMASTER_LTO "Link-time optimisation (interprocedural)" OFF)
+
+set_target_properties(loadmaster_core loadmaster PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+include(CheckCXXCompilerFlag)
+include(CheckCXXSourceCompiles)
+set(_lm_not_debug "$<NOT:$<CONFIG:Debug>>")
+
+if(LOADMASTER_HARDEN AND MSVC)
+    target_compile_options(loadmaster_build_flags INTERFACE /guard:cf)
+    target_link_options(loadmaster PRIVATE /GUARD:CF)
+    if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "x64" AND MSVC_VERSION GREATER_EQUAL 1927)
+        target_link_options(loadmaster PRIVATE /CETCOMPAT)
+    endif()
+elseif(LOADMASTER_HARDEN)
+    foreach(_lm_flag -fstack-protector-strong -fstack-clash-protection
+                     -fcf-protection=full -mbranch-protection=standard)
+        string(MAKE_C_IDENTIFIER "LOADMASTER_HAS${_lm_flag}" _lm_var)
+        check_cxx_compiler_flag(${_lm_flag} ${_lm_var})
+        if(${_lm_var})
+            target_compile_options(loadmaster_build_flags INTERFACE ${_lm_flag})
+        endif()
+    endforeach()
+    if(NOT LOADMASTER_SANITIZE)
+        target_compile_options(loadmaster_build_flags INTERFACE
+            $<${_lm_not_debug}:-U_FORTIFY_SOURCE>
+            $<${_lm_not_debug}:-D_FORTIFY_SOURCE=2>)
+    endif()
+    if(NOT APPLE)
+        target_link_options(loadmaster PRIVATE -Wl,-z,relro -Wl,-z,now)
+    endif()
+
+    # Apple toolchains produce PIE executables unconditionally.
+    if(NOT APPLE)
+        include(CheckPIESupported)
+        check_pie_supported(LANGUAGES CXX)
+        set(_lm_pie_ok ${CMAKE_CXX_LINK_PIE_SUPPORTED})
+        if(_lm_pie_ok AND LOADMASTER_STATIC_LINK AND NOT LOADMASTER_SANITIZE AND
+           NOT CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+            set(CMAKE_REQUIRED_FLAGS -fPIE)
+            set(CMAKE_REQUIRED_LINK_OPTIONS -pie -static-libstdc++ -static-libgcc)
+            check_cxx_source_compiles([[
+                #include <iostream>
+                #include <stdexcept>
+                #include <string>
+                int main(int argc, char **) {
+                  try {
+                    if (argc > 5) throw std::runtime_error("x");
+                  } catch (const std::exception &e) {
+                    std::cerr << std::string(e.what()) << std::endl;
+                  }
+                  return 0;
+                }]] LOADMASTER_PIE_WITH_STATIC_LIBSTDCXX)
+            unset(CMAKE_REQUIRED_FLAGS)
+            unset(CMAKE_REQUIRED_LINK_OPTIONS)
+            set(_lm_pie_ok ${LOADMASTER_PIE_WITH_STATIC_LIBSTDCXX})
+        endif()
+        if(NOT _lm_pie_ok)
+            message(STATUS "Hardening: PIE not available with this toolchain; "
+                           "linking a position-dependent executable")
+            set_target_properties(loadmaster PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+        endif()
+    endif()
+endif()
+
+if(LOADMASTER_GC_SECTIONS)
+    if(MSVC)
+        target_link_options(loadmaster PRIVATE
+            $<${_lm_not_debug}:/OPT:REF> $<${_lm_not_debug}:/OPT:ICF>)
+    else()
+        target_compile_options(loadmaster_build_flags INTERFACE
+            $<${_lm_not_debug}:-ffunction-sections> $<${_lm_not_debug}:-fdata-sections>)
+        if(APPLE)
+            target_link_options(loadmaster PRIVATE $<${_lm_not_debug}:-Wl,-dead_strip>)
+        else()
+            target_link_options(loadmaster PRIVATE $<${_lm_not_debug}:-Wl,--gc-sections>)
+        endif()
+    endif()
+endif()
+
+if(LOADMASTER_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _lm_ipo_ok OUTPUT _lm_ipo_out LANGUAGES CXX)
+    if(_lm_ipo_ok)
+        set_target_properties(loadmaster_core loadmaster PROPERTIES
+                              INTERPROCEDURAL_OPTIMIZATION ON)
+        message(STATUS "LTO: enabled")
+    else()
+        message(WARNING "LOADMASTER_LTO=ON but the toolchain does not support it: ${_lm_ipo_out}")
+    endif()
 endif()
 
 # Debug-only macro
