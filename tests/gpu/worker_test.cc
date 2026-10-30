@@ -63,8 +63,13 @@ class FakeDevice final : public GpuDevice {
       traffic_.push_back(mem_traffic_bytes);
       traffic_launch_ms_.push_back(ms);
     }
-    busy_ns_ += static_cast<int64_t>(ms * 1e6);
+    // Sleeps overshoot, by milliseconds on macOS and Windows: count the
+    // time the launch really took, as a GPU's busy counter would.
+    const auto start = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(ms * 1e6)));
+    busy_ns_ += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - start)
+                    .count();
     return true;
   }
 
@@ -75,7 +80,7 @@ class FakeDevice final : public GpuDevice {
   std::atomic<int> releases_{0};
   std::atomic<size_t> held_bytes_{0};
   std::atomic<std::uint64_t> last_traffic_bytes_{0};
-  std::atomic<int64_t> busy_ns_{0};  // kernel time asked for, all launches
+  std::atomic<int64_t> busy_ns_{0};  // wall time of all launches
   std::optional<double> bandwidth_;  // bytes per second; set before Start()
   std::mutex traffic_mutex_;
   std::vector<std::uint64_t> traffic_;     // every non-zero traffic, in order
