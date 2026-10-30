@@ -55,7 +55,7 @@ jobs:
       - name: Smoke test (silent)
         if: matrix.variant == 'silent'
         run: timeout 30 scripts/check_silent.sh dist/loadmaster-*-silent-linux-${{ matrix.arch }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}-${{ matrix.variant }}
           path: dist/*
@@ -90,7 +90,7 @@ jobs:
       - name: Smoke test (silent)
         if: matrix.variant == 'silent'
         run: scripts/check_silent.sh dist/loadmaster-*-silent-macos-arm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-arm64-${{ matrix.variant }}
           path: dist/*
@@ -140,7 +140,7 @@ jobs:
           # The runner ends the step with `exit $LASTEXITCODE`, which the
           # last run above left at its expected 1.
           exit 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x86_64-${{ matrix.variant }}
           path: dist/*
@@ -156,7 +156,7 @@ jobs:
       contents: write   # gh release create
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release
           merge-multiple: true
