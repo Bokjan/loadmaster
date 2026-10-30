@@ -201,6 +201,17 @@ std::string AppleMetalDevice::Name() const {
   return std::string(buf);
 }
 
+DeviceLocator AppleMetalDevice::Locator() const {
+  DeviceLocator out;
+  if (device_ != nullptr) {
+    // The IORegistry entry ID of the device's IOAccelerator service, which
+    // carries the per-process GPU time the contention monitor reads.
+    id<MTLDevice> device = (__bridge id<MTLDevice>)device_;
+    out.registry_id = static_cast<std::uint64_t>([device registryID]);
+  }
+  return out;
+}
+
 bool AppleMetalDevice::AllocateMemory(size_t bytes) {
   if (device_ == nullptr || queue_ == nullptr) {
     return false;

@@ -47,6 +47,10 @@ constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC = 0xf;
 constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC = 0x15;
 constexpr uint32_t ZE_STRUCTURE_TYPE_MODULE_DESC = 0x1b;
 constexpr uint32_t ZE_STRUCTURE_TYPE_KERNEL_DESC = 0x1d;
+// Extensions (ZE_extension_pci_properties / ZE_extension_device_luid),
+// used for the contention monitor's device identity.
+constexpr uint32_t ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES = 0x10008;
+constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_LUID_EXT_PROPERTIES = 0x1000d;
 
 // ---- Module format -------------------------------------------------------
 constexpr uint32_t ZE_MODULE_FORMAT_IL_SPIRV = 0u;
@@ -144,6 +148,35 @@ struct ze_device_properties_t {
   char name[256];  // ZE_MAX_DEVICE_NAME = 256
 };
 
+struct ze_pci_address_ext_t {
+  uint32_t domain;
+  uint32_t bus;
+  uint32_t device;
+  uint32_t function;
+};
+
+struct ze_pci_speed_ext_t {
+  int32_t genVersion;
+  int32_t width;
+  int64_t maxBandwidth;
+};
+
+struct ze_pci_ext_properties_t {
+  uint32_t stype;
+  void *pNext;
+  ze_pci_address_ext_t address;
+  ze_pci_speed_ext_t maxSpeed;
+};
+
+// Chained into ze_device_properties_t::pNext. Equal to the DXGI adapter
+// LUID on Windows.
+struct ze_device_luid_ext_properties_t {
+  uint32_t stype;
+  void *pNext;
+  uint8_t luid[8];
+  uint32_t nodeMask;
+};
+
 // ---- Function pointer table ---------------------------------------------
 struct ZeApi {
   ze_result_t (*zeInit)(uint32_t flags);
@@ -207,6 +240,10 @@ struct ZeApi {
                                   const ze_device_mem_alloc_desc_t *device_desc, std::size_t size,
                                   std::size_t alignment, ze_device_handle_t hDevice, void **pptr);
   ze_result_t (*zeMemFree)(ze_context_handle_t hContext, void *ptr);
+
+  // Optional (nullptr if the loader predates it).
+  ze_result_t (*zeDevicePciGetPropertiesExt)(ze_device_handle_t hDevice,
+                                             ze_pci_ext_properties_t *pPciProperties);
 };
 
 // Returns a singleton API table; first call dlopens ze_loader and

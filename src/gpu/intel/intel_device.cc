@@ -7,7 +7,9 @@
 
 #include "spirv_kernel.h"
 
+#include "core/platform.h"
 #include "gpu/constants.h"
+#include "gpu/contention/parse.h"
 #include "util/log.h"
 
 namespace gpu::intel {
@@ -266,6 +268,32 @@ std::string IntelDevice::Name() const {
   char buf[320];
   std::snprintf(buf, sizeof(buf), "%s (#%d)", name_.c_str(), device_index_);
   return std::string(buf);
+}
+
+DeviceLocator IntelDevice::Locator() const {
+  DeviceLocator out;
+  if (api_ == nullptr || device_ == nullptr) {
+    return out;
+  }
+  ze_pci_ext_properties_t pci{};
+  pci.stype = ZE_STRUCTURE_TYPE_PCI_EXT_PROPERTIES;
+  if (api_->zeDevicePciGetPropertiesExt != nullptr &&
+      api_->zeDevicePciGetPropertiesExt(device_, &pci) == ZE_RESULT_SUCCESS) {
+    out.pci_bus_id = contention::FormatPciBusId(pci.address.domain, pci.address.bus,
+                                                pci.address.device, pci.address.function);
+  }
+#if IS_WINDOWS
+  ze_device_luid_ext_properties_t luid{};
+  luid.stype = ZE_STRUCTURE_TYPE_DEVICE_LUID_EXT_PROPERTIES;
+  ze_device_properties_t props{};
+  props.stype = ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES;
+  props.pNext = &luid;
+  if (api_->zeDeviceGetProperties(device_, &props) == ZE_RESULT_SUCCESS) {
+    // Windows LUID {DWORD LowPart; LONG HighPart}, little-endian.
+    std::memcpy(&out.luid, luid.luid, sizeof(out.luid));
+  }
+#endif
+  return out;
 }
 
 bool IntelDevice::AllocateMemory(std::size_t bytes) {

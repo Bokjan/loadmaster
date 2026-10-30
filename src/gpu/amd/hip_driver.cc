@@ -69,19 +69,13 @@ void Unload() {
 
 template <typename Fn>
 bool Resolve(util::DlHandle handle, const char *name, Fn &slot, bool required = true) {
-  void *sym = util::Dlsym(handle, name);
-  if (sym == nullptr) {
-    if (required) {
-      LOG_WARN("Dlsym(%s) failed: %s", name, util::Dlerror());
-    }
-    return false;
+  if (util::DlsymInto(handle, name, slot)) {
+    return true;
   }
-  // void* -> function pointer: reinterpret_cast is conditionally-supported
-  // (implementation-defined) per the C++ standard, so the conversion is
-  // not portable well-formed; copy the bytes for a defined conversion.
-  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
-  std::memcpy(&slot, &sym, sizeof(slot));
-  return true;
+  if (required) {
+    LOG_WARN("Dlsym(%s) failed: %s", name, util::Dlerror());
+  }
+  return false;
 }
 
 bool DoLoad() {
@@ -155,6 +149,7 @@ bool DoLoad() {
   ok &= Resolve(g_hip_handle, "hipFree", g_api.hipFree);
   ok &= Resolve(g_hip_handle, "hipMemset", g_api.hipMemset);
   ok &= Resolve(g_hip_handle, "hipGetErrorString", g_api.hipGetErrorString);
+  Resolve(g_hip_handle, "hipDeviceGetPCIBusId", g_api.hipDeviceGetPCIBusId, /*required=*/false);
 
   ok &= Resolve(g_rtc_handle, "hiprtcCreateProgram", g_api.hiprtcCreateProgram);
   ok &= Resolve(g_rtc_handle, "hiprtcDestroyProgram", g_api.hiprtcDestroyProgram);

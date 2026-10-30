@@ -19,17 +19,11 @@ util::DlHandle g_handle = nullptr;
 
 template <typename Fn>
 bool Resolve(util::DlHandle handle, const char *name, Fn &slot) {
-  void *sym = util::Dlsym(handle, name);
-  if (sym == nullptr) {
-    LOG_WARN("Dlsym(OpenCL, %s) failed: %s", name, util::Dlerror());
-    return false;
+  if (util::DlsymInto(handle, name, slot)) {
+    return true;
   }
-  // void* -> function pointer: reinterpret_cast is conditionally-supported
-  // (implementation-defined) per the C++ standard, so the conversion is
-  // not portable well-formed; copy the bytes for a defined conversion.
-  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
-  std::memcpy(&slot, &sym, sizeof(slot));
-  return true;
+  LOG_WARN("Dlsym(OpenCL, %s) failed: %s", name, util::Dlerror());
+  return false;
 }
 
 bool DoLoad() {

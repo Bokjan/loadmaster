@@ -5,6 +5,8 @@
 // behind the same minimal interface. Used by the GPU module to load
 // vendor drivers on demand.
 
+#include <cstring>
+
 namespace util {
 
 using DlHandle = void *;
@@ -22,6 +24,22 @@ DlHandle DlopenAny(const char *const *names);
 
 // Resolve a symbol; returns nullptr if not present.
 void *Dlsym(DlHandle handle, const char *name);
+
+// Resolve a symbol into the function pointer `slot`. Returns false (and
+// leaves `slot` alone) if not present; Dlerror() says why.
+template <typename Fn>
+bool DlsymInto(DlHandle handle, const char *name, Fn &slot) {
+  void *sym = Dlsym(handle, name);
+  if (sym == nullptr) {
+    return false;
+  }
+  // void* -> function pointer: reinterpret_cast is conditionally-supported
+  // (implementation-defined) per the C++ standard, so the conversion is
+  // not portable well-formed; copy the bytes for a defined conversion.
+  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
+  std::memcpy(&slot, &sym, sizeof(slot));
+  return true;
+}
 
 // Close a handle; safe on nullptr.
 void Dlclose(DlHandle handle);

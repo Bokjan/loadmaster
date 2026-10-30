@@ -26,6 +26,7 @@ class OpenClDevice final : public GpuDevice {
 
   bool Init(int device_index) override;
   std::string Name() const override;
+  DeviceLocator Locator() const override;
   bool AllocateMemory(std::size_t bytes) override;
   void ReleaseMemory() override;
   bool RunKernel(int loop_count) override;
@@ -45,6 +46,9 @@ class OpenClDevice final : public GpuDevice {
   cl_kernel kernel_;
   cl_mem out_buf_;
   std::size_t out_bytes_;
+  // Init() got work through to the device: the runtime's hardware queue
+  // exists (ROCm creates its amdkfd queue lazily).
+  bool queue_created_;
   // Work-group size used for launches: kGpuKernelBlockSize, or less if
   // the device / compiled kernel can't take that many work-items.
   std::size_t local_size_;
@@ -53,6 +57,7 @@ class OpenClDevice final : public GpuDevice {
   std::vector<cl_mem> mem_load_bufs_;
   std::size_t mem_load_bytes_;
   std::string name_;
+  std::string platform_name_;
   int device_index_;
 
   void Destroy();

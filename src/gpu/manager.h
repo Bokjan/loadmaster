@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "contention/monitor.h"
 #include "worker.h"
 
 #include "core/resource_manager.h"
@@ -14,8 +15,12 @@ namespace gpu {
 // (Default, RandomNormal) decide HOW the per-tick load is set.
 //
 // Init() takes the list of (vendor-local index, device) pairs the
-// factory probed, binds + calibrates each device, allocates optional
-// device memory, and constructs one GpuWorkerContext per usable device.
+// factory probed, binds each device, and constructs one GpuWorkerContext
+// per usable device (which allocates the optional device memory once
+// started). It then sets up the contention monitor that makes a device
+// yield -- no kernels, no `-gm` block -- while another process is doing
+// compute work on it, and only then calibrates the devices nobody else is
+// using.
 // Subclasses can read `workers_` from their `Schedule()` override to
 // drive per-device loads.
 class GpuResourceManager : public core::ResourceManager {
@@ -38,10 +43,20 @@ class GpuResourceManager : public core::ResourceManager {
   // GpuWorkerContext holds non-movable members (std::atomic, std::jthread),
   // so we own them via unique_ptr to make the vector copyable/movable.
   std::vector<std::unique_ptr<GpuWorkerContext>> workers_;
+  std::unique_ptr<contention::Monitor> monitor_;
 
   // Convert a load percentage (0..kGpuMaxLoadPerDevice) into the
   // per-tick busy-millisecond budget used by GpuWorkerContext.
   static int LoadPercentToBusyMs(int load_percent);
+
+ private:
+  // Build monitor_ over workers_ and take the first sample, so a device
+  // that is already in use starts out yielding.
+  void InitContentionMonitor();
+  // Calibrate every worker that isn't yielding and drop the ones that
+  // can't run the kernel; yielding ones calibrate once they resume. False
+  // if no device is left.
+  bool CalibrateWorkers();
 };
 
 }  // namespace gpu

@@ -102,6 +102,22 @@ Disabled by default. Use `-g <load>` and/or `-gm <mib>` to enable.
 
 Each selected device gets its own worker thread that runs the same busy/sleep pattern as the CPU workers: each `kScheduleIntervalMS` tick, the worker launches a busy kernel sized to occupy `load%` of the period, then sleeps for the remainder (the host thread sleeps while the kernel runs; it does not spin). A calibration at startup tunes the per-thread loop count to the actual device and is then continuously corrected for clock boost / throttling. A device whose kernel can't run is dropped at startup, and one that fails 50 launches in a row is given up.
 
+### Yielding to other GPU users
+Like the CPU module, which only fills the gap other processes leave, the GPU module stands down when something else needs the GPU. Every 2 seconds (`kGpuYieldPollMS`) it looks for other processes doing *compute* work on each device; a device that has one stops launching kernels and frees its `-gm` block at once, and picks both up again 30 seconds (`kGpuYieldResumeMS`) after the last sighting. Each device is judged on its own. This is always on. While yielding, the device context itself (a few hundred MiB of VRAM on NVIDIA) stays open. A device that is already in use at startup isn't calibrated until it is free, so loadmaster doesn't run its calibration kernels on top of the other job.
+
+Only compute users count (CUDA / HIP / OpenCL / Level Zero, compute engines), so a desktop compositor or browser doesn't keep the GPU module idle; a purely graphical load (a game) doesn't trigger it either, except on macOS. How other processes are seen depends on the platform, and a device none of these can see (for 3 polls in a row, `kGpuYieldUnknownWarnPolls`) is reported once with a warning and never yields:
+
+| Platform | Source | What counts |
+|----------|--------|-------------|
+| Linux, NVIDIA; Windows, NVIDIA in TCC / MCDM mode | NVML (`libnvidia-ml.so.1` / `nvml.dll`, ships with the driver) | another process with a compute context on the device (`nvidia-smi` type `C`). Under WDDM (a Windows display GPU), NVML lists every desktop process with a D3D device as a compute user too, so those devices go by the GPU Engine counters below instead |
+| Linux, AMD ROCm | `/sys/class/kfd/kfd/proc` | another process with a ROCm queue on the device |
+| Linux, Intel / Mesa OpenCL / other DRM drivers | `/proc/<pid>/fd`, `/proc/<pid>/maps` and `/proc/<pid>/fdinfo` | another process with the device's `/dev/dri` node open, a compute runtime for that driver loaded (Level Zero / NEO OpenCL for Intel, ROCm for AMD, Mesa OpenCL for any), *and* keeping the device's engines >= 5% busy. The last check uses the kernel's DRM usage stats and is skipped where the driver has none; it keeps out programs that merely listed the OpenCL platforms, which loads every installed driver. Reading other processes' fd tables needs the same user or root: as a normal user, other users' jobs are invisible to this source |
+| Windows, any vendor | "GPU Engine" performance counters (what Task Manager shows) | another process keeping the adapter's compute engines >= 5% busy (`kGpuYieldMinBusyPercent`). Matched by adapter LUID; HIP devices, whose LUID isn't available, react to compute work on any adapter |
+| macOS | per-process GPU time in the IORegistry (what Activity Monitor shows) | another process (WindowServer aside) keeping the GPU >= 5% busy; Metal doesn't separate compute from graphics |
+| FreeBSD / DragonFly | none | never yields |
+
+Under NVML and amdkfd, which go by open contexts and queues, two loadmaster instances on the same GPU see each other as other users and both stand down. The sources that measure busy time don't count an instance that is yielding.
+
 ### Runtime dependencies
 On Linux and Windows the GPU module is fully **runtime-loaded** via `dlopen` / `LoadLibrary`. The loadmaster binary itself does not link against any vendor GPU library, so a build runs on any machine regardless of which (if any) GPU vendor stack is installed:
 

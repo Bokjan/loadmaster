@@ -1,5 +1,8 @@
 #include "manager.h"
 
+#include <chrono>
+#include <string>
+
 #include "constants.h"
 
 #include "core/constants.h"
@@ -30,28 +33,10 @@ bool GpuResourceManager::Init() {
     }
     LOG_INFO("GPU device #%d ready: %s", idx, dev->Name().c_str());
 
-    // Optional memory load
-    const int64_t mem_bytes = options_.GetGpuMemoryBytes();
-    if (mem_bytes > 0) {
-      if (!dev->AllocateMemory(static_cast<size_t>(mem_bytes))) {
-        LOG_WARN("GPU device #%d memory allocation failed (%lld bytes); continuing", idx,
-                 static_cast<long long>(mem_bytes));
-      }
-    }
-
     auto ctx = std::make_unique<GpuWorkerContext>(next_id, std::move(dev));
-    if (options_.GetGpuLoad() > 0) {
-      if (!ctx->CalibrateBaseLoopCount()) {
-        // Can't run the kernel at all: drop the device instead of keeping
-        // a worker that would fail on every tick.
-        LOG_WARN("GPU device #%d failed kernel calibration, skipping", idx);
-        continue;
-      }
-      // Initial load: subclasses are free to override on the first
-      // Schedule() tick. We seed with the user-requested per-device
-      // load so a worker that never sees Schedule() (e.g. the Default
-      // algorithm) still runs at the intended rate.
-      ctx->SetLoadSet(LoadPercentToBusyMs(options_.GetGpuLoad()));
+    // Optional memory load, allocated by the worker thread once started.
+    if (options_.GetGpuMemoryBytes() > 0) {
+      ctx->SetMemoryBytes(static_cast<size_t>(options_.GetGpuMemoryBytes()));
     }
     workers_.emplace_back(std::move(ctx));
     ++next_id;
@@ -62,25 +47,102 @@ bool GpuResourceManager::Init() {
     LOG_WARN("GPU module: no usable device, disabling");
     return false;
   }
+  // Look for other users before calibrating: calibration runs the kernel
+  // flat out, which would get in the way of a job already on the device
+  // and come out too low there.
+  InitContentionMonitor();
+  if (options_.GetGpuLoad() > 0) {
+    return CalibrateWorkers();
+  }
   return true;
 }
 
-void GpuResourceManager::CreateWorkerThreads() {
-  if (options_.GetGpuLoad() <= 0) {
-    return;
+bool GpuResourceManager::CalibrateWorkers() {
+  const size_t before = workers_.size();
+  std::erase_if(workers_, [](const std::unique_ptr<GpuWorkerContext> &w) {
+    if (w->Yielding()) {
+      return false;  // calibrates on its own thread once it resumes
+    }
+    if (w->CalibrateBaseLoopCount()) {
+      return false;
+    }
+    // Can't run the kernel at all: drop the device instead of keeping a
+    // worker that would fail on every tick.
+    LOG_WARN("GPU %s failed kernel calibration, skipping", w->device()->Name().c_str());
+    return true;
+  });
+  if (workers_.empty()) {
+    LOG_WARN("GPU module: no usable device, disabling");
+    return false;
+  }
+  if (workers_.size() != before) {
+    // monitor_ addresses devices by their index in workers_.
+    InitContentionMonitor();
   }
   for (auto &w : workers_) {
+    // Initial load: subclasses are free to override on the first
+    // Schedule() tick. We seed with the user-requested per-device load so
+    // a worker that never sees Schedule() (e.g. the Default algorithm)
+    // still runs at the intended rate.
+    w->SetLoadSet(LoadPercentToBusyMs(options_.GetGpuLoad()));
+  }
+  return true;
+}
+
+void GpuResourceManager::InitContentionMonitor() {
+  std::vector<std::string> names;
+  std::vector<DeviceLocator> locators;
+  for (const auto &w : workers_) {
+    w->SetYield(false);  // the first Poll() below decides afresh
+    names.push_back(w->device()->Name());
+    locators.push_back(w->device()->Locator());
+    LOG_DEBUG("GPU %s: pci=%s luid=0x%llx registry_id=0x%llx", names.back().c_str(),
+              locators.back().pci_bus_id.empty() ? "?" : locators.back().pci_bus_id.c_str(),
+              static_cast<unsigned long long>(locators.back().luid),
+              static_cast<unsigned long long>(locators.back().registry_id));
+  }
+  auto on_change = [this](size_t i, const std::string &name, bool yield, int pid) {
+    if (yield && pid > 0) {
+      LOG_INFO("GPU %s: in use by another process (pid %d), yielding", name.c_str(), pid);
+    } else if (yield) {
+      LOG_INFO("GPU %s: in use by another process, yielding", name.c_str());
+    } else {
+      LOG_INFO("GPU %s: no other process for %d s, resuming", name.c_str(),
+               kGpuYieldResumeMS / kMillisecondsPerSecond);
+    }
+    workers_[i]->SetYield(yield);
+  };
+  monitor_ = std::make_unique<contention::Monitor>(std::move(names), std::move(locators),
+                                                   contention::CreatePlatformSources(), on_change);
+  monitor_->Poll(std::chrono::steady_clock::now());
+}
+
+void GpuResourceManager::CreateWorkerThreads() {
+  // Started even without `-g`: the worker also holds the `-gm` block and
+  // gives it up while another process uses the device.
+  for (auto &w : workers_) {
     w->Start();
+  }
+  if (monitor_ != nullptr) {
+    monitor_->Start();
   }
 }
 
 void GpuResourceManager::RequestWorkerThreadsStop() {
+  if (monitor_ != nullptr) {
+    monitor_->RequestStop();
+  }
   for (auto &w : workers_) {
     w->RequestStop();
   }
 }
 
 void GpuResourceManager::JoinWorkerThreads() {
+  // The monitor calls into workers_: stop it before they go away.
+  if (monitor_ != nullptr) {
+    monitor_->Join();
+    monitor_.reset();
+  }
   for (auto &w : workers_) {
     w->Join();
   }

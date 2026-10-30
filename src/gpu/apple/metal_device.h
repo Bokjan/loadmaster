@@ -28,6 +28,7 @@ class AppleMetalDevice final : public GpuDevice {
 
   bool Init(int device_index) override;
   std::string Name() const override;
+  DeviceLocator Locator() const override;
   bool AllocateMemory(size_t bytes) override;
   void ReleaseMemory() override;
   bool RunKernel(int loop_count) override;

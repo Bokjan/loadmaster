@@ -5,6 +5,7 @@
 #include "hip_kernel.h"
 
 #include "gpu/constants.h"
+#include "gpu/contention/parse.h"
 #include "util/log.h"
 
 namespace gpu::amd {
@@ -17,6 +18,7 @@ AmdDevice::AmdDevice()
       busy_func_(nullptr),
       out_ptr_(nullptr),
       out_bytes_(0),
+      queue_created_(false),
       mem_load_ptr_(nullptr),
       mem_load_bytes_(0),
       device_index_(-1) {}
@@ -166,7 +168,8 @@ bool AmdDevice::Init(int device_index) {
     Destroy();
     return false;
   }
-  api_->hipMemset(out_ptr_, 0, out_bytes_);
+  // Also creates our amdkfd queue on the device; see Locator().
+  queue_created_ = api_->hipMemset(out_ptr_, 0, out_bytes_) == hipSuccess;
   return true;
 }
 
@@ -174,6 +177,18 @@ std::string AmdDevice::Name() const {
   char buf[320];
   std::snprintf(buf, sizeof(buf), "%s (#%d)", name_.c_str(), device_index_);
   return std::string(buf);
+}
+
+DeviceLocator AmdDevice::Locator() const {
+  DeviceLocator out;
+  out.kfd_client = queue_created_;
+  char bus_id[32] = {};
+  if (api_ != nullptr && api_->hipDeviceGetPCIBusId != nullptr &&
+      api_->hipDeviceGetPCIBusId(bus_id, static_cast<int>(sizeof(bus_id)), device_index_) ==
+          hipSuccess) {
+    out.pci_bus_id = contention::CanonicalPciBusId(bus_id);
+  }
+  return out;
 }
 
 bool AmdDevice::AllocateMemory(size_t bytes) {

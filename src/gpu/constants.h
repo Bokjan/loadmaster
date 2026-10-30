@@ -29,6 +29,22 @@ constexpr double kGpuAdaptSmoothing = 0.5;
 // worker gives the device up instead of logging a warning forever.
 constexpr int kGpuMaxConsecutiveFailures = 50;
 
+// Yielding to other GPU users, the GPU counterpart of the CPU module
+// filling only the gap other processes leave. Every kGpuYieldPollMS the
+// contention monitor looks for other processes doing compute work on each
+// device; a device that has one stops launching kernels and frees its
+// `-gm` block right away, and resumes kGpuYieldResumeMS after the last
+// sighting (so a job that pauses briefly doesn't get the GPU snatched back).
+constexpr int kGpuYieldPollMS = 2'000;
+constexpr int kGpuYieldResumeMS = 30'000;
+// Sources that only see busy time (Windows GPU engine counters, macOS
+// per-process GPU time) count another process once it keeps the device
+// at least this busy over a poll.
+constexpr double kGpuYieldMinBusyPercent = 5.0;
+// Polls in a row in which no source could see a device before warning that
+// it won't yield, so one failed counter read doesn't trigger the warning.
+constexpr int kGpuYieldUnknownWarnPolls = 3;
+
 // GPU rand_normal scheduler. Mirrors the CPU rand_normal knobs: every
 // device independently walks its own shuffled set of load points so that
 // the *time-average* load matches the user-requested `-g <load>` while

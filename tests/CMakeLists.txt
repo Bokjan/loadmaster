@@ -227,6 +227,24 @@ loadmaster_add_test(gpu_worker_test
     gpu/worker_test.cc
 )
 
+# Contention monitor (yielding to other GPU users): the string formats the
+# sources parse (vendor PCI ids, amdkfd topology, Windows GPU Engine
+# instances, macOS IOUserClientCreator) on every host, the yield
+# hysteresis and source merging with fake sources and injected time, and
+# -- Linux only, zero tests elsewhere -- the amdkfd and DRM sources against
+# a fake /proc + /sys tree.
+loadmaster_add_test(gpu_contention_parse_test
+    gpu/contention_parse_test.cc
+)
+
+loadmaster_add_test(gpu_contention_monitor_test
+    gpu/contention_monitor_test.cc
+)
+
+loadmaster_add_test(gpu_contention_linux_test
+    gpu/contention_linux_test.cc
+)
+
 # The CMake-side XOR encoder for busy_kernel.spv must agree with
 # util::obfuscate and with the key in spirv_kernel.h. loadmaster_core
 # supplies the LOADMASTER_OBFUSCATE value and the generated include dir.

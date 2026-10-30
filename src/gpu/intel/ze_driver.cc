@@ -18,18 +18,14 @@ std::mutex g_load_mutex;
 util::DlHandle g_handle = nullptr;
 
 template <typename Fn>
-bool Resolve(util::DlHandle handle, const char *name, Fn &slot) {
-  void *sym = util::Dlsym(handle, name);
-  if (sym == nullptr) {
-    LOG_WARN("Dlsym(ze_loader, %s) failed: %s", name, util::Dlerror());
-    return false;
+bool Resolve(util::DlHandle handle, const char *name, Fn &slot, bool required = true) {
+  if (util::DlsymInto(handle, name, slot)) {
+    return true;
   }
-  // void* -> function pointer: reinterpret_cast is conditionally-supported
-  // (implementation-defined) per the C++ standard, so the conversion is
-  // not portable well-formed; copy the bytes for a defined conversion.
-  static_assert(sizeof(Fn) == sizeof(sym), "pointer size mismatch");
-  std::memcpy(&slot, &sym, sizeof(slot));
-  return true;
+  if (required) {
+    LOG_WARN("Dlsym(ze_loader, %s) failed: %s", name, util::Dlerror());
+  }
+  return false;
 }
 
 bool DoLoad() {
@@ -85,6 +81,8 @@ bool DoLoad() {
   ok &= Resolve(g_handle, "zeKernelSetArgumentValue", g_api.zeKernelSetArgumentValue);
   ok &= Resolve(g_handle, "zeMemAllocDevice", g_api.zeMemAllocDevice);
   ok &= Resolve(g_handle, "zeMemFree", g_api.zeMemFree);
+  Resolve(g_handle, "zeDevicePciGetPropertiesExt", g_api.zeDevicePciGetPropertiesExt,
+          /*required=*/false);
 
   if (!ok) {
     LOG_WARN("failed to resolve all Level Zero symbols");

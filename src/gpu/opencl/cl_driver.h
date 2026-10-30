@@ -63,6 +63,9 @@ constexpr cl_uint CL_KERNEL_WORK_GROUP_SIZE = 0x11B0;     // size_t
 // extensions; drivers without them return an error and we skip the check.
 constexpr cl_uint CL_DEVICE_UUID_KHR = 0x106A;          // cl_uchar[16], cl_khr_device_uuid
 constexpr cl_uint CL_DEVICE_PCI_BUS_INFO_KHR = 0x410F;  // 4 x cl_uint, cl_khr_pci_bus_info
+// Windows adapter LUID (cl_khr_device_uuid), for the contention monitor.
+constexpr cl_uint CL_DEVICE_LUID_VALID_KHR = 0x106C;  // cl_bool
+constexpr cl_uint CL_DEVICE_LUID_KHR = 0x106D;        // cl_uchar[8]
 
 // ---- Function pointer table ---------------------------------------------
 struct ClApi {

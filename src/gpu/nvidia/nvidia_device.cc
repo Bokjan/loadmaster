@@ -1,10 +1,12 @@
 #include "nvidia_device.h"
 
 #include <cstdio>
+#include <cstring>
 
 #include "ptx_kernel.h"
 
 #include "gpu/constants.h"
+#include "gpu/contention/parse.h"
 #include "util/log.h"
 
 namespace gpu::nvidia {
@@ -139,6 +141,28 @@ std::string NvidiaDevice::Name() const {
   char buf[320];
   std::snprintf(buf, sizeof(buf), "%s (#%d)", name_.c_str(), device_index_);
   return std::string(buf);
+}
+
+DeviceLocator NvidiaDevice::Locator() const {
+  DeviceLocator out;
+  if (api_ == nullptr) {
+    return out;
+  }
+  char bus_id[32] = {};
+  if (api_->cuDeviceGetPCIBusId != nullptr &&
+      api_->cuDeviceGetPCIBusId(bus_id, static_cast<int>(sizeof(bus_id)), device_) ==
+          CUDA_SUCCESS) {
+    out.pci_bus_id = contention::CanonicalPciBusId(bus_id);
+  }
+  // An 8-byte Windows LUID {DWORD LowPart; LONG HighPart}: as a little-endian
+  // uint64 that is (HighPart << 32) | LowPart.
+  char luid[8] = {};
+  unsigned int node_mask = 0;
+  if (api_->cuDeviceGetLuid != nullptr &&
+      api_->cuDeviceGetLuid(luid, &node_mask, device_) == CUDA_SUCCESS) {
+    std::memcpy(&out.luid, luid, sizeof(out.luid));
+  }
+  return out;
 }
 
 bool NvidiaDevice::AllocateMemory(size_t bytes) {

@@ -47,6 +47,10 @@ struct CudaApi {
   CUresult (*cuMemFree)(CUdeviceptr dptr);
   CUresult (*cuMemsetD8)(CUdeviceptr dstDevice, unsigned char uc, size_t N);
   CUresult (*cuGetErrorString)(CUresult error, const char **pStr);
+  // Optional (nullptr if missing): device identity for the contention
+  // monitor. cuDeviceGetLuid only exists in Windows drivers.
+  CUresult (*cuDeviceGetPCIBusId)(char *pciBusId, int len, CUdevice dev);
+  CUresult (*cuDeviceGetLuid)(char *luid, unsigned int *deviceNodeMask, CUdevice dev);
 };
 
 // Returns a singleton API table; first call dlopens libcuda.so.1 and

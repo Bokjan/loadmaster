@@ -8,6 +8,7 @@
 #include "cl_kernel.h"
 
 #include "gpu/constants.h"
+#include "gpu/contention/parse.h"
 #include "util/log.h"
 
 namespace gpu::opencl {
@@ -22,6 +23,7 @@ OpenClDevice::OpenClDevice()
       kernel_(nullptr),
       out_buf_(nullptr),
       out_bytes_(0),
+      queue_created_(false),
       local_size_(static_cast<std::size_t>(kGpuKernelBlockSize)),
       mem_load_bytes_(0),
       device_index_(-1) {}
@@ -156,6 +158,7 @@ bool OpenClDevice::Init(int device_index) {
   char plat_name[128] = {0};
   api_->clGetDeviceInfo(device_, CL_DEVICE_NAME, sizeof(dev_name) - 1, dev_name, nullptr);
   api_->clGetPlatformInfo(platform_, CL_PLATFORM_NAME, sizeof(plat_name) - 1, plat_name, nullptr);
+  platform_name_ = plat_name;
   name_.clear();
   if (plat_name[0] != '\0') {
     name_.append(plat_name);
@@ -241,11 +244,46 @@ bool OpenClDevice::Init(int device_index) {
     local_size_ = std::min(local_size_, max_wg);
   }
   LOG_DEBUG("OpenCL #%d: work-group size %zu", device_index_, local_size_);
+  // Touch the device once, as the HIP backend's hipMemset does, so the
+  // runtime's queue exists from here on; see Locator().
+  const uint32_t zero = 0;
+  rc = api_->clEnqueueFillBuffer(queue_, out_buf_, &zero, sizeof(zero), 0, out_bytes_, 0, nullptr,
+                                 nullptr);
+  queue_created_ = rc == CL_SUCCESS && api_->clFinish(queue_) == CL_SUCCESS;
+  if (!queue_created_) {
+    LOG_DEBUG("OpenCL #%d: clEnqueueFillBuffer(scratch) failed: %s (rc=%d)", device_index_,
+              ClErrorString(rc), rc);
+  }
   return true;
 }
 
 std::string OpenClDevice::Name() const {
   return name_ + " (#" + std::to_string(device_index_) + ")";
+}
+
+DeviceLocator OpenClDevice::Locator() const {
+  DeviceLocator out;
+  if (api_ == nullptr || device_ == nullptr) {
+    return out;
+  }
+  cl_uint pci[4] = {};
+  if (api_->clGetDeviceInfo(device_, CL_DEVICE_PCI_BUS_INFO_KHR, sizeof(pci), pci, nullptr) ==
+      CL_SUCCESS) {
+    out.pci_bus_id = contention::FormatPciBusId(pci[0], pci[1], pci[2], pci[3]);
+  }
+  cl_uint luid_valid = 0;  // cl_bool
+  unsigned char luid[8] = {};
+  if (api_->clGetDeviceInfo(device_, CL_DEVICE_LUID_VALID_KHR, sizeof(luid_valid), &luid_valid,
+                            nullptr) == CL_SUCCESS &&
+      luid_valid != 0 &&
+      api_->clGetDeviceInfo(device_, CL_DEVICE_LUID_KHR, sizeof(luid), luid, nullptr) ==
+          CL_SUCCESS) {
+    // Windows LUID {DWORD LowPart; LONG HighPart}, little-endian.
+    std::memcpy(&out.luid, luid, sizeof(out.luid));
+  }
+  // ROCm's OpenCL runs on amdkfd like HIP does.
+  out.kfd_client = queue_created_ && platform_name_ == "AMD Accelerated Parallel Processing";
+  return out;
 }
 
 bool OpenClDevice::AllocateMemory(std::size_t bytes) {

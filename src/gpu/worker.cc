@@ -26,7 +26,15 @@ int Extrapolate(int count, double elapsed_ms, double target_ms) {
 }  // namespace
 
 GpuWorkerContext::GpuWorkerContext(int id, std::unique_ptr<GpuDevice> device)
-    : id_(id), device_(std::move(device)), base_loop_count_(1), load_set_(0) {}
+    : id_(id),
+      device_(std::move(device)),
+      base_loop_count_(1),
+      calibrated_(false),
+      load_set_(0),
+      yield_(false),
+      memory_bytes_(0),
+      memory_held_(false),
+      memory_failed_(false) {}
 
 GpuWorkerContext::~GpuWorkerContext() {
   // jthread joins in its dtor; nothing extra to do.
@@ -99,6 +107,7 @@ bool GpuWorkerContext::CalibrateBaseLoopCount() {
              kScheduleIntervalMS);
   }
   base_loop_count_ = std::max(1, count);
+  calibrated_ = true;
   LOG_DEBUG("gpu worker id=%d base_loop_count=%d (%.1f ms per launch, target %d ms)", id_,
             base_loop_count_, *elapsed, kScheduleIntervalMS);
   return true;
@@ -133,13 +142,49 @@ void GpuWorkerContext::AdaptBaseLoopCount(int target_ms, double elapsed_ms) {
   base_loop_count_ = new_count;
 }
 
+void GpuWorkerContext::SyncMemory(bool yield) {
+  if (device_ == nullptr || memory_bytes_ == 0) {
+    return;
+  }
+  if (yield) {
+    if (memory_held_) {
+      device_->ReleaseMemory();
+      memory_held_ = false;
+    }
+    memory_failed_ = false;
+    return;
+  }
+  if (memory_held_ || memory_failed_) {
+    return;
+  }
+  memory_held_ = device_->AllocateMemory(memory_bytes_);
+  if (!memory_held_) {
+    memory_failed_ = true;
+    LOG_WARN("gpu worker id=%d: memory allocation failed (%zu bytes); continuing", id_,
+             memory_bytes_);
+  }
+}
+
 void GpuWorkerContext::Loop(std::stop_token stoken) {
   const auto period = std::chrono::milliseconds(kScheduleIntervalMS);
   int consecutive_failures = 0;
   while (!stoken.stop_requested()) {
+    const bool yield = yield_.load(std::memory_order_relaxed);
+    // Before taking the tick's start time: filling a large block takes a
+    // while and must not count as kernel time in AdaptBaseLoopCount().
+    SyncMemory(yield);
     const auto start = std::chrono::steady_clock::now();
-    const int target_ms = load_set_.load(std::memory_order_relaxed);
+    const int target_ms = yield ? 0 : load_set_.load(std::memory_order_relaxed);
 
+    if (target_ms > 0 && device_ != nullptr && !calibrated_) {
+      // Yielding since startup: calibrate now that the device is ours.
+      if (!CalibrateBaseLoopCount()) {
+        LOG_ERROR("gpu worker id=%d: kernel calibration failed, giving the device up", id_);
+        SyncMemory(true);
+        return;
+      }
+      continue;  // a fresh tick: calibration time isn't this tick's work
+    }
     if (target_ms > 0 && device_ != nullptr) {
       // base_loop_count_ corresponds to kScheduleIntervalMS of work.
       const int64_t scaled =
@@ -149,6 +194,9 @@ void GpuWorkerContext::Loop(std::stop_token stoken) {
         if (++consecutive_failures >= kGpuMaxConsecutiveFailures) {
           LOG_ERROR("gpu worker id=%d: %d consecutive kernel failures, giving the device up", id_,
                     consecutive_failures);
+          // Nobody follows the yield state from here on: don't leave the
+          // `-gm` block pinned on a device we no longer drive.
+          SyncMemory(true);
           return;
         }
         LOG_WARN("gpu worker id=%d kernel launch failed; backing off", id_);

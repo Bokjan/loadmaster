@@ -55,6 +55,9 @@ target_sources(loadmaster_core PRIVATE
     gpu/manager_default.cc
     gpu/manager_random_normal.cc
     gpu/worker.cc
+    gpu/contention/monitor.cc
+    gpu/contention/parse.cc
+    gpu/contention/sources.cc
     gpu/nvidia/cuda_driver.cc
     gpu/nvidia/nvidia_device.cc
     gpu/amd/hip_driver.cc
@@ -90,11 +93,16 @@ if(WIN32)
     target_sources(loadmaster_core PRIVATE
         cpu/stat_windows.cc
         util/proc_stat_windows.cc
+        gpu/contention/nvml_source.cc
+        gpu/contention/pdh_source.cc
     )
+    # GPU Engine performance counters (gpu/contention/pdh_source.cc).
+    target_link_libraries(loadmaster_core PUBLIC pdh)
 elseif(APPLE)
     target_sources(loadmaster_core PRIVATE
         cpu/stat_macos.cc
         util/proc_stat_macos.cc
+        gpu/contention/ioreg_source.cc
     )
 elseif(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
     # FreeBSD / DragonFly use sysctl(KERN_CP_TIME) for system CPU and
@@ -109,6 +117,10 @@ else()  # Linux (__linux__)
     target_sources(loadmaster_core PRIVATE
         cpu/stat_linux.cc
         util/proc_stat_linux.cc
+        gpu/contention/linux_fs.cc
+        gpu/contention/kfd_source.cc
+        gpu/contention/drm_source.cc
+        gpu/contention/nvml_source.cc
     )
 endif()
 
@@ -583,14 +595,18 @@ endif()
 #     gpu/apple/metal_device.mm.
 #   * Metal          : MTLDevice / MTLCommandQueue / MTLLibrary etc.,
 #     i.e. the entire Apple-side GPU backend.
+#   * IOKit          : per-process GPU time from the IORegistry
+#     (gpu/contention/ioreg_source.cc).
 if(APPLE)
     find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(METAL_FRAMEWORK Metal REQUIRED)
+    find_library(IOKIT_FRAMEWORK IOKit REQUIRED)
     target_link_libraries(loadmaster_core PUBLIC
         ${COREFOUNDATION_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}
         ${METAL_FRAMEWORK}
+        ${IOKIT_FRAMEWORK}
     )
 endif()
 
