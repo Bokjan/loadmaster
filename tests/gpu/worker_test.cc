@@ -66,7 +66,13 @@ class FakeDevice final : public GpuDevice {
     // Sleeps overshoot, by milliseconds on macOS and Windows: count the
     // time the launch really took, as a GPU's busy counter would.
     const auto start = std::chrono::steady_clock::now();
-    std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(ms * 1e6)));
+    const auto duration = std::chrono::nanoseconds(static_cast<int64_t>(ms * 1e6));
+    if (spin_) {
+      while (std::chrono::steady_clock::now() - start < duration) {
+      }
+    } else {
+      std::this_thread::sleep_for(duration);
+    }
     busy_ns_ += std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - start)
                     .count();
@@ -82,6 +88,9 @@ class FakeDevice final : public GpuDevice {
   std::atomic<std::uint64_t> last_traffic_bytes_{0};
   std::atomic<int64_t> busy_ns_{0};  // wall time of all launches
   std::optional<double> bandwidth_;  // bytes per second; set before Start()
+  // Spin instead of sleeping, for launch times exact to well below a ms
+  // (and a core busy meanwhile); set before Start().
+  bool spin_ = false;
   std::mutex traffic_mutex_;
   std::vector<std::uint64_t> traffic_;     // every non-zero traffic, in order
   std::vector<double> traffic_launch_ms_;  // and how long those launches took
@@ -227,9 +236,12 @@ TEST_F(GpuWorkerTest, MemoryTrafficTimeComesOutOfTheAluLoop) {
   // to match, so launch times don't follow the traffic. Without that,
   // AdaptBaseLoopCount() chases each change a few ticks late and launch
   // time rises and falls with the traffic (slope ~0.25 ms per MiB here).
+  // The launches spin: a sleep's overshoot (up to ~15 ms on CI's macOS
+  // runners) would swamp the few ms the traffic moves them by.
   constexpr double kMsPerMiB = 0.3;
   auto dev = std::make_unique<FakeDevice>(2000.0, kMsPerMiB);
   FakeDevice *raw = dev.get();
+  raw->spin_ = true;
   GpuWorkerContext ctx(0, std::move(dev), 1);
   ASSERT_TRUE(ctx.CalibrateBaseLoopCount());
   ctx.SetLoadSet(kScheduleIntervalMS / 2);
@@ -256,6 +268,7 @@ TEST_F(GpuWorkerTest, MemoryTrafficTimeComesOutOfTheAluLoop) {
   }
   const double n = static_cast<double>(kLaunches - kWarmUp);
   const double slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  printf("SLOPE %f\n", slope);
   EXPECT_LT(std::abs(slope), 0.3 * kMsPerMiB) << "launch time follows the traffic";
 }
 

@@ -148,27 +148,33 @@ void GpuWorkerContext::AdaptBaseLoopCount(double alu_target_ms, double alu_elaps
   LOG_TRACE("gpu worker id=%d: ALU loop %.1f ms for %.1f ms, base_loop_count %d -> %d", id_,
             alu_elapsed_ms, alu_target_ms, base_loop_count_, new_count);
   base_loop_count_ = new_count;
-  // The last sample's residual assumed the old speed.
-  last_traffic_sample_.reset();
 }
 
 void GpuWorkerContext::UpdateMemCost(double mib, double residual_ms) {
-  // Wall time = ALU loop + mib * cost + a fixed launch overhead. Between
-  // two launches the overhead cancels and, with the ALU loop's share taken
-  // out, the cost is the change in residual over the change in traffic.
-  // The traffic's random walk supplies the changes; tick-to-tick timing
-  // noise is smoothed out.
-  const std::optional<TrafficSample> last = last_traffic_sample_;
-  last_traffic_sample_ = TrafficSample{mib, residual_ms};
-  if (!last) {
+  // Wall time = ALU loop + mib * cost + a fixed launch overhead: with the
+  // ALU loop's share taken out, the cost is the slope of the residual over
+  // the traffic and the overhead its intercept. A fit over the recent
+  // launches uses the whole spread of the traffic's random walk, where the
+  // difference between two launches would drown in a few ms of timing
+  // noise (a sleep overshooting, a launch queued behind another); older
+  // launches fade out so the fit follows the device.
+  MemCostFit &f = mem_cost_fit_;
+  const double keep = 1.0 - kGpuMemCostForget;
+  f.w = f.w * keep + 1.0;
+  f.x = f.x * keep + mib;
+  f.y = f.y * keep + residual_ms;
+  f.xx = f.xx * keep + mib * mib;
+  f.xy = f.xy * keep + mib * residual_ms;
+  f.launches = std::min(f.launches + 1, kGpuMemCostMinLaunches);  // no overflow
+  if (f.launches < kGpuMemCostMinLaunches) {
     return;
   }
-  const double delta_mib = mib - last->mib;
-  if (std::abs(delta_mib) < kGpuMemCostMinDelta * std::max(mib, last->mib)) {
-    return;
+  const double mean_x = f.x / f.w;
+  const double var_x = f.xx / f.w - mean_x * mean_x;
+  if (var_x < kGpuMemCostMinSpread * kGpuMemCostMinSpread * mean_x * mean_x) {
+    return;  // the traffic barely moved: the slope would be noise
   }
-  const double sample = (residual_ms - last->residual_ms) / delta_mib;
-  mem_ms_per_mib_ += kGpuMemCostSmoothing * (sample - mem_ms_per_mib_);
+  mem_ms_per_mib_ = (f.xy / f.w - mean_x * f.y / f.w) / var_x;
 }
 
 void GpuWorkerContext::SyncMemory(bool sharing) {

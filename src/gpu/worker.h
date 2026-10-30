@@ -98,17 +98,19 @@ class GpuWorkerContext final {
   // last stepped.
   MemTrafficEnvelope traffic_envelope_;
   std::optional<std::chrono::steady_clock::time_point> traffic_stepped_at_;
-  // What the block's traffic costs in kernel time, ms per MiB (see
-  // UpdateMemCost), and the last launch that moved some.
-  struct TrafficSample {
-    double mib;
-    double residual_ms;  // wall time minus the ALU loop's predicted time
+  // What the block's traffic costs in kernel time, ms per MiB, and the
+  // fit it comes from (see UpdateMemCost): exponentially weighted sums
+  // over the launches that moved some, of x = MiB and y = wall time minus
+  // the ALU loop's predicted time.
+  struct MemCostFit {
+    int launches = 0;
+    double w = 0.0, x = 0.0, y = 0.0, xx = 0.0, xy = 0.0;
   };
   double mem_ms_per_mib_;
+  MemCostFit mem_cost_fit_;
   // Mean traffic at full load, set from the device's bandwidth when the
   // block is first allocated (0 until then).
   double traffic_bytes_per_second_;
-  std::optional<TrafficSample> last_traffic_sample_;
   std::jthread thread_;
 
   void Loop(std::stop_token stoken);

@@ -57,12 +57,16 @@ constexpr int kGpuMemTrafficBytesPerAccess = 8;
 // a 64-bit window start), so the sweep walks it in windows of at most this
 // size.
 constexpr std::size_t kGpuMemSweepWindowMaxBytes = std::size_t{1} << 30;
-// What the traffic costs in kernel time, in ms per MiB, is estimated from
-// pairs of consecutive launches whose traffic differs by at least this
-// fraction, and smoothed with this weight per pair. The ALU loop gives up
-// at most this share of a launch's busy time to it.
-constexpr double kGpuMemCostMinDelta = 0.1;
-constexpr double kGpuMemCostSmoothing = 0.1;
+// What the traffic costs in kernel time, in ms per MiB, is the slope of a
+// least-squares fit of launch time over traffic in which each launch's
+// weight decays by kGpuMemCostForget per launch (~20 launches, 2 s at full
+// load). The fit is used from kGpuMemCostMinLaunches launches on, while
+// the traffic in it spreads by at least kGpuMemCostMinSpread (standard
+// deviation over mean). The ALU loop gives up at most kGpuMemCostMaxShare
+// of a launch's busy time to it.
+constexpr double kGpuMemCostForget = 0.05;
+constexpr int kGpuMemCostMinLaunches = 10;
+constexpr double kGpuMemCostMinSpread = 0.1;
 constexpr double kGpuMemCostMaxShare = 0.5;
 // After this many consecutive failed launches (~5 s of retries) the
 // worker gives the device up instead of logging a warning forever.
