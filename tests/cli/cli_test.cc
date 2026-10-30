@@ -74,12 +74,17 @@ TEST_F(CliTest, HelpRequestsCleanExit) {
   Options opts;
   auto a = MakeArgv({"loadmaster", "-h"});
   // -h prints usage to stdout; we don't care about the output here,
-  // just the exit signal.
+  // just the exit signal (and, in a silent build, that there is none).
   testing::internal::CaptureStdout();
   const ParseResult r = ParseCommandLineArguments(opts, a.argc(), a.argv());
-  (void)testing::internal::GetCapturedStdout();
+  const std::string out = testing::internal::GetCapturedStdout();
   EXPECT_EQ(r.exit_code, EXIT_SUCCESS);
   EXPECT_TRUE(r.should_exit) << "-h must signal the caller to exit";
+#if LOADMASTER_SILENT
+  EXPECT_TRUE(out.empty()) << "a silent build must not print usage";
+#else
+  (void)out;
+#endif
 }
 
 TEST_F(CliTest, VersionRequestsCleanExit) {
@@ -90,7 +95,11 @@ TEST_F(CliTest, VersionRequestsCleanExit) {
   const std::string out = testing::internal::GetCapturedStdout();
   EXPECT_EQ(r.exit_code, EXIT_SUCCESS);
   EXPECT_TRUE(r.should_exit);
+#if LOADMASTER_SILENT
+  EXPECT_TRUE(out.empty()) << "a silent build must not print the version";
+#else
   EXPECT_FALSE(out.empty()) << "-v should print *something* to stdout";
+#endif
 }
 
 // ---- Integer-valued flags ------------------------------------------------

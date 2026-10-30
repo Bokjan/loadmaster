@@ -90,6 +90,12 @@
       "inherits": "unix-tsan"
     },
     {
+      "name": "silent",
+      "displayName": "Release + tests, LOADMASTER_SILENT (Linux/macOS, host arch)",
+      "inherits": "unix-release",
+      "cacheVariables": { "LOADMASTER_SILENT": "ON" }
+    },
+    {
       "name": "macos-arm64-debug",
       "displayName": "macOS arm64 Debug",
       "inherits": "macos-arm64-base",
@@ -112,6 +118,12 @@
       "displayName": "Windows x64 Release",
       "inherits": "windows-base",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "windows-silent",
+      "displayName": "Windows x64 Release, LOADMASTER_SILENT",
+      "inherits": "windows-base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LOADMASTER_SILENT": "ON" }
     }
   ],
   "buildPresets": [
@@ -119,19 +131,23 @@
     { "name": "release", "configurePreset": "release" },
     { "name": "sanitize", "configurePreset": "sanitize" },
     { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "silent", "configurePreset": "silent" },
     { "name": "macos-arm64-debug", "configurePreset": "macos-arm64-debug" },
     { "name": "macos-arm64-release", "configurePreset": "macos-arm64-release" },
     { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug" },
-    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" }
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" },
+    { "name": "windows-silent", "configurePreset": "windows-silent", "configuration": "Release" }
   ],
   "testPresets": [
     { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "sanitize", "configurePreset": "sanitize", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "silent", "configurePreset": "silent", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "macos-arm64-debug", "configurePreset": "macos-arm64-debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "macos-arm64-release", "configurePreset": "macos-arm64-release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
     { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
-    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-silent", "configurePreset": "windows-silent", "configuration": "Release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
   ]
 }

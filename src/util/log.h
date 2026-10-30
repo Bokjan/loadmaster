@@ -37,6 +37,19 @@
 #define LOADMASTER_LOG_LEVEL_WARN 4
 #define LOADMASTER_LOG_LEVEL_ERROR 5
 #define LOADMASTER_LOG_LEVEL_FATAL 6
+#define LOADMASTER_LOG_LEVEL_OFF 7
+
+// Silent build (CMake's LOADMASTER_SILENT): the process prints nothing at
+// all. Every LOG_* site is compiled out, LOG_FATAL included (it still
+// aborts), whatever LOADMASTER_LOG_MIN_LEVEL says; cli.cc and main.cc
+// handle the rest (-h / -v, stray output from libraries).
+#ifndef LOADMASTER_SILENT
+#  define LOADMASTER_SILENT 0
+#endif
+#if LOADMASTER_SILENT
+#  undef LOADMASTER_LOG_MIN_LEVEL
+#  define LOADMASTER_LOG_MIN_LEVEL LOADMASTER_LOG_LEVEL_OFF
+#endif
 
 namespace util {
 
@@ -86,7 +99,9 @@ class StderrLogger final : public Logger {
 namespace logger_internal {
 
 extern Logger *g_default_logger;
+#if !LOADMASTER_SILENT
 extern const char *g_log_level_cstr[];
+#endif
 
 void SetDefaultLogger(Logger *ptr);
 
@@ -159,9 +174,14 @@ void SetDefaultLogger(Logger *ptr);
 // For "startup failed, exit cleanly" cases, log at ERROR/WARN and return a
 // status to the caller, then exit(EXIT_FAILURE) from main. LOG_FATAL is
 // never compiled out -- it doubles as a [[noreturn]] crash primitive that
-// callers may rely on for control flow.
-#define LOG_FATAL(fmt, ...)                                                           \
-  do {                                                                                \
-    LOG_DEFAULT_FORWARD(::util::Logger::kLevelFatal, fmt __VA_OPT__(, ) __VA_ARGS__); \
-    ::util::logger_internal::FatalAbort();                                            \
-  } while (false)
+// callers may rely on for control flow. Only a silent build drops its
+// message, keeping the abort.
+#if LOADMASTER_LOG_MIN_LEVEL <= LOADMASTER_LOG_LEVEL_FATAL
+#  define LOG_FATAL(fmt, ...)                                                           \
+    do {                                                                                \
+      LOG_DEFAULT_FORWARD(::util::Logger::kLevelFatal, fmt __VA_OPT__(, ) __VA_ARGS__); \
+      ::util::logger_internal::FatalAbort();                                            \
+    } while (false)
+#else
+#  define LOG_FATAL(fmt, ...) ::util::logger_internal::FatalAbort()
+#endif

@@ -48,8 +48,10 @@ namespace logger_internal {
 
 StderrLogger g_default_stderr_logger;
 Logger *g_default_logger = &g_default_stderr_logger;
+#if !LOADMASTER_SILENT
 const char *g_log_level_cstr[] = {"<UNKNOWN>", "<TRACE>", "<DEBUG>", "<INFO> ",
                                   "<WARN> ",   "<ERROR>", "<FATAL>", "<OFF>  "};
+#endif
 
 void SetDefaultLogger(Logger *ptr) { g_default_logger = ptr; }
 

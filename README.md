@@ -6,9 +6,9 @@ loadmaster is designed to waste your machine performance. Powerful, flexible, si
 - CMake >= 3.15
 
 # Build & Run
-- Typical CMake building routine (see `scripts/build_local.sh` for a one-shot local helper), or a preset from `CMakePresets.json` with CMake 3.21+: `cmake --preset release && cmake --build --preset release` (`debug` / `release`: with tests, `sanitize`: ASan + UBSan, `tsan`: ThreadSanitizer, plus `macos-arm64-*` and `windows-*`; `ctest --preset <name>` runs the tests). Presets build under `build/<preset>/`.
+- Typical CMake building routine (see `scripts/build_local.sh` for a one-shot local helper), or a preset from `CMakePresets.json` with CMake 3.21+: `cmake --preset release && cmake --build --preset release` (`debug` / `release`: with tests, `sanitize`: ASan + UBSan, `tsan`: ThreadSanitizer, `silent`: a `LOADMASTER_SILENT` release, plus `macos-arm64-*` and `windows-*`; `ctest --preset <name>` runs the tests). Presets build under `build/<preset>/`.
 - The scripts in `scripts/` use Ninja for new build trees when it is installed, and CMake uses `ccache` when it is installed.
-- CI (`.github/workflows/ci.yml`) runs the unit tests on Linux (GCC, Clang, ASan + UBSan, TSan; x86_64 and aarch64), macOS arm64, Windows and FreeBSD with warnings as errors. Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds the release artifacts below with the `scripts/build_*` scripts, checks them with `scripts/check_obfuscation.sh`, and publishes them with their checksums as the latest GitHub release.
+- CI (`.github/workflows/ci.yml`) runs the unit tests on Linux (GCC, Clang, ASan + UBSan, TSan; x86_64 and aarch64), macOS arm64, Windows and FreeBSD with warnings as errors. Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds the release artifacts below, normal and silent, with the `scripts/build_*` scripts, checks them with `scripts/check_obfuscation.sh` (and the silent ones with `scripts/check_silent.sh`), and publishes them with their checksums as the latest GitHub release.
 - libstdc++/libgcc are linked statically by default so the binary is portable across distros; libc and libdl remain dynamic so the GPU module can `dlopen` the vendor drivers. Disable via `-DLOADMASTER_STATIC_LINK=OFF`.
 - Customizable runtime arguments specified by CLI args - see `<exe> -h`.
 - It's recommended to rename the executable as you want.
@@ -33,6 +33,7 @@ This is a **local** setting (per clone), so each contributor runs it once after 
 | `LOADMASTER_STATIC_LINK` | `ON` | Statically link the C++ / runtime into the executable so it has no `vcredist` / `libstdc++`-version dependency. On Linux this is **semi-static** (`-static-libstdc++ -static-libgcc`): `libc` / `libdl` / `libpthread` stay dynamic because the GPU module needs `dlopen` to load the vendor drivers, which is incompatible with a fully-`-static` glibc binary. Cross-distro portability there is achieved by building inside the manylinux2014 container (see `scripts/build_linux.sh`) rather than by full static linking. |
 | `LOADMASTER_OBFUSCATE` | `ON` | XOR-mask embedded GPU kernel sources, the SPIR-V module, and the CLI version / help text in `.rodata` so `strings` and AV heuristics don't trip on them. Runtime output is unchanged. Turn off when bisecting a kernel build / JIT failure. |
 | `LOADMASTER_LOG_MIN_LEVEL` | `trace` | Strips `LOG_*` sites below this level at preprocessor time. Lower-priority sites expand to `((void)0)`, so their format strings, `__FILE__` paths, and helper code never enter the binary. Bump to `info` / `warn` for a quieter, leaner release; `LOG_FATAL` is never compiled out. |
+| `LOADMASTER_SILENT` | `OFF` | A binary that never prints anything: every `LOG_*` site is compiled out (`LOG_FATAL` still aborts, without a message) whatever `LOADMASTER_LOG_MIN_LEVEL` says; `-h` / `-v` exit `0` and invalid arguments exit non-zero without a word (the help text isn't compiled in), and `main()` points stdout / stderr at the null device first, so vendor GPU libraries and the C++ runtime stay quiet too. Options, `-L` included, are parsed as usual. The exit status is the only result. |
 | `LOADMASTER_SANITIZE` | *(empty)* | Comma-separated sanitizers for every target, tests included, e.g. `address,undefined` or `thread` (GCC / Clang) or `address` (MSVC). Disables `LOADMASTER_STATIC_LINK`. `scripts/run_tests.sh --sanitize` builds the test suite this way in `build_tests_sanitize/`. |
 | `LOADMASTER_LINK_COMPILE_COMMANDS` | `ON` | Mirror the build dir's `compile_commands.json` into the source root (symlink, or copy on Windows) for clangd / IDEs. Turn off for throwaway or containerised builds so they don't repoint your link; the release scripts and all presets but `debug` do. `CMAKE_EXPORT_COMPILE_COMMANDS` itself defaults to `ON` and can be overridden. |
 | `LOADMASTER_BUILD_TESTS` | `OFF` | Build the GoogleTest suite (`scripts/run_tests.sh` / `run_tests.ps1` and the presets turn it on). |
@@ -54,6 +55,8 @@ Because we link glibc dynamically on Linux (to keep `dlopen` working for the GPU
 | Windows x86_64 | `scripts\build_windows.ps1`            (Windows + VS 2022)   | `dist/loadmaster-<version>-windows-x86_64.exe` |
 | macOS arm64    | `scripts/build_macos.sh`               (Apple Silicon host)  | `dist/loadmaster-<version>-macos-arm64`        |
 | macOS x86_64   | `scripts/build_macos.sh --arch x86_64` (not published by CI) | `dist/loadmaster-<version>-macos-x86_64`       |
+
+Pass `--silent` (`-Silent` on Windows) for the `LOADMASTER_SILENT` variant, `dist/loadmaster-<version>-silent-<os>-<arch>[.exe]`, built in its own tree; releases ship both.
 
 `<version>` is the one in `src/core/version.h` (what `-v` prints). Each artifact gets a `<artifact>.sha256` next to it (`sha256sum -c` / `shasum -a 256 -c` format). The scripts start from an empty build tree, as a release should; pass `--incremental` (`-Incremental` on Windows) to reuse it while iterating.
 
@@ -141,7 +144,7 @@ If the requested vendor's libraries aren't found, the module logs and disables i
 - On Apple Silicon the GPU shares system RAM (UMA), so `-gm <mib>` reserves that many MiB of physical memory rather than dedicated VRAM. Plan accordingly when running with `-gm` and a large `-m`.
 
 # Exit status & signals
-- Exit status is `0` after a normal run stopped by a signal (or `-h` / `-v`), and non-zero for invalid arguments or when no module could be enabled (for example `-l 0` without `-m` / `-g`, or a GPU-only run on a host without a usable GPU).
+- Exit status is `0` after a normal run stopped by a signal (or `-h` / `-v`), and non-zero for invalid arguments or when no module could be enabled (for example `-l 0` without `-m` / `-g`, or a GPU-only run on a host without a usable GPU). The silent build (`LOADMASTER_SILENT`, the `-silent-` release artifacts) prints nothing in any of these cases, so the exit status is all it reports.
 - `SIGINT` / `SIGTERM` stop loadmaster cleanly on POSIX. On Windows, Ctrl-C, Ctrl-Break, closing the console window, logoff and shutdown all request a clean stop.
 - `-L <level>` picks the log level: `trace`, `debug`, `info`, `warn` (default), `error`, `fatal`, `off`; `all` is an alias for `trace`.
 

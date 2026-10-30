@@ -15,12 +15,14 @@
 #     scripts/build_linux.sh --arch x86_64
 #     scripts/build_linux.sh --arch aarch64
 #     scripts/build_linux.sh --manylinux 2_28
+#     scripts/build_linux.sh --silent        # LOADMASTER_SILENT build
 #     scripts/build_linux.sh --incremental   # reuse the build tree
 #     scripts/build_linux.sh --help
 #
 # Output:
 #     dist/loadmaster-<version>-linux-<arch>
 #     dist/loadmaster-<version>-linux-<arch>.sha256
+#     (--silent: dist/loadmaster-<version>-silent-linux-<arch>[.sha256])
 #
 # Cross-architecture builds (e.g. building aarch64 on an x86_64 host)
 # work transparently if qemu-user-static binfmt is registered with
@@ -42,16 +44,18 @@ set -o nounset
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [--arch <x86_64|aarch64>] [--manylinux <2014|2_28>]
-                        [--incremental] [--help]
+                        [--silent] [--incremental] [--help]
 
   --arch <arch>         Target architecture. Defaults to the host's arch
                         (x86_64 or aarch64). Cross-arch needs qemu-user-static.
   --manylinux <policy>  2014 (glibc 2.17, default) or 2_28 (glibc 2.28).
+  --silent              Build the variant that never prints anything
+                        (LOADMASTER_SILENT=ON), named ...-silent-linux-<arch>.
   --incremental         Reuse the existing build tree instead of starting
                         from scratch (faster; for iteration, not releases).
   --help, -h            Show this message.
 
-Output: dist/loadmaster-<version>-linux-<arch> (+ .sha256)
+Output: dist/loadmaster-<version>[-silent]-linux-<arch> (+ .sha256)
 EOF
 }
 
@@ -66,6 +70,7 @@ detect_arch() {
 
 ARCH="$(detect_arch)"
 POLICY="2014"
+SILENT=0
 INCREMENTAL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -76,6 +81,10 @@ while [[ $# -gt 0 ]]; do
         --manylinux)
             POLICY="${2:-}"
             shift 2
+            ;;
+        --silent)
+            SILENT=1
+            shift
             ;;
         --incremental)
             INCREMENTAL=1
@@ -114,9 +123,20 @@ case "${ARCH}" in
         ;;
 esac
 
-readonly ARCH POLICY IMAGE INCREMENTAL
+# The silent variant gets its own build tree and an artifact name of its own.
+if [[ "${SILENT}" -eq 1 ]]; then
+    SILENT_CMAKE=ON
+    VARIANT="silent-"
+    BUILD_SUFFIX="_silent"
+else
+    SILENT_CMAKE=OFF
+    VARIANT=""
+    BUILD_SUFFIX=""
+fi
+
+readonly ARCH POLICY IMAGE INCREMENTAL SILENT_CMAKE VARIANT BUILD_SUFFIX
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly BUILD_DIR="${REPO_ROOT}/build_release_manylinux${POLICY}_${ARCH}"
+readonly BUILD_DIR="${REPO_ROOT}/build_release_manylinux${POLICY}_${ARCH}${BUILD_SUFFIX}"
 readonly DIST_DIR="${REPO_ROOT}/dist"
 
 # shellcheck source=lib/common.sh
@@ -168,14 +188,15 @@ docker run --rm \
         set -e
         source scripts/lib/common.sh
         lm_prefer_ninja '${BUILD_REL}'
-        cmake -B '${BUILD_REL}' -DCMAKE_BUILD_TYPE=Release -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF
+        cmake -B '${BUILD_REL}' -DCMAKE_BUILD_TYPE=Release -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF \\
+              -DLOADMASTER_SILENT=${SILENT_CMAKE}
         cmake --build '${BUILD_REL}' -j \"\$(lm_jobs)\"
-        out=\"dist/loadmaster-\$(lm_version '${BUILD_REL}')-linux-${ARCH}\"
+        out=\"dist/loadmaster-\$(lm_version '${BUILD_REL}')-${VARIANT}linux-${ARCH}\"
         cp '${BUILD_REL}/src/loadmaster' \"\${out}\"
         strip \"\${out}\"
     "
 
-OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-linux-${ARCH}"
+OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-${VARIANT}linux-${ARCH}"
 readonly OUTPUT
 lm_write_sha256 "${OUTPUT}"
 

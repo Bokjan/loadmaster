@@ -198,8 +198,24 @@ else()
 endif()
 target_compile_definitions(loadmaster_core PUBLIC
     LOADMASTER_LOG_MIN_LEVEL=${_lm_log_level_num})
-message(STATUS
-    "Log threshold: keeping LOG_${_lm_log_level_lc}+ sites compiled in (level ${_lm_log_level_num})")
+
+# ---- Silent build --------------------------------------------------------
+# A build that prints nothing, ever: every LOG_* site is compiled out
+# (overriding LOADMASTER_LOG_MIN_LEVEL), -h / -v and parse errors exit
+# without a word (the help text is not compiled in), and main() points
+# stdout / stderr at the null device before anything else runs, so
+# vendor GPU libraries and the C++ runtime stay quiet too. The exit
+# code is the only result. The release workflow ships both variants.
+# PUBLIC, like LOADMASTER_OBFUSCATE: util/log.h reads it in every TU.
+option(LOADMASTER_SILENT "Build a binary that never prints anything (no logs, no -h / -v text)" OFF)
+if(LOADMASTER_SILENT)
+    target_compile_definitions(loadmaster_core PUBLIC LOADMASTER_SILENT=1)
+    message(STATUS "Silent build: all output compiled out")
+else()
+    target_compile_definitions(loadmaster_core PUBLIC LOADMASTER_SILENT=0)
+    message(STATUS
+        "Log threshold: keeping LOG_${_lm_log_level_lc}+ sites compiled in (level ${_lm_log_level_num})")
+endif()
 
 # ---- Intel Level Zero busy kernel: SPIR-V embedding -----------------------
 # The Intel backend needs a precompiled SPIR-V binary. We bake it into

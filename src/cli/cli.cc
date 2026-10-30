@@ -19,6 +19,7 @@ namespace cli {
 
 namespace {
 
+#if !LOADMASTER_SILENT
 // Obfuscated payloads for the human-facing strings printed by `-h`.
 // Bundling them here keeps the plaintext out of .rodata: each blob is
 // XOR-encoded at compile time and decoded into a stack-local Scoped
@@ -46,18 +47,19 @@ OPTIONS:
     -ga <algorithm>         GPU schedule algorithm (default/rand_normal), default: default
 )deli",
     0xC2374A91u);
-#ifdef _MSC_VER
+#  ifdef _MSC_VER
 constexpr auto kBuiltLineMsvc =
     util::obfuscate::Make("Built: " __DATE__ " " __TIME__ ", with MSVC %d.%d.%d\n", 0x5BD49E03u);
-#elif defined(__VERSION__)
+#  elif defined(__VERSION__)
 constexpr auto kBuiltLineVersioned = util::obfuscate::Make(
     "Built: " __DATE__ " " __TIME__ ", with Compiler " __VERSION__, 0x5BD49E03u);
-#else
+#  else
 constexpr auto kBuiltLinePlain =
     util::obfuscate::Make("Built: " __DATE__ " " __TIME__, 0x5BD49E03u);
-#endif
+#  endif
 
 void PrintUsage(const char *path);
+#endif  // !LOADMASTER_SILENT
 
 using FnArgumentProcessor = std::function<bool(int argc, const char *argv[], int &idx)>;
 
@@ -67,8 +69,9 @@ using FnArgumentProcessor = std::function<bool(int argc, const char *argv[], int
 //   * kFail      : parse error
 enum class StepResult { kContinue, kExitOk, kFail };
 
+// `prompt` only feeds LOG_ERROR, which a silent build compiles out.
 bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
-  const char *prompt = argv[idx];
+  [[maybe_unused]] const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_ERROR("[%s] failed to read option, arguments insufficient", prompt);
     return false;
@@ -93,7 +96,7 @@ bool ReadInt(int argc, const char *argv[], int &idx, std::optional<int> &out) {
 }
 
 bool ReadStringView(int argc, const char *argv[], int &idx, std::optional<std::string_view> &out) {
-  const char *prompt = argv[idx];
+  [[maybe_unused]] const char *prompt = argv[idx];
   if (idx + 1 >= argc) {
     LOG_ERROR("[%s] failed to read option, arguments insufficient", prompt);
     return false;
@@ -108,7 +111,13 @@ StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[])
     FnArgumentProcessor handler;
     bool is_terminal;  // -h / -v: print and exit cleanly
   };
+  // A silent build keeps -h / -v (they still exit cleanly) but prints
+  // nothing; their text isn't compiled in.
   const Spec specs[] = {
+#if LOADMASTER_SILENT
+      {"-h", [](int, const char **, int &) { return true; }, true},
+      {"-v", [](int, const char **, int &) { return true; }, true},
+#else
       {"-h",
        [&](int, const char **a, int &) {
          PrintUsage(a[0]);
@@ -121,6 +130,7 @@ StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[])
          return true;
        },
        true},
+#endif
       {"-l", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.cpu_load); },
        false},
       {"-c", [&](int c, const char **v, int &i) { return ReadInt(c, v, i, cli_args.cpu_count); },
@@ -171,30 +181,32 @@ StepResult ExtractArguments(CliArgument &cli_args, int argc, const char *argv[])
   return StepResult::kContinue;
 }
 
+#if !LOADMASTER_SILENT
 void PrintUsage(const char *path) {
   std::puts(VersionString());
   {
     util::obfuscate::ScopedHolder s(kUsage);
     std::printf(s.c_str(), path);
   }
-#ifdef _MSC_VER
+#  ifdef _MSC_VER
   {
     util::obfuscate::ScopedHolder s(kBuiltLineMsvc);
     std::printf(s.c_str(), _MSC_FULL_VER / 10000000, _MSC_FULL_VER / 100000 % 100,
                 _MSC_FULL_VER % 100000);
   }
-#elif defined(__VERSION__)
+#  elif defined(__VERSION__)
   {
     util::obfuscate::ScopedHolder s(kBuiltLineVersioned);
     std::puts(s.c_str());
   }
-#else
+#  else
   {
     util::obfuscate::ScopedHolder s(kBuiltLinePlain);
     std::puts(s.c_str());
   }
-#endif
+#  endif
 }
+#endif  // !LOADMASTER_SILENT
 
 }  // namespace
 

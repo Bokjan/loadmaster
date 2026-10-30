@@ -174,7 +174,8 @@ bool DoLoad() {
   int probe_count = 0;
   const hipError_t probe_rc = g_api.hipGetDeviceCount(&probe_count);
   if (probe_rc != hipSuccess) {
-    const char *msg =
+    // Only logged: unused when LOG_INFO is compiled out.
+    [[maybe_unused]] const char *msg =
         (g_api.hipGetErrorString != nullptr) ? g_api.hipGetErrorString(probe_rc) : "<unknown>";
     LOG_INFO("HIP runtime present but unusable (hipGetDeviceCount rc=%d: %s)", probe_rc,
              msg ? msg : "<unknown>");

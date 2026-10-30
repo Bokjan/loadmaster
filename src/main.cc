@@ -2,6 +2,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 
 #include "cli/cli.h"
 #include "core/platform.h"
@@ -12,7 +13,54 @@
 #include "memory/factory.h"
 #include "util/log.h"
 
+#if LOADMASTER_SILENT
+#  include <fcntl.h>
+#  if IS_WINDOWS
+#    include <io.h>
+#  else
+#    include <unistd.h>
+#  endif
+#endif
+
 namespace {
+
+#if LOADMASTER_SILENT
+// Silent build: the LOG_* sites and the -h / -v text are compiled out, but
+// vendor GPU libraries and the C++ runtime can still write to stdout /
+// stderr. Point both at the null device before anything else runs, and
+// keep the runtime's crash reports quiet: a plain abort() instead of
+// libstdc++'s verbose terminate handler, and on MSVC no abort() message
+// or Windows Error Reporting dialog.
+void SilenceOutput() {
+  std::set_terminate([] { std::abort(); });
+#  if IS_WINDOWS
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+  const int fd = _open("NUL", _O_WRONLY);
+  if (fd < 0) {
+    return;
+  }
+  _dup2(fd, 1);
+  _dup2(fd, 2);
+  if (fd > 2) {
+    _close(fd);
+  }
+  // The Win32 standard handles too, for code that writes through
+  // GetStdHandle() rather than the CRT.
+  ::SetStdHandle(STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>(_get_osfhandle(1)));
+  ::SetStdHandle(STD_ERROR_HANDLE, reinterpret_cast<HANDLE>(_get_osfhandle(2)));
+#  else
+  const int fd = ::open("/dev/null", O_WRONLY);
+  if (fd < 0) {
+    return;
+  }
+  ::dup2(fd, STDOUT_FILENO);
+  ::dup2(fd, STDERR_FILENO);
+  if (fd > STDERR_FILENO) {
+    ::close(fd);
+  }
+#  endif
+}
+#endif
 
 #if !IS_WINDOWS
 void HandleSignal(int signal) {
@@ -90,6 +138,9 @@ void NotifyShutdownComplete() {
 }  // namespace
 
 int main(int argc, const char *argv[]) {
+#if LOADMASTER_SILENT
+  SilenceOutput();
+#endif
   core::Options options;
   const auto parse = cli::ParseCommandLineArguments(options, argc, argv);
   if (parse.should_exit) {

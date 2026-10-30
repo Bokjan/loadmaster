@@ -27,6 +27,10 @@ jobs:
           - { os: ubuntu-24.04,     preset: release, cxx: clang++ }
           - { os: ubuntu-24.04,     preset: sanitize }
           - { os: ubuntu-24.04,     preset: tsan }
+          # LOADMASTER_SILENT compiles every LOG_* site out; -Werror then
+          # catches variables only a log call used.
+          - { os: ubuntu-24.04,     preset: silent }
+          - { os: ubuntu-24.04,     preset: silent, cxx: clang++ }
           # Linux arm64 (host arch)
           - { os: ubuntu-24.04-arm, preset: debug }
           - { os: ubuntu-24.04-arm, preset: release }
@@ -41,6 +45,7 @@ jobs:
           # no longer exposes a VS instance to vswhere, so the VS generator fails)
           - { os: windows-2022,     preset: windows-debug }
           - { os: windows-2022,     preset: windows-release }
+          - { os: windows-2022,     preset: windows-silent }
     steps:
       - uses: actions/checkout@v7.0.0
 

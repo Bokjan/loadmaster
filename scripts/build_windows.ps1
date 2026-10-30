@@ -10,11 +10,13 @@
 #
 # Usage (any PowerShell, Windows 10/11):
 #     scripts\build_windows.ps1
+#     scripts\build_windows.ps1 -Silent        # LOADMASTER_SILENT build
 #     scripts\build_windows.ps1 -Incremental   # reuse the build tree
 #
 # Output:
 #     dist\loadmaster-<version>-windows-x86_64.exe
 #     dist\loadmaster-<version>-windows-x86_64.exe.sha256
+#     (-Silent: dist\loadmaster-<version>-silent-windows-x86_64.exe[.sha256])
 #
 # The resulting executable links the C/C++ runtime statically (/MT) so it
 # does not need the Visual C++ Redistributable on the target machine.
@@ -24,6 +26,9 @@
 
 [CmdletBinding()]
 param(
+    # Build the variant that never prints anything (LOADMASTER_SILENT=ON),
+    # named ...-silent-windows-x86_64.exe.
+    [switch]$Silent,
     # Reuse the existing build tree instead of starting from scratch
     # (faster; for iteration, not releases).
     [switch]$Incremental
@@ -32,7 +37,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot  = Resolve-Path "$PSScriptRoot\.."
-$BuildDir  = Join-Path $RepoRoot 'build_release_windows'
+# The silent variant gets its own build tree and an artifact name of its own.
+$SilentCMake = if ($Silent) { 'ON' } else { 'OFF' }
+$Variant     = if ($Silent) { 'silent-' } else { '' }
+$BuildDir  = Join-Path $RepoRoot $(if ($Silent) { 'build_release_windows_silent' } else { 'build_release_windows' })
 $DistDir   = Join-Path $RepoRoot 'dist'
 
 # ---------------------------------------------------------------------------
@@ -95,7 +103,7 @@ New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 # generator itself locates the VS toolchain via the registry, so we don't
 # need vcvars to be loaded -- only cmake.exe needs to be reachable.
 & cmake -S $RepoRoot -B $BuildDir -G "Visual Studio 17 2022" -A x64 `
-        -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF
+        -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF "-DLOADMASTER_SILENT=$SilentCMake"
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
 & cmake --build $BuildDir --config Release --parallel
@@ -107,7 +115,7 @@ if (-not (Test-Path $Built)) {
 }
 # CMake parses the version out of src/core/version.h at configure time.
 $Version = (Get-Content (Join-Path $BuildDir 'version.txt') -Raw).Trim()
-$OutputName = "loadmaster-$Version-windows-x86_64.exe"
+$OutputName = "loadmaster-$Version-${Variant}windows-x86_64.exe"
 $Output = Join-Path $DistDir $OutputName
 Copy-Item -Force $Built $Output
 

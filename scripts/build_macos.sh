@@ -11,12 +11,14 @@
 #     scripts/build_macos.sh                 # auto-detect host arch
 #     scripts/build_macos.sh --arch arm64
 #     scripts/build_macos.sh --arch x86_64
+#     scripts/build_macos.sh --silent        # LOADMASTER_SILENT build
 #     scripts/build_macos.sh --incremental   # reuse the build tree
 #     scripts/build_macos.sh --help
 #
 # Output:
 #     dist/loadmaster-<version>-macos-<arch>
 #     dist/loadmaster-<version>-macos-<arch>.sha256
+#     (--silent: dist/loadmaster-<version>-silent-macos-<arch>[.sha256])
 #
 # Notes:
 #   * Unlike the Linux build, we do NOT statically link libc++/libSystem:
@@ -35,18 +37,20 @@ set -o nounset
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--arch <arm64|x86_64>] [--incremental] [--help]
+Usage: $(basename "$0") [--arch <arm64|x86_64>] [--silent] [--incremental] [--help]
 
   --arch <arch>   Target architecture. Defaults to the host's arch.
                   Cross-compiling is supported on Apple Silicon hosts via
                   CMAKE_OSX_ARCHITECTURES (no Rosetta needed at build
                   time, but the resulting x86_64 binary will run under
                   Rosetta 2 on Apple Silicon).
+  --silent        Build the variant that never prints anything
+                  (LOADMASTER_SILENT=ON), named ...-silent-macos-<arch>.
   --incremental   Reuse the existing build tree instead of starting from
                   scratch (faster; for iteration, not releases).
   --help, -h      Show this message.
 
-Output: dist/loadmaster-<version>-macos-<arch> (+ .sha256)
+Output: dist/loadmaster-<version>[-silent]-macos-<arch> (+ .sha256)
 EOF
 }
 
@@ -59,12 +63,17 @@ detect_arch() {
 }
 
 ARCH="$(detect_arch)"
+SILENT=0
 INCREMENTAL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)
             ARCH="${2:-}"
             shift 2
+            ;;
+        --silent)
+            SILENT=1
+            shift
             ;;
         --incremental)
             INCREMENTAL=1
@@ -104,9 +113,20 @@ if ! command -v cmake >/dev/null 2>&1; then
     exit 1
 fi
 
-readonly ARCH INCREMENTAL
+# The silent variant gets its own build tree and an artifact name of its own.
+if [[ "${SILENT}" -eq 1 ]]; then
+    SILENT_CMAKE=ON
+    VARIANT="silent-"
+    BUILD_SUFFIX="_silent"
+else
+    SILENT_CMAKE=OFF
+    VARIANT=""
+    BUILD_SUFFIX=""
+fi
+
+readonly ARCH INCREMENTAL SILENT_CMAKE VARIANT BUILD_SUFFIX
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly BUILD_DIR="${REPO_ROOT}/build_release_macos_${ARCH}"
+readonly BUILD_DIR="${REPO_ROOT}/build_release_macos_${ARCH}${BUILD_SUFFIX}"
 readonly DIST_DIR="${REPO_ROOT}/dist"
 
 # shellcheck source=lib/common.sh
@@ -128,10 +148,11 @@ cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" \
       -DCMAKE_BUILD_TYPE=Release \
       -DLOADMASTER_LINK_COMPILE_COMMANDS=OFF \
       -DCMAKE_OSX_ARCHITECTURES="${ARCH}" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}"
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET}" \
+      -DLOADMASTER_SILENT="${SILENT_CMAKE}"
 cmake --build "${BUILD_DIR}" -j "$(lm_jobs)"
 
-OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-macos-${ARCH}"
+OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-${VARIANT}macos-${ARCH}"
 readonly OUTPUT
 cp "${BUILD_DIR}/src/loadmaster" "${OUTPUT}"
 strip -x "${OUTPUT}"   # -x: keep external symbols (required by dlopen)
