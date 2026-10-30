@@ -50,6 +50,8 @@ class GpuWorkerContext final {
 
   GpuDevice *device() const { return device_.get(); }
   int id() const { return id_; }
+  // Whether a calibration succeeded. Read before Start() or after Join().
+  bool calibrated() const { return calibrated_; }
 
  private:
   int id_;

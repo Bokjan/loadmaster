@@ -46,7 +46,6 @@ class FakeDevice final : public GpuDevice {
       return false;
     }
     ++launches_;
-    last_loop_count_ = loop_count;
     std::this_thread::sleep_for(
         std::chrono::nanoseconds(static_cast<int64_t>(loop_count * ns_per_loop_)));
     return true;
@@ -54,7 +53,6 @@ class FakeDevice final : public GpuDevice {
 
   std::atomic<bool> fail_{false};
   std::atomic<int> launches_{0};
-  std::atomic<int> last_loop_count_{0};
   std::atomic<int> failures_{0};
   std::atomic<int> allocations_{0};
   std::atomic<int> releases_{0};
@@ -211,13 +209,15 @@ TEST_F(GpuWorkerTest, WorkerYieldingAtStartupCalibratesOnResume) {
   EXPECT_EQ(raw->launches_.load(), 0) << "calibrated on a device in use";
 
   ctx.SetYield(false);
-  // Calibration, then half a period of work per launch: 2 us per loop ->
-  // 25'000 loops (an uncalibrated worker would launch 1).
+  // Don't judge by the loop count launched afterwards: AdaptBaseLoopCount()
+  // grows an uncalibrated worker's count of 1 to the same place within a
+  // few ticks, and where the fake's sleeps overshoot (by tens of ms on the
+  // macOS CI runner) it settles far below what 2 us per loop predicts.
   ASSERT_TRUE(WaitFor([&] { return raw->launches_.load() > 0; }));
-  std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-  EXPECT_NEAR(raw->last_loop_count_.load(), 25'000, 5'000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(5 * kScheduleIntervalMS));
   ctx.RequestStop();
   ctx.Join();
+  EXPECT_TRUE(ctx.calibrated()) << "resumed without calibrating";
 }
 
 TEST_F(GpuWorkerTest, FailedDeferredCalibrationGivesTheDeviceUp) {
