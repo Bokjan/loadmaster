@@ -32,21 +32,13 @@ lm_version() {
     tr -d '[:space:]' <"${file}"
 }
 
-# Write <file>.sha256 next to <file>, in the format `sha256sum -c` /
-# `shasum -a 256 -c` read: "<hex>  <basename>".
-lm_write_sha256() {
-    local dir base
-    dir="$(dirname "$1")"
-    base="$(basename "$1")"
-    (
-        cd "${dir}"
-        if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${base}"
-        elif command -v shasum >/dev/null 2>&1; then
-            shasum -a 256 "${base}"
-        else
-            # FreeBSD base: `sha256 -r` prints "<hex> <file>".
-            sha256 -r "${base}" | awk '{ print $1 "  " $2 }'
-        fi
-    ) >"$1.sha256"
+# Print the SHA-256 of <file> in hex.
+lm_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1"
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1"
+    else
+        sha256 -r "$1"   # FreeBSD base
+    fi | cut -d ' ' -f 1
 }

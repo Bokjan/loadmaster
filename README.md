@@ -58,7 +58,7 @@ Because we link glibc dynamically on Linux (to keep `dlopen` working for the GPU
 
 Pass `--silent` (`-Silent` on Windows) for the `LOADMASTER_SILENT` variant, `dist/loadmaster-<version>-silent-<os>-<arch>[.exe]`, built in its own tree; releases ship both.
 
-`<version>` is the one in `src/core/version.h` (what `-v` prints). Each artifact gets a `<artifact>.sha256` next to it (`sha256sum -c` / `shasum -a 256 -c` format). The scripts start from an empty build tree, as a release should; pass `--incremental` (`-Incremental` on Windows) to reuse it while iterating.
+`<version>` is the one in `src/core/version.h` (what `-v` prints). The scripts print the artifact's SHA-256; the GitHub release page shows it for each asset. The scripts start from an empty build tree, as a release should; pass `--incremental` (`-Incremental` on Windows) to reuse it while iterating.
 
 The Linux script only requires Docker. It builds inside the manylinux2014 image (CentOS 7 / glibc 2.17) as the invoking user (so the build tree stays yours), strips the result inside the container, and drops it into `dist/`. `--manylinux 2_28` builds in the manylinux_2_28 image (AlmaLinux 8 / glibc 2.28, newer GCC) instead, which drops CentOS / RHEL 7, Ubuntu < 18.10 and Debian < 10. It prints the image digest it used; set `MANYLINUX_IMAGE=quay.io/pypa/manylinux2014_<arch>@sha256:<digest>` to pin it for reproducible builds. By default it targets the host's architecture (`x86_64` or `aarch64`); pass `--arch` to override. Cross-architecture builds (e.g. arm64 from x86_64) work via qemu-user-static binfmt but are much slower; running on a native host of the target arch is recommended.
 

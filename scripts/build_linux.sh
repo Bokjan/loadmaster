@@ -21,8 +21,7 @@
 #
 # Output:
 #     dist/loadmaster-<version>-linux-<arch>
-#     dist/loadmaster-<version>-linux-<arch>.sha256
-#     (--silent: dist/loadmaster-<version>-silent-linux-<arch>[.sha256])
+#     (--silent: dist/loadmaster-<version>-silent-linux-<arch>)
 #
 # Cross-architecture builds (e.g. building aarch64 on an x86_64 host)
 # work transparently if qemu-user-static binfmt is registered with
@@ -55,7 +54,7 @@ Usage: $(basename "$0") [--arch <x86_64|aarch64>] [--manylinux <2014|2_28>]
                         from scratch (faster; for iteration, not releases).
   --help, -h            Show this message.
 
-Output: dist/loadmaster-<version>[-silent]-linux-<arch> (+ .sha256)
+Output: dist/loadmaster-<version>[-silent]-linux-<arch>
 EOF
 }
 
@@ -198,10 +197,9 @@ docker run --rm \
 
 OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-${VARIANT}linux-${ARCH}"
 readonly OUTPUT
-lm_write_sha256 "${OUTPUT}"
 
 file "${OUTPUT}"
 echo
 echo "Built:  ${OUTPUT}"
-echo "SHA256: $(cut -d ' ' -f 1 "${OUTPUT}.sha256")"
+echo "SHA256: $(lm_sha256 "${OUTPUT}")"
 echo "Image:  $(docker image inspect --format '{{index .RepoDigests 0}}' "${IMAGE}" 2>/dev/null || echo "${IMAGE}")"

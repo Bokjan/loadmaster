@@ -17,8 +17,7 @@
 #
 # Output:
 #     dist/loadmaster-<version>-macos-<arch>
-#     dist/loadmaster-<version>-macos-<arch>.sha256
-#     (--silent: dist/loadmaster-<version>-silent-macos-<arch>[.sha256])
+#     (--silent: dist/loadmaster-<version>-silent-macos-<arch>)
 #
 # Notes:
 #   * Unlike the Linux build, we do NOT statically link libc++/libSystem:
@@ -50,7 +49,7 @@ Usage: $(basename "$0") [--arch <arm64|x86_64>] [--silent] [--incremental] [--he
                   scratch (faster; for iteration, not releases).
   --help, -h      Show this message.
 
-Output: dist/loadmaster-<version>[-silent]-macos-<arch> (+ .sha256)
+Output: dist/loadmaster-<version>[-silent]-macos-<arch>
 EOF
 }
 
@@ -156,8 +155,7 @@ OUTPUT="${DIST_DIR}/loadmaster-$(lm_version "${BUILD_DIR}")-${VARIANT}macos-${AR
 readonly OUTPUT
 cp "${BUILD_DIR}/src/loadmaster" "${OUTPUT}"
 strip -x "${OUTPUT}"   # -x: keep external symbols (required by dlopen)
-lm_write_sha256 "${OUTPUT}"
 file "${OUTPUT}"
 echo
 echo "Built:  ${OUTPUT}"
-echo "SHA256: $(cut -d ' ' -f 1 "${OUTPUT}.sha256")"
+echo "SHA256: $(lm_sha256 "${OUTPUT}")"

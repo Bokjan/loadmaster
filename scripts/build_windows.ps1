@@ -15,8 +15,7 @@
 #
 # Output:
 #     dist\loadmaster-<version>-windows-x86_64.exe
-#     dist\loadmaster-<version>-windows-x86_64.exe.sha256
-#     (-Silent: dist\loadmaster-<version>-silent-windows-x86_64.exe[.sha256])
+#     (-Silent: dist\loadmaster-<version>-silent-windows-x86_64.exe)
 #
 # The resulting executable links the C/C++ runtime statically (/MT) so it
 # does not need the Visual C++ Redistributable on the target machine.
@@ -119,10 +118,7 @@ $OutputName = "loadmaster-$Version-${Variant}windows-x86_64.exe"
 $Output = Join-Path $DistDir $OutputName
 Copy-Item -Force $Built $Output
 
-# "<hex>  <name>\n", the format `sha256sum -c` reads; written by hand so
-# PowerShell adds no BOM / CRLF.
 $Hash = (Get-FileHash -Algorithm SHA256 $Output).Hash.ToLowerInvariant()
-[IO.File]::WriteAllText("$Output.sha256", "$Hash  $OutputName`n")
 
 Write-Host ""
 Write-Host "Built:  $Output"
