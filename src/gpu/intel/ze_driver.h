@@ -41,6 +41,7 @@ constexpr uint32_t ZE_INIT_FLAG_GPU_ONLY = 1u;
 // disables the whole Intel backend (ZE_RESULT_ERROR_INVALID_ARGUMENT during
 // enumeration).
 constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_PROPERTIES = 0x3;
+constexpr uint32_t ZE_STRUCTURE_TYPE_DEVICE_MEMORY_PROPERTIES = 0x7;
 constexpr uint32_t ZE_STRUCTURE_TYPE_CONTEXT_DESC = 0xd;
 constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC = 0xe;
 constexpr uint32_t ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC = 0xf;
@@ -177,6 +178,17 @@ struct ze_device_luid_ext_properties_t {
   uint32_t nodeMask;
 };
 
+// Layout of ze_device_memory_properties_t -- see ze_api.h.
+struct ze_device_memory_properties_t {
+  uint32_t stype;
+  void *pNext;
+  uint32_t flags;
+  uint32_t maxClockRate;  // MHz
+  uint32_t maxBusWidth;   // bits
+  uint64_t totalSize;
+  char name[256];  // ZE_MAX_DEVICE_NAME = 256
+};
+
 // ---- Function pointer table ---------------------------------------------
 struct ZeApi {
   ze_result_t (*zeInit)(uint32_t flags);
@@ -244,6 +256,9 @@ struct ZeApi {
   // Optional (nullptr if the loader predates it).
   ze_result_t (*zeDevicePciGetPropertiesExt)(ze_device_handle_t hDevice,
                                              ze_pci_ext_properties_t *pPciProperties);
+  // Optional: the memory clock and bus width, for the `-gm` traffic rate.
+  ze_result_t (*zeDeviceGetMemoryProperties)(ze_device_handle_t hDevice, uint32_t *pCount,
+                                             ze_device_memory_properties_t *pMemProperties);
 };
 
 // Returns a singleton API table; first call dlopens ze_loader and

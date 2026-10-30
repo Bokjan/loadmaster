@@ -13,7 +13,8 @@ namespace gpu::contention {
 // created a queues/<id>/gpuid file naming the GPU the queue runs on.
 // Holding a queue on a device is what "doing compute work on it" means
 // here; graphics never goes through amdkfd. World-readable, so other
-// users' processes are visible too.
+// users' processes are visible too. amdkfd has no per-process usage, so
+// a device in use is measured as a whole, by amdgpu's gpu_busy_percent.
 class KfdSource final : public Source {
  public:
   // `root` prefixes /sys (tests point it at a fake tree); `self_pid` is the

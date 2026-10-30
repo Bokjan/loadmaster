@@ -55,6 +55,8 @@ target_sources(loadmaster_core PRIVATE
     gpu/manager_default.cc
     gpu/manager_random_normal.cc
     gpu/worker.cc
+    gpu/mem_sweep.cc
+    gpu/mem_traffic.cc
     gpu/contention/monitor.cc
     gpu/contention/parse.cc
     gpu/contention/sources.cc

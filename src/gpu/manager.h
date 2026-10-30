@@ -17,10 +17,10 @@ namespace gpu {
 // Init() takes the list of (vendor-local index, device) pairs the
 // factory probed, binds each device, and constructs one GpuWorkerContext
 // per usable device (which allocates the optional device memory once
-// started). It then sets up the contention monitor that makes a device
-// yield -- no kernels, no `-gm` block -- while another process is doing
-// compute work on it, and only then calibrates the devices nobody else is
-// using.
+// started). It then sets up the contention monitor that has a device
+// share with other processes doing compute work on it -- no `-gm` block,
+// and only the part of the load their share leaves over -- and only then
+// calibrates the devices nobody else is using.
 // Subclasses can read `workers_` from their `Schedule()` override to
 // drive per-device loads.
 class GpuResourceManager : public core::ResourceManager {
@@ -51,11 +51,11 @@ class GpuResourceManager : public core::ResourceManager {
 
  private:
   // Build monitor_ over workers_ and take the first sample, so a device
-  // that is already in use starts out yielding.
+  // that is already in use starts out shared.
   void InitContentionMonitor();
-  // Calibrate every worker that isn't yielding and drop the ones that
-  // can't run the kernel; yielding ones calibrate once they resume. False
-  // if no device is left.
+  // Calibrate every worker that isn't sharing its device and drop the ones
+  // that can't run the kernel; the others calibrate on their own thread
+  // once their share leaves room for a kernel. False if no device is left.
   bool CalibrateWorkers();
 };
 

@@ -4,7 +4,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdlib>
+#include <thread>
+
+#include "gpu/constants.h"
 
 namespace gpu::contention::linux_fs {
 
@@ -68,6 +72,41 @@ std::vector<int> ListNumericDir(const std::string &path) {
       continue;
     }
     out.push_back(std::atoi(name.c_str()));
+  }
+  return out;
+}
+
+std::map<std::string, double> AverageGpuBusyPercent(const std::string &root,
+                                                    const std::set<std::string> &pcis) {
+  std::map<std::string, std::string> files;
+  for (const auto &pci : pcis) {
+    const std::string path = root + "/sys/bus/pci/devices/" + pci + "/gpu_busy_percent";
+    if (ReadFile(path)) {
+      files[pci] = path;
+    }
+  }
+  std::map<std::string, double> sum;
+  std::map<std::string, int> count;
+  for (int i = 0; i < kGpuBusyPercentSamples && !files.empty(); ++i) {
+    if (i > 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(kGpuBusyPercentSampleIntervalMS));
+    }
+    for (const auto &[pci, path] : files) {
+      const auto text = ReadFile(path);
+      if (!text) {
+        continue;
+      }
+      char *end = nullptr;
+      const double value = std::strtod(text->c_str(), &end);
+      if (end != text->c_str()) {
+        sum[pci] += value;
+        ++count[pci];
+      }
+    }
+  }
+  std::map<std::string, double> out;
+  for (const auto &[pci, total] : sum) {
+    out[pci] = total / count[pci];
   }
   return out;
 }

@@ -70,6 +70,7 @@ bool DoLoad() {
   ok &= Resolve(g_handle, "cuGetErrorString", g_api.cuGetErrorString);
   Resolve(g_handle, "cuDeviceGetPCIBusId", g_api.cuDeviceGetPCIBusId, /*required=*/false);
   Resolve(g_handle, "cuDeviceGetLuid", g_api.cuDeviceGetLuid, /*required=*/false);
+  Resolve(g_handle, "cuDeviceGetAttribute", g_api.cuDeviceGetAttribute, /*required=*/false);
 
   if (!ok) {
     LOG_WARN("failed to resolve all CUDA driver symbols");

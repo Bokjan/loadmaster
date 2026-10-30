@@ -43,7 +43,7 @@ std::vector<std::unique_ptr<Source>> CreatePlatformSources() {
   out.push_back(std::make_unique<DrmSource>("", self));
 #endif
   // BSD: no vendor library or kernel interface lists GPU users; the
-  // monitor warns once per device and never yields.
+  // monitor warns once per device and never makes room.
   return out;
 }
 

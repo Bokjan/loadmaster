@@ -18,14 +18,16 @@ namespace gpu::contention {
 // DRM client keeps the device's engines at least kGpuYieldMinBusyPercent
 // busy (fdinfo usage stats). The last check weeds out programs that merely
 // enumerated OpenCL platforms, which maps every installed ICD; drivers
-// without usage stats fall back to the first two.
+// without usage stats fall back to the first two. The device's busy time
+// is the sum over every client's (ours included); where some client has
+// no usage stats, amdgpu's gpu_busy_percent stands in if there is one.
 //
 // Reading another process's fd table, fdinfo and maps needs ptrace-read
 // access to it, i.e. the same user or root: run as root to see everybody.
 class DrmSource final : public Source {
  public:
   // `root` prefixes /proc and /sys (tests point it at a fake tree);
-  // `self_pid` is the pid to ignore.
+  // `self_pid` is our own pid, which only adds to the busy time.
   DrmSource(std::string root, int self_pid);
 
   const char *Name() const override { return "DRM"; }

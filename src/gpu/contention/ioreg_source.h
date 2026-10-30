@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <utility>
 
 #include "core/resource_manager.h"
@@ -18,7 +19,8 @@ namespace gpu::contention {
 //
 // Metal doesn't separate compute from graphics, so this is busy-time
 // based rather than "has a compute context", and WindowServer (the
-// compositor, always drawing something) is left out.
+// compositor, always drawing something) is left out. The device's busy
+// time is the sum over every process's, ours and WindowServer's included.
 class IoRegSource final : public Source {
  public:
   explicit IoRegSource(int self_pid);
@@ -30,6 +32,8 @@ class IoRegSource final : public Source {
   int self_pid_;
   // (registry_id, pid) -> accumulated GPU ns at the previous poll.
   std::map<std::pair<uint64_t, int>, uint64_t> last_ns_;
+  // Pids of WindowServer seen so far.
+  std::set<int> window_server_pids_;
   TimePoint last_time_;
   bool primed_;
 };

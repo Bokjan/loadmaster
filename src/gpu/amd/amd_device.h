@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "gpu/device.h"
+#include "gpu/mem_sweep.h"
 #include "hip_driver.h"
 
 namespace gpu::amd {
@@ -16,9 +17,10 @@ class AmdDevice final : public GpuDevice {
   bool Init(int device_index) override;
   std::string Name() const override;
   DeviceLocator Locator() const override;
+  std::optional<double> MemoryBandwidth() const override;
   bool AllocateMemory(size_t bytes) override;
   void ReleaseMemory() override;
-  bool RunKernel(int loop_count) override;
+  bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) override;
 
  private:
   const HipApi *api_;
@@ -32,6 +34,7 @@ class AmdDevice final : public GpuDevice {
   bool queue_created_;
   void *mem_load_ptr_;
   size_t mem_load_bytes_;
+  MemSweep sweep_;  // where the next launch's traffic goes in that block
   std::string name_;
   int device_index_;
 

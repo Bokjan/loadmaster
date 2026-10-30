@@ -227,6 +227,19 @@ loadmaster_add_test(gpu_worker_test
     gpu/worker_test.cc
 )
 
+# The busy kernel's per-launch pass over the `-gm` block: window layout,
+# access spacing and the cursor, checked against a host replay of the
+# kernels' index walk.
+loadmaster_add_test(gpu_mem_sweep_test
+    gpu/mem_sweep_test.cc
+)
+
+# The fluctuating factor on that traffic: long-run mean, bounds, spread and
+# smoothness on seeded runs.
+loadmaster_add_test(gpu_mem_traffic_test
+    gpu/mem_traffic_test.cc
+)
+
 # Contention monitor (yielding to other GPU users): the string formats the
 # sources parse (vendor PCI ids, amdkfd topology, Windows GPU Engine
 # instances, macOS IOUserClientCreator) on every host, the yield

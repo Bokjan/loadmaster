@@ -5,6 +5,7 @@
 #include <pdh.h>
 #include <pdhmsg.h>
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -116,7 +117,8 @@ void PdhSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
     return;
   }
   last_ = std::move(raw);
-  // Busy percent of each other process's compute engines, per adapter.
+  // Busy percent of each process's compute engines (ours included), per
+  // adapter.
   std::map<std::pair<int, uint64_t>, double> busy;
   for (const auto &[wide_name, value] : percent) {
     // Instance names are plain ASCII.
@@ -125,21 +127,30 @@ void PdhSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
       name.push_back(c < 0x80 ? static_cast<char>(c) : '?');
     }
     const auto instance = ParseGpuEngineInstance(name);
-    if (!instance || instance->pid == static_cast<int>(self_pid_) ||
-        !IsComputeEngineType(instance->engine_type)) {
+    if (!instance || !IsComputeEngineType(instance->engine_type)) {
       continue;
     }
     busy[{instance->pid, instance->luid}] += value;
   }
   for (size_t d = 0; d < devices.size(); ++d) {
     out[d].verdict = Observation::Verdict::kIdle;
+    double total = 0.0;
     for (const auto &[key, value] : busy) {
-      if (value >= kGpuYieldMinBusyPercent &&
-          (devices[d].luid == 0 || devices[d].luid == key.second)) {
+      if (devices[d].luid != 0 && devices[d].luid != key.second) {
+        continue;
+      }
+      total += value;
+      if (key.first != static_cast<int>(self_pid_) && value >= kGpuYieldMinBusyPercent &&
+          out[d].verdict != Observation::Verdict::kBusy) {
         out[d].verdict = Observation::Verdict::kBusy;
         out[d].pid = key.first;
-        break;
       }
+    }
+    if (out[d].verdict == Observation::Verdict::kBusy) {
+      // Several compute engines busy at once add up: a device is at most
+      // fully busy. (Without a LUID this sums every adapter: errs on the
+      // side of leaving more to the others.)
+      out[d].device_busy = std::min(total, 100.0);
     }
   }
 }

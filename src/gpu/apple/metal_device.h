@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "gpu/device.h"
+#include "gpu/mem_sweep.h"
 
 namespace gpu::apple {
 
@@ -31,7 +33,7 @@ class AppleMetalDevice final : public GpuDevice {
   DeviceLocator Locator() const override;
   bool AllocateMemory(size_t bytes) override;
   void ReleaseMemory() override;
-  bool RunKernel(int loop_count) override;
+  bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) override;
 
   // Number of MTLDevices visible to the system. Implemented in the .mm.
   static int DeviceCount();
@@ -51,6 +53,7 @@ class AppleMetalDevice final : public GpuDevice {
   void *out_buffer_;
   void *mem_buffer_;
   std::size_t mem_bytes_;
+  MemSweep sweep_;  // where the next launch's traffic goes in mem_buffer_
   std::string name_;
   int device_index_;
 

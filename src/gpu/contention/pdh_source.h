@@ -11,8 +11,10 @@ namespace gpu::contention {
 // Manager reads, one instance per (process, adapter, engine). A process
 // counts when its compute engines ("Compute_0", "Cuda", ...; 3D / copy /
 // video don't) keep the adapter at least kGpuYieldMinBusyPercent busy.
+// The adapter's busy time is the sum over every process's compute engines,
+// ours included.
 // Matched by adapter LUID; a device whose LUID the backend can't report
-// (HIP) is compared against every adapter, which errs on yielding.
+// (HIP) is compared against every adapter, which errs on making room.
 class PdhSource final : public Source {
  public:
   // A PDH_RAW_COUNTER, kept here so <pdh.h> stays out of the header.

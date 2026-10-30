@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <string>
 
 #include "source.h"
@@ -14,6 +15,10 @@ namespace gpu::contention {
 // type "C". Graphics-only processes are a separate list and don't count.
 // Covers every NVIDIA device whatever backend drives it (CUDA or OpenCL),
 // matched by PCI address. Sees other users' processes without root.
+//
+// A device with other users is measured as a whole: the share of time
+// any kernel ran on it (what nvidia-smi shows as GPU-Util), averaged over
+// the driver's samples since the previous poll.
 //
 // Windows: only TCC / MCDM devices. Under WDDM every process with a
 // D3D device ("C+G": explorer.exe, browsers, ...) is on the compute list
@@ -48,11 +53,22 @@ class NvmlSource final : public Source {
   size_t process_info_size_;
   // nvmlDeviceGetDriverModel(_v2), Windows only (nullptr elsewhere).
   Return (*get_driver_model_)(DeviceHandle device, int *current, int *pending);
+  // Optional (nullptr if missing): nvmlDeviceGetSamples, and
+  // nvmlDeviceGetUtilizationRates as the fallback. `samples` /
+  // `utilization` point at nvmlSample_t / nvmlUtilization_t arrays.
+  Return (*get_samples_)(DeviceHandle device, int type, unsigned long long last_seen_us,
+                         int *value_type, unsigned int *count, void *samples);
+  Return (*get_utilization_)(DeviceHandle device, void *utilization);
   // PCI address -> NVML handle, or nullptr if NVML doesn't know it.
   std::map<std::string, DeviceHandle> handles_;
+  // Device -> timestamp of the newest utilization sample read from it.
+  std::map<DeviceHandle, unsigned long long> last_sample_us_;
 
   // Pids with a compute context on `device`, or false on error.
   bool ComputePids(DeviceHandle device, std::vector<int> &pids);
+  // Percent of the time since the previous call any kernel ran on
+  // `device`, or nullopt if NVML can't tell.
+  std::optional<double> DeviceBusy(DeviceHandle device);
 };
 
 }  // namespace gpu::contention

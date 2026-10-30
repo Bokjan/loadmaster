@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 
 #include "constants.h"
 
@@ -25,16 +26,21 @@ int Extrapolate(int count, double elapsed_ms, double target_ms) {
 
 }  // namespace
 
-GpuWorkerContext::GpuWorkerContext(int id, std::unique_ptr<GpuDevice> device)
+GpuWorkerContext::GpuWorkerContext(int id, std::unique_ptr<GpuDevice> device,
+                                   std::uint32_t traffic_seed)
     : id_(id),
       device_(std::move(device)),
       base_loop_count_(1),
       calibrated_(false),
       load_set_(0),
-      yield_(false),
+      others_percent_(-1),
+      busy_us_(0),
       memory_bytes_(0),
       memory_held_(false),
-      memory_failed_(false) {}
+      memory_failed_(false),
+      traffic_envelope_(traffic_seed),
+      mem_ms_per_mib_(0.0),
+      traffic_bytes_per_second_(0.0) {}
 
 GpuWorkerContext::~GpuWorkerContext() {
   // jthread joins in its dtor; nothing extra to do.
@@ -42,11 +48,13 @@ GpuWorkerContext::~GpuWorkerContext() {
 
 std::optional<double> GpuWorkerContext::TimeKernelMs(int loop_count) {
   const auto start = std::chrono::steady_clock::now();
-  if (!device_->RunKernel(loop_count)) {
+  if (!device_->RunKernel(loop_count, 0)) {
     return std::nullopt;
   }
-  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
-      .count();
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  busy_us_.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count(),
+                     std::memory_order_relaxed);
+  return std::chrono::duration<double, std::milli>(elapsed).count();
 }
 
 std::optional<double> GpuWorkerContext::MedianKernelMs(int loop_count) {
@@ -68,7 +76,7 @@ bool GpuWorkerContext::CalibrateBaseLoopCount() {
   }
   const double target_ms = static_cast<double>(kScheduleIntervalMS);
   // Warm-up launch: the first one pays for JIT / lazy context setup.
-  if (!device_->RunKernel(1)) {
+  if (!device_->RunKernel(1, 0)) {
     LOG_WARN("gpu worker id=%d: kernel launch failed during calibration", id_);
     return false;
   }
@@ -125,11 +133,11 @@ void GpuWorkerContext::Join() {
   }
 }
 
-void GpuWorkerContext::AdaptBaseLoopCount(int target_ms, double elapsed_ms) {
-  if (target_ms < kGpuAdaptMinBusyMs || elapsed_ms <= 0.0) {
+void GpuWorkerContext::AdaptBaseLoopCount(double alu_target_ms, double alu_elapsed_ms) {
+  if (alu_target_ms < kGpuAdaptMinBusyMs || alu_elapsed_ms <= 0.0) {
     return;
   }
-  const double ratio = static_cast<double>(target_ms) / elapsed_ms;
+  const double ratio = alu_target_ms / alu_elapsed_ms;
   if (std::abs(ratio - 1.0) < kGpuAdaptDeadband) {
     return;
   }
@@ -137,16 +145,37 @@ void GpuWorkerContext::AdaptBaseLoopCount(int target_ms, double elapsed_ms) {
       static_cast<double>(base_loop_count_) * (1.0 + kGpuAdaptSmoothing * (ratio - 1.0));
   const int new_count =
       static_cast<int>(std::clamp(next, 1.0, static_cast<double>(kGpuKernelLoopBaseMax)));
-  LOG_TRACE("gpu worker id=%d: %.1f ms for a %d ms budget, base_loop_count %d -> %d", id_,
-            elapsed_ms, target_ms, base_loop_count_, new_count);
+  LOG_TRACE("gpu worker id=%d: ALU loop %.1f ms for %.1f ms, base_loop_count %d -> %d", id_,
+            alu_elapsed_ms, alu_target_ms, base_loop_count_, new_count);
   base_loop_count_ = new_count;
+  // The last sample's residual assumed the old speed.
+  last_traffic_sample_.reset();
 }
 
-void GpuWorkerContext::SyncMemory(bool yield) {
+void GpuWorkerContext::UpdateMemCost(double mib, double residual_ms) {
+  // Wall time = ALU loop + mib * cost + a fixed launch overhead. Between
+  // two launches the overhead cancels and, with the ALU loop's share taken
+  // out, the cost is the change in residual over the change in traffic.
+  // The traffic's random walk supplies the changes; tick-to-tick timing
+  // noise is smoothed out.
+  const std::optional<TrafficSample> last = last_traffic_sample_;
+  last_traffic_sample_ = TrafficSample{mib, residual_ms};
+  if (!last) {
+    return;
+  }
+  const double delta_mib = mib - last->mib;
+  if (std::abs(delta_mib) < kGpuMemCostMinDelta * std::max(mib, last->mib)) {
+    return;
+  }
+  const double sample = (residual_ms - last->residual_ms) / delta_mib;
+  mem_ms_per_mib_ += kGpuMemCostSmoothing * (sample - mem_ms_per_mib_);
+}
+
+void GpuWorkerContext::SyncMemory(bool sharing) {
   if (device_ == nullptr || memory_bytes_ == 0) {
     return;
   }
-  if (yield) {
+  if (sharing) {
     if (memory_held_) {
       device_->ReleaseMemory();
       memory_held_ = false;
@@ -158,6 +187,17 @@ void GpuWorkerContext::SyncMemory(bool yield) {
     return;
   }
   memory_held_ = device_->AllocateMemory(memory_bytes_);
+  if (memory_held_ && traffic_bytes_per_second_ <= 0.0) {
+    const auto bandwidth = device_->MemoryBandwidth();
+    traffic_bytes_per_second_ = bandwidth ? *bandwidth * kGpuMemTrafficBandwidthShare
+                                          : static_cast<double>(kGpuMemTrafficMiBPerSecond) *
+                                                static_cast<double>(kMebiByte);
+    LOG_DEBUG(
+        "gpu worker id=%d: memory bandwidth %.1f GB/s (0: unknown), traffic %.0f MiB/s "
+        "at full load",
+        id_, bandwidth.value_or(0.0) / 1e9,
+        traffic_bytes_per_second_ / static_cast<double>(kMebiByte));
+  }
   if (!memory_held_) {
     memory_failed_ = true;
     LOG_WARN("gpu worker id=%d: memory allocation failed (%zu bytes); continuing", id_,
@@ -169,15 +209,19 @@ void GpuWorkerContext::Loop(std::stop_token stoken) {
   const auto period = std::chrono::milliseconds(kScheduleIntervalMS);
   int consecutive_failures = 0;
   while (!stoken.stop_requested()) {
-    const bool yield = yield_.load(std::memory_order_relaxed);
+    const int others = others_percent_.load(std::memory_order_relaxed);
     // Before taking the tick's start time: filling a large block takes a
     // while and must not count as kernel time in AdaptBaseLoopCount().
-    SyncMemory(yield);
+    SyncMemory(others >= 0);
     const auto start = std::chrono::steady_clock::now();
-    const int target_ms = yield ? 0 : load_set_.load(std::memory_order_relaxed);
+    // While sharing, the others' share comes out of the budget: device
+    // busy time, ours and theirs, adds up to the load asked for.
+    const int target_ms =
+        std::max(0, load_set_.load(std::memory_order_relaxed) -
+                        std::max(others, 0) * kScheduleIntervalMS / kGpuMaxLoadPerDevice);
 
     if (target_ms > 0 && device_ != nullptr && !calibrated_) {
-      // Yielding since startup: calibrate now that the device is ours.
+      // In use by others since startup: calibrate now that there is room.
       if (!CalibrateBaseLoopCount()) {
         LOG_ERROR("gpu worker id=%d: kernel calibration failed, giving the device up", id_);
         SyncMemory(true);
@@ -186,15 +230,33 @@ void GpuWorkerContext::Loop(std::stop_token stoken) {
       continue;  // a fresh tick: calibration time isn't this tick's work
     }
     if (target_ms > 0 && device_ != nullptr) {
+      // Memory traffic: on average in proportion to the busy time, scaled
+      // by this device's fluctuating factor; see kGpuMemTrafficMiBPerSecond.
+      std::uint64_t traffic = 0;
+      if (memory_held_) {
+        const double stepped_ms =
+            traffic_stepped_at_
+                ? std::chrono::duration<double, std::milli>(start - *traffic_stepped_at_).count()
+                : 0.0;
+        traffic_stepped_at_ = start;
+        const double mean = traffic_bytes_per_second_ * target_ms / kMillisecondsPerSecond;
+        traffic = static_cast<std::uint64_t>(mean * traffic_envelope_.Next(stepped_ms));
+      }
+      const double mib = static_cast<double>(traffic) / static_cast<double>(kMebiByte);
+      // The launch's time is its ALU loop plus what the traffic costs: give
+      // the loop only the rest of the budget, so the busy time stays at
+      // target_ms however the traffic moves, and AdaptBaseLoopCount() sees
+      // the loop alone (clock drift, not the traffic's random walk).
+      const double mem_ms = std::clamp(mem_ms_per_mib_ * mib, 0.0, target_ms * kGpuMemCostMaxShare);
       // base_loop_count_ corresponds to kScheduleIntervalMS of work.
-      const int64_t scaled =
-          static_cast<int64_t>(base_loop_count_) * target_ms / kScheduleIntervalMS;
-      const int loop_count = static_cast<int>(std::max<int64_t>(scaled, 1));
-      if (!device_->RunKernel(loop_count)) {
+      const double scaled = static_cast<double>(base_loop_count_) * (target_ms - mem_ms) /
+                            static_cast<double>(kScheduleIntervalMS);
+      const int loop_count = static_cast<int>(std::max(scaled, 1.0));
+      if (!device_->RunKernel(loop_count, traffic)) {
         if (++consecutive_failures >= kGpuMaxConsecutiveFailures) {
           LOG_ERROR("gpu worker id=%d: %d consecutive kernel failures, giving the device up", id_,
                     consecutive_failures);
-          // Nobody follows the yield state from here on: don't leave the
+          // Nobody follows the sharing state from here on: don't leave the
           // `-gm` block pinned on a device we no longer drive.
           SyncMemory(true);
           return;
@@ -204,10 +266,18 @@ void GpuWorkerContext::Loop(std::stop_token stoken) {
         continue;
       }
       consecutive_failures = 0;
+      const auto elapsed = std::chrono::steady_clock::now() - start;
+      busy_us_.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count(),
+                         std::memory_order_relaxed);
+      const double elapsed_ms = std::chrono::duration<double, std::milli>(elapsed).count();
+      const double alu_ms = static_cast<double>(loop_count) *
+                            static_cast<double>(kScheduleIntervalMS) /
+                            static_cast<double>(base_loop_count_);
+      if (traffic != 0) {
+        UpdateMemCost(mib, elapsed_ms - alu_ms);
+      }
       // Follow clock boost / thermal throttling, as the CPU workers do.
-      AdaptBaseLoopCount(target_ms, std::chrono::duration<double, std::milli>(
-                                        std::chrono::steady_clock::now() - start)
-                                        .count());
+      AdaptBaseLoopCount(alu_ms, elapsed_ms - std::max(mem_ms_per_mib_, 0.0) * mib);
     }
 
     const auto now = std::chrono::steady_clock::now();

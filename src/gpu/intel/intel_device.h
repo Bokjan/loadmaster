@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "gpu/device.h"
+#include "gpu/mem_sweep.h"
 #include "ze_driver.h"
 
 namespace gpu::intel {
@@ -25,9 +26,10 @@ class IntelDevice final : public GpuDevice {
   bool Init(int device_index) override;
   std::string Name() const override;
   DeviceLocator Locator() const override;
+  std::optional<double> MemoryBandwidth() const override;
   bool AllocateMemory(std::size_t bytes) override;
   void ReleaseMemory() override;
-  bool RunKernel(int loop_count) override;
+  bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) override;
 
  private:
   const ZeApi *api_;
@@ -46,6 +48,7 @@ class IntelDevice final : public GpuDevice {
   std::vector<void *> mem_load_ptrs_;
   std::size_t mem_load_bytes_;
   std::size_t max_alloc_bytes_;
+  MemSweep sweep_;  // where the next launch's traffic goes in that block
   std::string name_;
   int device_index_;
 

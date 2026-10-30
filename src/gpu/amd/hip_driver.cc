@@ -150,6 +150,7 @@ bool DoLoad() {
   ok &= Resolve(g_hip_handle, "hipMemset", g_api.hipMemset);
   ok &= Resolve(g_hip_handle, "hipGetErrorString", g_api.hipGetErrorString);
   Resolve(g_hip_handle, "hipDeviceGetPCIBusId", g_api.hipDeviceGetPCIBusId, /*required=*/false);
+  Resolve(g_hip_handle, "hipDeviceGetAttribute", g_api.hipDeviceGetAttribute, /*required=*/false);
 
   ok &= Resolve(g_rtc_handle, "hiprtcCreateProgram", g_api.hiprtcCreateProgram);
   ok &= Resolve(g_rtc_handle, "hiprtcDestroyProgram", g_api.hiprtcDestroyProgram);

@@ -25,6 +25,9 @@ using CUdeviceptr = std::uintptr_t;
 static_assert(sizeof(void *) == 8, "the CUDA driver bindings assume a 64-bit target");
 
 constexpr CUresult CUDA_SUCCESS = 0;
+// CUdevice_attribute values.
+constexpr int CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE = 36;        // kHz
+constexpr int CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH = 37;  // bits
 
 // Function pointer table. All pointers are nullptr until Load() succeeds.
 struct CudaApi {
@@ -51,6 +54,8 @@ struct CudaApi {
   // monitor. cuDeviceGetLuid only exists in Windows drivers.
   CUresult (*cuDeviceGetPCIBusId)(char *pciBusId, int len, CUdevice dev);
   CUresult (*cuDeviceGetLuid)(char *luid, unsigned int *deviceNodeMask, CUdevice dev);
+  // Optional: the memory clock and bus width, for the `-gm` traffic rate.
+  CUresult (*cuDeviceGetAttribute)(int *pi, int attrib, CUdevice dev);
 };
 
 // Returns a singleton API table; first call dlopens libcuda.so.1 and

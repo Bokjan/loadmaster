@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "gpu/device.h"
@@ -16,6 +17,10 @@ struct Observation {
   };
   Verdict verdict = Verdict::kUnknown;
   int pid = 0;  // one of the other processes when kBusy, for the log; 0 if unknown
+  // How busy the whole device was since the source's previous sample, in
+  // percent of the time, counting every process (this one included).
+  // nullopt where the source can't measure it; only needed when kBusy.
+  std::optional<double> device_busy;
 };
 
 // One way of finding other processes on a GPU: a vendor library (NVML), a
@@ -35,10 +40,11 @@ class Source {
   virtual const char *Name() const = 0;
 
   // Fill out[i] for devices[i]. `out` is pre-sized and kUnknown, except
-  // for devices an earlier source already found kBusy: a source may skip
-  // those, as nothing it reports for them changes the verdict. Called from
-  // the monitor thread only, except for the first poll from
-  // GpuResourceManager::Init before that thread starts.
+  // for devices an earlier source already found kBusy and measured
+  // (device_busy set): a source may skip those, as nothing it reports for
+  // them changes the outcome. Called from the monitor thread only, except
+  // for the first poll from GpuResourceManager::Init before that thread
+  // starts.
   virtual void Sample(const std::vector<DeviceLocator> &devices, std::vector<Observation> &out) = 0;
 };
 

@@ -1,6 +1,8 @@
 #include "drm_source.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <optional>
 #include <set>
 #include <thread>
 #include <vector>
@@ -46,15 +48,18 @@ DrmSource::DrmSource(std::string root, int self_pid) : root_(std::move(root)), s
 }
 
 void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Observation> &out) {
-  // Devices to look at: ours, and not already found busy by another source.
+  // Devices to look at: ours, and not already found busy and measured by
+  // another source.
   std::set<std::string> wanted;
   for (size_t i = 0; i < devices.size(); ++i) {
-    if (out[i].verdict == Observation::Verdict::kBusy) {
+    if (out[i].verdict == Observation::Verdict::kBusy && out[i].device_busy) {
       continue;
     }
     for (const auto &[path, node] : nodes_) {
       if (node.pci == devices[i].pci_bus_id) {
-        out[i].verdict = Observation::Verdict::kIdle;
+        if (out[i].verdict != Observation::Verdict::kBusy) {
+          out[i].verdict = Observation::Verdict::kIdle;
+        }
         wanted.insert(node.pci);
       }
     }
@@ -62,27 +67,30 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
   if (wanted.empty()) {
     return;
   }
-  auto idle = [&](const std::string &pci) {
-    for (size_t i = 0; i < devices.size(); ++i) {
-      if (out[i].verdict == Observation::Verdict::kIdle && devices[i].pci_bus_id == pci) {
-        return true;
-      }
-    }
-    return false;
+  // Per device: one other process using it (0 = none yet), the busy
+  // fraction of every client measured (ours included), and whether a
+  // client had no usage stats, which leaves that sum short.
+  struct Usage {
+    int other_pid = 0;
+    double busy = 0.0;
+    bool unmeasured = false;
   };
-  auto mark_busy = [&](const std::string &pci, int pid) {
-    for (size_t i = 0; i < devices.size(); ++i) {
-      if (out[i].verdict == Observation::Verdict::kIdle && devices[i].pci_bus_id == pci) {
-        out[i].verdict = Observation::Verdict::kBusy;
-        out[i].pid = pid;
-      }
+  std::map<std::string, Usage> usage;
+  auto count = [&](const std::string &pci, int pid, std::optional<double> fraction) {
+    Usage &u = usage[pci];
+    if (!fraction) {
+      u.unmeasured = true;
+    } else {
+      u.busy += *fraction;
+    }
+    if (pid != self_pid_ && u.other_pid == 0 &&
+        (!fraction || *fraction * 100.0 >= kGpuYieldMinBusyPercent)) {
+      u.other_pid = pid;
     }
   };
   auto busy_between = [](const Reading &before, const Reading &after) {
-    const auto fraction =
-        DrmBusyFraction(before.info, after.info,
-                        std::chrono::duration<double, std::nano>(after.at - before.at).count());
-    return fraction && *fraction * 100.0 >= kGpuYieldMinBusyPercent;
+    return DrmBusyFraction(before.info, after.info,
+                           std::chrono::duration<double, std::nano>(after.at - before.at).count());
   };
 
   // DRM clients met for the first time: measured once the scan is done.
@@ -95,9 +103,6 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
   std::map<std::pair<int, uint64_t>, Reading> next;
   const std::string proc = root_ + "/proc";
   for (int pid : linux_fs::ListNumericDir(proc)) {
-    if (pid == self_pid_) {
-      continue;
-    }
     const std::string pid_dir = proc + "/" + std::to_string(pid);
     // fd -> node, for the nodes of wanted devices this process has open.
     std::map<std::string, const Node *> held;
@@ -111,12 +116,15 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
     if (held.empty()) {
       continue;
     }
-    const auto maps = linux_fs::ReadFile(pid_dir + "/maps");
+    // Our own clients only add to the device's busy time; nobody else's
+    // count without a compute runtime.
+    const auto maps =
+        pid == self_pid_ ? std::optional<std::string>("") : linux_fs::ReadFile(pid_dir + "/maps");
     if (!maps) {
       continue;
     }
     for (const auto &[fd, node] : held) {
-      if (!MapsComputeRuntime(*maps, node->driver)) {
+      if (pid != self_pid_ && !MapsComputeRuntime(*maps, node->driver)) {
         continue;
       }
       const std::string fdinfo_path = pid_dir + "/fdinfo/" + fd;
@@ -128,7 +136,9 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
       if (!info || (!info->has_engine_ns && info->cycles.empty())) {
         // No usage stats from this driver (or kernel): the runtime has to
         // do.
-        mark_busy(node->pci, pid);
+        if (pid != self_pid_) {
+          count(node->pci, pid, std::nullopt);
+        }
         continue;
       }
       // dup()ed fds share a client; without an id, the fd stands for it.
@@ -144,14 +154,12 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
       const auto before = last_.find(key);
       if (before == last_.end()) {
         fresh.push_back({key, fdinfo_path, node->pci});
-      } else if (busy_between(before->second, now)) {
-        mark_busy(node->pci, pid);
+      } else if (const auto fraction = busy_between(before->second, now)) {
+        count(node->pci, pid, fraction);
       }
     }
   }
 
-  // No need to measure clients of devices found busy meanwhile.
-  std::erase_if(fresh, [&](const Fresh &f) { return !idle(f.pci); });
   if (!fresh.empty()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(kDrmBaselineMS));
     for (const auto &f : fresh) {
@@ -162,13 +170,48 @@ void DrmSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
       }
       Reading &baseline = next[f.key];
       const Reading now{*info, Clock::now()};
-      if (busy_between(baseline, now)) {
-        mark_busy(f.pci, f.key.first);
+      if (const auto fraction = busy_between(baseline, now)) {
+        count(f.pci, f.key.first, fraction);
       }
       baseline = now;
     }
   }
   last_ = std::move(next);
+
+  // Devices with clients the stats don't cover: amdgpu still has the
+  // whole device's busy percent.
+  std::set<std::string> unmeasured;
+  for (const auto &[pci, u] : usage) {
+    if (u.other_pid != 0 && u.unmeasured) {
+      unmeasured.insert(pci);
+    }
+  }
+  const auto whole = unmeasured.empty() ? std::map<std::string, double>{}
+                                        : linux_fs::AverageGpuBusyPercent(root_, unmeasured);
+  for (size_t i = 0; i < devices.size(); ++i) {
+    const auto it = usage.find(devices[i].pci_bus_id);
+    if (out[i].verdict == Observation::Verdict::kUnknown || it == usage.end() ||
+        it->second.other_pid == 0) {
+      // Not ours to judge, or no other process here. (One an earlier
+      // source found may not use DRM at all, e.g. a ROCm job: the sum
+      // below wouldn't include it.)
+      continue;
+    }
+    const Usage &u = it->second;
+    if (out[i].verdict == Observation::Verdict::kIdle) {
+      out[i].verdict = Observation::Verdict::kBusy;
+      out[i].pid = u.other_pid;
+    }
+    if (out[i].device_busy) {
+      continue;
+    }
+    if (!u.unmeasured) {
+      // Several engines busy at once add up: a device is at most fully busy.
+      out[i].device_busy = std::min(u.busy * 100.0, 100.0);
+    } else if (const auto w = whole.find(it->first); w != whole.end()) {
+      out[i].device_busy = w->second;
+    }
+  }
 }
 
 }  // namespace gpu::contention

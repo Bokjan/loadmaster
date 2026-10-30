@@ -4,6 +4,7 @@
 
 #include "cuda_driver.h"
 #include "gpu/device.h"
+#include "gpu/mem_sweep.h"
 
 namespace gpu::nvidia {
 
@@ -15,9 +16,10 @@ class NvidiaDevice final : public GpuDevice {
   bool Init(int device_index) override;
   std::string Name() const override;
   DeviceLocator Locator() const override;
+  std::optional<double> MemoryBandwidth() const override;
   bool AllocateMemory(size_t bytes) override;
   void ReleaseMemory() override;
-  bool RunKernel(int loop_count) override;
+  bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) override;
 
  private:
   const CudaApi *api_;
@@ -29,6 +31,7 @@ class NvidiaDevice final : public GpuDevice {
   size_t out_bytes_;
   CUdeviceptr mem_load_ptr_;  // optional memory-load block
   size_t mem_load_bytes_;
+  MemSweep sweep_;  // where the next launch's traffic goes in that block
   std::string name_;
   int device_index_;
 

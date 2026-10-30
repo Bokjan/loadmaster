@@ -36,6 +36,7 @@ void AmdDevice::Destroy() {
     api_->hipFree(mem_load_ptr_);
     mem_load_ptr_ = nullptr;
     mem_load_bytes_ = 0;
+    sweep_.Clear();
   }
   if (out_ptr_ != nullptr) {
     api_->hipFree(out_ptr_);
@@ -191,6 +192,23 @@ DeviceLocator AmdDevice::Locator() const {
   return out;
 }
 
+std::optional<double> AmdDevice::MemoryBandwidth() const {
+  // hipDeviceAttribute_t values (hip_runtime_api.h, ROCm 5 and later).
+  constexpr int kHipDeviceAttributeMemoryBusWidth = 59;   // bits
+  constexpr int kHipDeviceAttributeMemoryClockRate = 60;  // kHz
+  int clock_khz = 0;
+  int bus_bits = 0;
+  if (api_ == nullptr || api_->hipDeviceGetAttribute == nullptr ||
+      api_->hipDeviceGetAttribute(&clock_khz, kHipDeviceAttributeMemoryClockRate, device_index_) !=
+          hipSuccess ||
+      api_->hipDeviceGetAttribute(&bus_bits, kHipDeviceAttributeMemoryBusWidth, device_index_) !=
+          hipSuccess ||
+      clock_khz <= 0 || bus_bits <= 0) {
+    return std::nullopt;
+  }
+  return 2.0 * clock_khz * 1e3 * bus_bits / 8.0;
+}
+
 bool AmdDevice::AllocateMemory(size_t bytes) {
   if (api_ == nullptr || !MakeCurrent()) {
     return false;
@@ -199,6 +217,7 @@ bool AmdDevice::AllocateMemory(size_t bytes) {
     api_->hipFree(mem_load_ptr_);
     mem_load_ptr_ = nullptr;
     mem_load_bytes_ = 0;
+    sweep_.Clear();
   }
   const hipError_t rc = api_->hipMalloc(&mem_load_ptr_, bytes);
   if (rc != hipSuccess) {
@@ -220,6 +239,7 @@ bool AmdDevice::AllocateMemory(size_t bytes) {
     return false;
   }
   mem_load_bytes_ = bytes;
+  sweep_.Reset({bytes});
   return true;
 }
 
@@ -232,18 +252,28 @@ void AmdDevice::ReleaseMemory() {
   }
   mem_load_ptr_ = nullptr;
   mem_load_bytes_ = 0;
+  sweep_.Clear();
 }
 
-bool AmdDevice::RunKernel(int loop_count) {
+bool AmdDevice::RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) {
   if (api_ == nullptr || busy_func_ == nullptr || !MakeCurrent()) {
     return false;
   }
   if (loop_count < 1) {
     loop_count = 1;
   }
-  void *args[] = {&out_ptr_, &loop_count};
-  hipError_t rc = api_->hipModuleLaunchKernel(busy_func_, kGpuKernelGridSize, 1, 1,
-                                              kGpuKernelBlockSize, 1, 1, 0, nullptr, args, nullptr);
+  const unsigned int grid = kGpuKernelGridSize;
+  const unsigned int block = kGpuKernelBlockSize;
+  const SweepArgs sweep = sweep_.Next(loop_count, mem_traffic_bytes, grid * block);
+  // Without traffic the kernel never dereferences `mem`; any valid pointer.
+  void *mem = sweep.words != 0 ? mem_load_ptr_ : out_ptr_;
+  unsigned long long mem_offset = sweep.offset_words;
+  unsigned int mem_words = sweep.words;
+  unsigned int mem_base = sweep.base;
+  int mem_stride = sweep.stride;
+  void *args[] = {&out_ptr_, &loop_count, &mem, &mem_offset, &mem_words, &mem_base, &mem_stride};
+  hipError_t rc =
+      api_->hipModuleLaunchKernel(busy_func_, grid, 1, 1, block, 1, 1, 0, nullptr, args, nullptr);
   if (rc != hipSuccess) {
     LOG_WARN("hipModuleLaunchKernel failed: %s", HipErrorString(rc));
     return false;

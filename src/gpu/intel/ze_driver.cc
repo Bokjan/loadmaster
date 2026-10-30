@@ -83,6 +83,8 @@ bool DoLoad() {
   ok &= Resolve(g_handle, "zeMemFree", g_api.zeMemFree);
   Resolve(g_handle, "zeDevicePciGetPropertiesExt", g_api.zeDevicePciGetPropertiesExt,
           /*required=*/false);
+  Resolve(g_handle, "zeDeviceGetMemoryProperties", g_api.zeDeviceGetMemoryProperties,
+          /*required=*/false);
 
   if (!ok) {
     LOG_WARN("failed to resolve all Level Zero symbols");

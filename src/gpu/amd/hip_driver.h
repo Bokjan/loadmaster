@@ -47,6 +47,8 @@ struct HipApi {
   const char *(*hipGetErrorString)(hipError_t err);
   // Optional (nullptr if missing): device identity for the contention monitor.
   hipError_t (*hipDeviceGetPCIBusId)(char *pciBusId, int len, int device);
+  // Optional: the memory clock and bus width, for the `-gm` traffic rate.
+  hipError_t (*hipDeviceGetAttribute)(int *pi, int attr, int deviceId);
 
   // libhiprtc
   hiprtcResult (*hiprtcCreateProgram)(hiprtcProgram *prog, const char *src, const char *name,

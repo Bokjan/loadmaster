@@ -12,9 +12,12 @@
 
 #  include <unistd.h>
 
+#  include <chrono>
 #  include <filesystem>
 #  include <fstream>
+#  include <optional>
 #  include <string>
+#  include <thread>
 #  include <vector>
 
 #  include "gpu/contention/drm_source.h"
@@ -175,16 +178,96 @@ TEST_F(ContentionLinuxTest, DrmIgnoresOtherVendorsRuntimes) {
   EXPECT_EQ(out[0].verdict, Verdict::kIdle);
 }
 
-TEST_F(ContentionLinuxTest, DrmSkipsDevicesAlreadyBusy) {
+TEST_F(ContentionLinuxTest, DrmSkipsDevicesAlreadyBusyAndMeasured) {
   DrmNode("renderD128", "0000:03:00.0", "amdgpu");
   Link("proc/600/fd/3", "/dev/dri/renderD128");
   File("proc/600/maps", "... /usr/lib/libRusticlOpenCL.so.1\n");
   DrmSource source(root_.string(), kSelf);
-  // amdkfd already saw pid 77 on it.
-  std::vector<Observation> out = {{Verdict::kBusy, 77}};
+  // amdkfd already saw pid 77 on it, and amdgpu measured it.
+  Observation busy;
+  busy.verdict = Verdict::kBusy;
+  busy.pid = 77;
+  busy.device_busy = 50.0;
+  std::vector<Observation> out = {busy};
   source.Sample({At("0000:03:00.0")}, out);
   EXPECT_EQ(out[0].verdict, Verdict::kBusy);
   EXPECT_EQ(out[0].pid, 77);
+  EXPECT_EQ(out[0].device_busy, 50.0);
+}
+
+TEST_F(ContentionLinuxTest, DrmAddsUpEveryClientsBusyTimeOursIncluded) {
+  DrmNode("renderD128", "0000:03:00.0", "i915");
+  // Us, through Level Zero, and an OpenCL job.
+  const std::string self = "proc/" + std::to_string(kSelf);
+  Link(self + "/fd/3", "/dev/dri/renderD128");
+  File(self + "/fdinfo/3", I915Fdinfo(1, 0));
+  Link("proc/400/fd/6", "/dev/dri/renderD128");
+  File("proc/400/maps", "... /usr/lib/intel-opencl/libigdrcl.so\n");
+  File("proc/400/fdinfo/6", I915Fdinfo(12, 0));
+
+  DrmSource source(root_.string(), kSelf);
+  const std::vector<DeviceLocator> devices = {At("0000:03:00.0")};
+  std::vector<Observation> out(devices.size());
+  source.Sample(devices, out);  // baselines
+  ASSERT_EQ(out[0].verdict, Verdict::kIdle);
+
+  // Over the next ~1 s: 300 ms of theirs, 200 ms of ours.
+  const auto start = std::chrono::steady_clock::now();
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  File(self + "/fdinfo/3", I915Fdinfo(1, 200'000'000));
+  File("proc/400/fdinfo/6", I915Fdinfo(12, 300'000'000));
+  out.assign(devices.size(), Observation{});
+  source.Sample(devices, out);
+  const double wall_s =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+  EXPECT_EQ(out[0].verdict, Verdict::kBusy);
+  EXPECT_EQ(out[0].pid, 400);
+  ASSERT_TRUE(out[0].device_busy.has_value());
+  // The window runs from the first Sample's readings to the second's.
+  EXPECT_LE(*out[0].device_busy, 50.0 + 1.0);
+  EXPECT_GE(*out[0].device_busy, 50.0 / wall_s * 0.9);
+
+  // We alone: the device is ours, whatever it measures.
+  File(self + "/fdinfo/3", I915Fdinfo(1, 900'000'000'000));
+  out.assign(devices.size(), Observation{});
+  source.Sample(devices, out);
+  EXPECT_EQ(out[0].verdict, Verdict::kIdle);
+}
+
+TEST_F(ContentionLinuxTest, DrmFallsBackToGpuBusyPercentWithoutUsageStats) {
+  DrmNode("renderD128", "0000:03:00.0", "amdgpu");
+  DrmNode("renderD129", "0000:04:00.0", "i915");
+  for (const char *node : {"renderD128", "renderD129"}) {
+    const std::string fd = node == std::string("renderD128") ? "3" : "4";
+    Link("proc/600/fd/" + fd, std::string("/dev/dri/") + node);
+    File("proc/600/fdinfo/" + fd, "pos:\t0\nflags:\t02100002\n");
+  }
+  File("proc/600/maps", "... /usr/lib/libRusticlOpenCL.so.1\n");
+  File("sys/bus/pci/devices/0000:03:00.0/gpu_busy_percent", "35\n");
+  DrmSource source(root_.string(), kSelf);
+  std::vector<Observation> out(2);
+  source.Sample({At("0000:03:00.0"), At("0000:04:00.0")}, out);
+  EXPECT_EQ(out[0].verdict, Verdict::kBusy);
+  EXPECT_EQ(out[0].device_busy, 35.0);
+  EXPECT_EQ(out[1].verdict, Verdict::kBusy);
+  EXPECT_EQ(out[1].device_busy, std::nullopt) << "i915 has no gpu_busy_percent";
+}
+
+TEST_F(ContentionLinuxTest, KfdMeasuresABusyDeviceAsAWhole) {
+  KfdNode(1, 1111, "location_id 768\ndomain 0\n");   // 0000:03:00.0
+  KfdNode(2, 2222, "location_id 1024\ndomain 0\n");  // 0000:04:00.0
+  KfdQueue(kSelf, 0, 1111);
+  KfdQueue(kSelf, 1, 2222);
+  KfdQueue(300, 2, 1111);
+  KfdQueue(300, 3, 2222);
+  File("sys/bus/pci/devices/0000:03:00.0/gpu_busy_percent", "80\n");
+  KfdSource source(root_.string(), kSelf);
+  std::vector<Observation> out(2);
+  source.Sample({At("0000:03:00.0", true), At("0000:04:00.0", true)}, out);
+  EXPECT_EQ(out[0].verdict, Verdict::kBusy);
+  EXPECT_EQ(out[0].device_busy, 80.0);
+  EXPECT_EQ(out[1].verdict, Verdict::kBusy);
+  EXPECT_EQ(out[1].device_busy, std::nullopt);
 }
 
 TEST_F(ContentionLinuxTest, KfdCountsQueuesPerGpu) {

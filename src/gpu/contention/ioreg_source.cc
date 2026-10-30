@@ -3,6 +3,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
 
+#include <algorithm>
 #include <chrono>
 #include <string>
 
@@ -101,7 +102,10 @@ void IoRegSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<
         CFRelease(creator_ref);
       }
       const auto creator = ParseUserClientCreator(creator_text);
-      if (creator && creator->pid != self_pid_ && creator->name != "WindowServer") {
+      if (creator && creator->name == "WindowServer") {
+        window_server_pids_.insert(creator->pid);
+      }
+      if (creator) {
         // A process can have several clients: sum them.
         current[{registry_id, creator->pid}] += ClientGpuNs(client);
       }
@@ -112,6 +116,7 @@ void IoRegSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<
     if (wall_ns <= 0.0) {
       continue;
     }
+    double total = 0.0;
     for (const auto &[key, ns] : current) {
       if (key.first != registry_id) {
         continue;
@@ -121,11 +126,20 @@ void IoRegSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<
         continue;  // new process (or restarted pid): no baseline yet
       }
       const double share = 100.0 * static_cast<double>(ns - prev->second) / wall_ns;
+      // Everybody's time adds to the device's, but only processes other
+      // than us and the compositor count as users to make room for.
+      total += share;
+      if (key.second == self_pid_ || window_server_pids_.count(key.second) != 0) {
+        continue;
+      }
       if (share >= kGpuYieldMinBusyPercent && share > best_share) {
         best_share = share;
         out[d].verdict = Observation::Verdict::kBusy;
         out[d].pid = key.second;
       }
+    }
+    if (out[d].verdict == Observation::Verdict::kBusy) {
+      out[d].device_busy = std::min(total, 100.0);
     }
   }
   last_ns_ = std::move(current);

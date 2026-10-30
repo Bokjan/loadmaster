@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace gpu {
@@ -59,6 +60,12 @@ class GpuDevice {
   // Identity for the contention monitor. Only valid after Init().
   virtual DeviceLocator Locator() const { return {}; }
 
+  // Peak memory bandwidth in bytes per second as the driver reports it
+  // (memory clock x bus width, double data rate), or nullopt where the
+  // backend can't tell. Sets the `-gm` block's traffic rate. Only valid
+  // after Init().
+  virtual std::optional<double> MemoryBandwidth() const { return std::nullopt; }
+
   // Allocate `bytes` of device memory and overwrite it once to force
   // physical commit. Safe to call multiple times (previous block freed).
   virtual bool AllocateMemory(size_t bytes) = 0;
@@ -67,7 +74,11 @@ class GpuDevice {
   // Launch the busy kernel with the given per-thread loop count and block
   // until completion. Returns false on launch / sync failure. Kernel time
   // is linear in `loop_count`; calibration lives in GpuWorkerContext.
-  virtual bool RunKernel(int loop_count) = 0;
+  // Along the way the kernel reads and writes back about
+  // `mem_traffic_bytes` of the block from AllocateMemory(), continuing
+  // where the previous launch stopped (see gpu::MemSweep); no traffic
+  // without a block.
+  virtual bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) = 0;
 };
 
 }  // namespace gpu

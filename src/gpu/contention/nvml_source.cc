@@ -1,6 +1,8 @@
 #include "nvml_source.h"
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 
 #include "core/platform.h"
 #include "util/log.h"
@@ -14,6 +16,51 @@ constexpr int kNvmlErrorInvalidArgument = 2;
 constexpr int kNvmlErrorNotFound = 6;
 constexpr int kNvmlErrorInsufficientSize = 7;
 constexpr int kNvmlDriverWddm = 0;
+constexpr int kNvmlGpuUtilizationSamples = 1;
+// nvmlValueType_t
+constexpr int kNvmlValueDouble = 0;
+constexpr int kNvmlValueUnsignedInt = 1;
+constexpr int kNvmlValueUnsignedLong = 2;
+constexpr int kNvmlValueUnsignedLongLong = 3;
+
+// nvmlSample_t: { unsigned long long timeStamp; nvmlValue_t sampleValue; },
+// the value an 8-byte union whose members all start at its first byte.
+struct NvmlSample {
+  unsigned long long time_stamp;
+  unsigned char value[8];
+};
+// nvmlUtilization_t: { gpu; memory }, percent.
+struct NvmlUtilization {
+  unsigned int gpu;
+  unsigned int memory;
+};
+
+std::optional<double> SampleValue(const NvmlSample &sample, int type) {
+  switch (type) {
+    case kNvmlValueDouble: {
+      double v = 0.0;
+      std::memcpy(&v, sample.value, sizeof(v));
+      return v;
+    }
+    case kNvmlValueUnsignedInt: {
+      unsigned int v = 0;
+      std::memcpy(&v, sample.value, sizeof(v));
+      return static_cast<double>(v);
+    }
+    case kNvmlValueUnsignedLong: {
+      unsigned long v = 0;
+      std::memcpy(&v, sample.value, sizeof(v));
+      return static_cast<double>(v);
+    }
+    case kNvmlValueUnsignedLongLong: {
+      unsigned long long v = 0;
+      std::memcpy(&v, sample.value, sizeof(v));
+      return static_cast<double>(v);
+    }
+    default:
+      return std::nullopt;
+  }
+}
 
 // nvmlProcessInfo_v2_t, filled by the _v2 and _v3 entry points (R450+):
 // { pid; usedGpuMemory; gpuInstanceId; computeInstanceId }.
@@ -41,7 +88,9 @@ NvmlSource::NvmlSource(int self_pid)
       get_handle_by_pci_bus_id_(nullptr),
       get_compute_processes_(nullptr),
       process_info_size_(0),
-      get_driver_model_(nullptr) {
+      get_driver_model_(nullptr),
+      get_samples_(nullptr),
+      get_utilization_(nullptr) {
   // Ships with the NVIDIA driver: libnvidia-ml.so.1 on Linux, nvml.dll in
   // System32 on Windows (R450 and later).
   static const char *const kCandidates[] = {
@@ -76,6 +125,9 @@ NvmlSource::NvmlSource(int self_pid)
     ok = false;  // can't tell WDDM devices apart, and those mislead
   }
 #endif
+  // Optional: without them a device in use is left alone entirely.
+  util::DlsymInto(lib_, "nvmlDeviceGetSamples", get_samples_);
+  util::DlsymInto(lib_, "nvmlDeviceGetUtilizationRates", get_utilization_);
   if (!ok) {
     LOG_WARN("NVML: missing entry points, not using it");
     util::Dlclose(lib_);
@@ -124,6 +176,41 @@ bool NvmlSource::ComputePids(DeviceHandle device, std::vector<int> &pids) {
     return true;
   }
   return false;
+}
+
+std::optional<double> NvmlSource::DeviceBusy(DeviceHandle device) {
+  if (get_samples_ != nullptr) {
+    // The driver keeps a buffer of samples (every ~1/6 s): average the
+    // ones newer than what the previous call read.
+    unsigned long long &last = last_sample_us_[device];
+    int type = 0;
+    unsigned int count = 0;
+    Return rc = get_samples_(device, kNvmlGpuUtilizationSamples, last, &type, &count, nullptr);
+    if (rc == kNvmlSuccess && count > 0) {
+      std::vector<NvmlSample> buf(count);
+      rc = get_samples_(device, kNvmlGpuUtilizationSamples, last, &type, &count, buf.data());
+      double sum = 0.0;
+      unsigned int used = 0;
+      for (unsigned int i = 0; rc == kNvmlSuccess && i < count && i < buf.size(); ++i) {
+        if (const auto v = SampleValue(buf[i], type)) {
+          sum += *v;
+          ++used;
+          last = std::max(last, buf[i].time_stamp);
+        }
+      }
+      if (used > 0) {
+        return sum / used;
+      }
+    }
+    // NOT_FOUND (nothing new) or unsupported: take the current reading.
+  }
+  if (get_utilization_ != nullptr) {
+    NvmlUtilization u{};
+    if (get_utilization_(device, &u) == kNvmlSuccess) {
+      return static_cast<double>(u.gpu);
+    }
+  }
+  return std::nullopt;
 }
 
 void NvmlSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Observation> &out) {
@@ -181,6 +268,12 @@ void NvmlSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<O
     }
     out[i].verdict = others > 0 ? Observation::Verdict::kBusy : Observation::Verdict::kIdle;
     out[i].pid = other_pid;
+    // Read every poll, so the samples averaged are the ones since the
+    // previous poll even when the other process has only just appeared.
+    const auto busy = DeviceBusy(it->second);
+    if (others > 0) {
+      out[i].device_busy = busy;
+    }
   }
 }
 

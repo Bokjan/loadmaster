@@ -82,6 +82,7 @@ void AppleMetalDevice::Destroy() {
     (void)b;
     mem_buffer_ = nullptr;
     mem_bytes_ = 0;
+    sweep_.Clear();
   }
   if (out_buffer_ != nullptr) {
     id<MTLBuffer> b = (__bridge_transfer id<MTLBuffer>)out_buffer_;
@@ -227,6 +228,7 @@ bool AppleMetalDevice::AllocateMemory(size_t bytes) {
       (void)b;
       mem_buffer_ = nullptr;
       mem_bytes_ = 0;
+      sweep_.Clear();
     }
 
     id<MTLDevice> device = (__bridge id<MTLDevice>)device_;
@@ -253,6 +255,7 @@ bool AppleMetalDevice::AllocateMemory(size_t bytes) {
 
     mem_buffer_ = (__bridge_retained void *)buffer;
     mem_bytes_ = bytes;
+    sweep_.Reset({bytes});
     return true;
   }
 }
@@ -263,10 +266,11 @@ void AppleMetalDevice::ReleaseMemory() {
     (void)b;
     mem_buffer_ = nullptr;
     mem_bytes_ = 0;
+    sweep_.Clear();
   }
 }
 
-bool AppleMetalDevice::RunKernel(int loop_count) {
+bool AppleMetalDevice::RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) {
   if (queue_ == nullptr || pipeline_ == nullptr || out_buffer_ == nullptr) {
     return false;
   }
@@ -298,6 +302,24 @@ bool AppleMetalDevice::RunKernel(int loop_count) {
     // of kGpuKernelBlockSize threads each.
     MTLSize grid = MTLSizeMake(static_cast<NSUInteger>(kGpuKernelGridSize), 1, 1);
     MTLSize tg = MTLSizeMake(static_cast<NSUInteger>(kGpuKernelBlockSize), 1, 1);
+
+    // Without traffic the kernel never dereferences `mem`; any buffer.
+    const SweepArgs sweep =
+        sweep_.Next(loop_count, mem_traffic_bytes, static_cast<uint32_t>(grid.width * tg.width));
+    if (sweep.words != 0) {
+      [enc setBuffer:(__bridge id<MTLBuffer>)mem_buffer_ offset:0 atIndex:2];
+    } else {
+      [enc setBuffer:out_buffer offset:0 atIndex:2];
+    }
+    const uint64_t mem_offset = sweep.offset_words;
+    const uint32_t mem_words = sweep.words;
+    const uint32_t mem_base = sweep.base;
+    const uint32_t mem_stride = static_cast<uint32_t>(sweep.stride);
+    [enc setBytes:&mem_offset length:sizeof(mem_offset) atIndex:3];
+    [enc setBytes:&mem_words length:sizeof(mem_words) atIndex:4];
+    [enc setBytes:&mem_base length:sizeof(mem_base) atIndex:5];
+    [enc setBytes:&mem_stride length:sizeof(mem_stride) atIndex:6];
+
     [enc dispatchThreadgroups:grid threadsPerThreadgroup:tg];
     [enc endEncoding];
 

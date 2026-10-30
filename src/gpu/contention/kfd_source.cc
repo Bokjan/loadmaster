@@ -70,6 +70,7 @@ void KfdSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
       }
     }
   }
+  std::set<std::string> busy_pcis;
   for (size_t i = 0; i < devices.size(); ++i) {
     const auto it = gpu_ids_.find(WithoutFunction(devices[i].pci_bus_id));
     if (devices[i].pci_bus_id.empty() || it == gpu_ids_.end()) {
@@ -89,6 +90,20 @@ void KfdSource::Sample(const std::vector<DeviceLocator> &devices, std::vector<Ob
     }
     out[i].verdict = others > 0 ? Observation::Verdict::kBusy : Observation::Verdict::kIdle;
     out[i].pid = others > 0 ? *pids.begin() : 0;
+    if (others > 0) {
+      busy_pcis.insert(devices[i].pci_bus_id);
+    }
+  }
+  // amdkfd has no per-process usage; amdgpu has the whole device's.
+  if (busy_pcis.empty()) {
+    return;
+  }
+  const auto busy = linux_fs::AverageGpuBusyPercent(root_, busy_pcis);
+  for (size_t i = 0; i < devices.size(); ++i) {
+    const auto it = busy.find(devices[i].pci_bus_id);
+    if (out[i].verdict == Observation::Verdict::kBusy && it != busy.end()) {
+      out[i].device_busy = it->second;
+    }
   }
 }
 

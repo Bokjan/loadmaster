@@ -299,6 +299,7 @@ bool OpenClDevice::AllocateMemory(std::size_t bytes) {
   }
   // One clCreateBuffer is capped at CL_DEVICE_MAX_MEM_ALLOC_SIZE, so a
   // large `-gm` used to fail outright; allocate it in chunks instead.
+  std::vector<std::size_t> chunk_bytes;
   std::size_t remaining = bytes;
   while (remaining > 0) {
     const std::size_t chunk = static_cast<std::size_t>(std::min<cl_ulong>(remaining, max_alloc));
@@ -311,6 +312,7 @@ bool OpenClDevice::AllocateMemory(std::size_t bytes) {
       return false;
     }
     mem_load_bufs_.push_back(buf);
+    chunk_bytes.push_back(chunk);
     mem_load_bytes_ += chunk;
     remaining -= chunk;
     // Force backing-store commit by filling the chunk once.
@@ -324,6 +326,7 @@ bool OpenClDevice::AllocateMemory(std::size_t bytes) {
     }
   }
   api_->clFinish(queue_);
+  sweep_.Reset(chunk_bytes);
   return true;
 }
 
@@ -336,21 +339,45 @@ void OpenClDevice::ReleaseMemory() {
   }
   mem_load_bufs_.clear();
   mem_load_bytes_ = 0;
+  sweep_.Clear();
 }
 
-bool OpenClDevice::RunKernel(int loop_count) {
+bool OpenClDevice::RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) {
   if (api_ == nullptr || kernel_ == nullptr || queue_ == nullptr) {
     return false;
   }
   if (loop_count < 1) {
     loop_count = 1;
   }
+  const size_t global_size = static_cast<size_t>(kGpuKernelGridSize) * local_size_;
+  const SweepArgs sweep =
+      sweep_.Next(loop_count, mem_traffic_bytes, static_cast<std::uint32_t>(global_size));
+  // Without traffic the kernel never dereferences `mem`; any valid buffer.
+  const cl_mem mem = sweep.words != 0 ? mem_load_bufs_[sweep.segment] : out_buf_;
+  const cl_ulong mem_offset = sweep.offset_words;
+  const cl_uint mem_words = sweep.words;
+  const cl_uint mem_base = sweep.base;
+  const int mem_stride = sweep.stride;
   cl_int rc = api_->clSetKernelArg(kernel_, 1, sizeof(int), &loop_count);
+  if (rc == CL_SUCCESS) {
+    rc = api_->clSetKernelArg(kernel_, 2, sizeof(cl_mem), &mem);
+  }
+  if (rc == CL_SUCCESS) {
+    rc = api_->clSetKernelArg(kernel_, 3, sizeof(cl_ulong), &mem_offset);
+  }
+  if (rc == CL_SUCCESS) {
+    rc = api_->clSetKernelArg(kernel_, 4, sizeof(cl_uint), &mem_words);
+  }
+  if (rc == CL_SUCCESS) {
+    rc = api_->clSetKernelArg(kernel_, 5, sizeof(cl_uint), &mem_base);
+  }
+  if (rc == CL_SUCCESS) {
+    rc = api_->clSetKernelArg(kernel_, 6, sizeof(int), &mem_stride);
+  }
   if (rc != CL_SUCCESS) {
-    LOG_WARN("clSetKernelArg(loop) failed: %s (rc=%d)", ClErrorString(rc), rc);
+    LOG_WARN("clSetKernelArg(per-launch) failed: %s (rc=%d)", ClErrorString(rc), rc);
     return false;
   }
-  const size_t global_size = static_cast<size_t>(kGpuKernelGridSize) * local_size_;
   rc = api_->clEnqueueNDRangeKernel(queue_, kernel_, 1, nullptr, &global_size, &local_size_, 0,
                                     nullptr, nullptr);
   if (rc != CL_SUCCESS) {

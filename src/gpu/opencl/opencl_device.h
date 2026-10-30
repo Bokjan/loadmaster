@@ -7,6 +7,7 @@
 
 #include "cl_driver.h"
 #include "gpu/device.h"
+#include "gpu/mem_sweep.h"
 
 namespace gpu::opencl {
 
@@ -29,7 +30,7 @@ class OpenClDevice final : public GpuDevice {
   DeviceLocator Locator() const override;
   bool AllocateMemory(std::size_t bytes) override;
   void ReleaseMemory() override;
-  bool RunKernel(int loop_count) override;
+  bool RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) override;
 
   // Number of OpenCL GPU devices visible across all platforms. Returns 0
   // if the loader can't be opened (factory uses this to decide whether
@@ -56,6 +57,7 @@ class OpenClDevice final : public GpuDevice {
   // (often only a quarter of VRAM).
   std::vector<cl_mem> mem_load_bufs_;
   std::size_t mem_load_bytes_;
+  MemSweep sweep_;  // where the next launch's traffic goes in that block
   std::string name_;
   std::string platform_name_;
   int device_index_;

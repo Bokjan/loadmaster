@@ -1,6 +1,7 @@
 #include "manager.h"
 
 #include <chrono>
+#include <optional>
 #include <string>
 
 #include "constants.h"
@@ -60,8 +61,8 @@ bool GpuResourceManager::Init() {
 bool GpuResourceManager::CalibrateWorkers() {
   const size_t before = workers_.size();
   std::erase_if(workers_, [](const std::unique_ptr<GpuWorkerContext> &w) {
-    if (w->Yielding()) {
-      return false;  // calibrates on its own thread once it resumes
+    if (w->Sharing()) {
+      return false;  // calibrates on its own thread once there is room
     }
     if (w->CalibrateBaseLoopCount()) {
       return false;
@@ -93,7 +94,7 @@ void GpuResourceManager::InitContentionMonitor() {
   std::vector<std::string> names;
   std::vector<DeviceLocator> locators;
   for (const auto &w : workers_) {
-    w->SetYield(false);  // the first Poll() below decides afresh
+    w->SetOthers(std::nullopt);  // the first Poll() below decides afresh
     names.push_back(w->device()->Name());
     locators.push_back(w->device()->Locator());
     LOG_DEBUG("GPU %s: pci=%s luid=0x%llx registry_id=0x%llx", names.back().c_str(),
@@ -101,19 +102,26 @@ void GpuResourceManager::InitContentionMonitor() {
               static_cast<unsigned long long>(locators.back().luid),
               static_cast<unsigned long long>(locators.back().registry_id));
   }
-  auto on_change = [this](size_t i, const std::string &name, bool yield, int pid) {
-    if (yield && pid > 0) {
-      LOG_INFO("GPU %s: in use by another process (pid %d), yielding", name.c_str(), pid);
-    } else if (yield) {
-      LOG_INFO("GPU %s: in use by another process, yielding", name.c_str());
-    } else {
-      LOG_INFO("GPU %s: no other process for %d s, resuming", name.c_str(),
+  auto on_change = [this](size_t i, const std::string &name, std::optional<int> others, int pid) {
+    const bool was = workers_[i]->Sharing();
+    if (!others) {
+      LOG_INFO("GPU %s: no other process for %d s, back to the full load", name.c_str(),
                kGpuYieldResumeMS / kMillisecondsPerSecond);
+    } else if (!was && pid > 0) {
+      LOG_INFO("GPU %s: in use by another process (pid %d) taking %d%%, filling the rest",
+               name.c_str(), pid, *others);
+    } else if (!was) {
+      LOG_INFO("GPU %s: in use by another process taking %d%%, filling the rest", name.c_str(),
+               *others);
+    } else {
+      LOG_DEBUG("GPU %s: other processes take %d%%", name.c_str(), *others);
     }
-    workers_[i]->SetYield(yield);
+    workers_[i]->SetOthers(others);
   };
+  auto own_busy_ms = [this](size_t i) { return workers_[i]->BusyMs(); };
   monitor_ = std::make_unique<contention::Monitor>(std::move(names), std::move(locators),
-                                                   contention::CreatePlatformSources(), on_change);
+                                                   contention::CreatePlatformSources(), on_change,
+                                                   own_busy_ms);
   monitor_->Poll(std::chrono::steady_clock::now());
 }
 

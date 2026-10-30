@@ -296,12 +296,40 @@ DeviceLocator IntelDevice::Locator() const {
   return out;
 }
 
+std::optional<double> IntelDevice::MemoryBandwidth() const {
+  if (api_ == nullptr || device_ == nullptr || api_->zeDeviceGetMemoryProperties == nullptr) {
+    return std::nullopt;
+  }
+  uint32_t count = 0;
+  if (api_->zeDeviceGetMemoryProperties(device_, &count, nullptr) != ZE_RESULT_SUCCESS ||
+      count == 0) {
+    return std::nullopt;
+  }
+  std::vector<ze_device_memory_properties_t> props(count);
+  for (auto &p : props) {
+    p.stype = ZE_STRUCTURE_TYPE_DEVICE_MEMORY_PROPERTIES;
+  }
+  if (api_->zeDeviceGetMemoryProperties(device_, &count, props.data()) != ZE_RESULT_SUCCESS) {
+    return std::nullopt;
+  }
+  // The fastest of the device's memories (HBM next to DDR, ...).
+  double best = 0.0;
+  for (uint32_t i = 0; i < count && i < props.size(); ++i) {
+    best = std::max(best, 2.0 * props[i].maxClockRate * 1e6 * props[i].maxBusWidth / 8.0);
+  }
+  if (best <= 0.0) {
+    return std::nullopt;
+  }
+  return best;
+}
+
 bool IntelDevice::AllocateMemory(std::size_t bytes) {
   if (api_ == nullptr || context_ == nullptr) {
     return false;
   }
   ReleaseMemory();
   const std::size_t max_chunk = (max_alloc_bytes_ > 0) ? max_alloc_bytes_ : bytes;
+  std::vector<std::size_t> chunk_bytes;
   std::size_t remaining = bytes;
   while (remaining > 0) {
     const std::size_t chunk = std::min(remaining, max_chunk);
@@ -316,6 +344,7 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
       return false;
     }
     mem_load_ptrs_.push_back(ptr);
+    chunk_bytes.push_back(chunk);
     mem_load_bytes_ += chunk;
     remaining -= chunk;
   }
@@ -337,12 +366,9 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
   } else {
     const uint8_t pattern = 0xA5;
     ze_result_t fill_rc = ZE_RESULT_SUCCESS;
-    std::size_t left = bytes;
-    for (void *ptr : mem_load_ptrs_) {
-      const std::size_t chunk = std::min(left, max_chunk);
-      left -= chunk;
-      fill_rc = api_->zeCommandListAppendMemoryFill(tmp, ptr, &pattern, sizeof(pattern), chunk,
-                                                    nullptr, 0, nullptr);
+    for (std::size_t i = 0; i < mem_load_ptrs_.size(); ++i) {
+      fill_rc = api_->zeCommandListAppendMemoryFill(
+          tmp, mem_load_ptrs_[i], &pattern, sizeof(pattern), chunk_bytes[i], nullptr, 0, nullptr);
       if (fill_rc != ZE_RESULT_SUCCESS) {
         break;
       }
@@ -367,6 +393,7 @@ bool IntelDevice::AllocateMemory(std::size_t bytes) {
     }
     api_->zeCommandListDestroy(tmp);
   }
+  sweep_.Reset(chunk_bytes);
   return true;
 }
 
@@ -379,19 +406,45 @@ void IntelDevice::ReleaseMemory() {
   }
   mem_load_ptrs_.clear();
   mem_load_bytes_ = 0;
+  sweep_.Clear();
 }
 
-bool IntelDevice::RunKernel(int loop_count) {
+bool IntelDevice::RunKernel(int loop_count, std::uint64_t mem_traffic_bytes) {
   if (api_ == nullptr || kernel_ == nullptr || cmd_list_ == nullptr || queue_ == nullptr) {
     return false;
   }
   if (loop_count < 1) {
     loop_count = 1;
   }
-  // Re-bind the per-launch scalar arg (out pointer was bound once at Init).
+  // Re-bind the per-launch args (out pointer was bound once at Init).
+  // The group size was set at Init(); the launch below uses this grid.
+  const ze_group_count_t grid{static_cast<uint32_t>(kGpuKernelGridSize), 1, 1};
+  const SweepArgs sweep = sweep_.Next(
+      loop_count, mem_traffic_bytes, grid.groupCountX * static_cast<uint32_t>(kGpuKernelBlockSize));
+  // Without traffic the kernel never dereferences `mem`; any valid pointer.
+  void *mem = sweep.words != 0 ? mem_load_ptrs_[sweep.segment] : out_ptr_;
+  const uint64_t mem_offset = sweep.offset_words;
+  const uint32_t mem_words = sweep.words;
+  const uint32_t mem_base = sweep.base;
+  const int mem_stride = sweep.stride;
   ze_result_t rc = api_->zeKernelSetArgumentValue(kernel_, 1, sizeof(loop_count), &loop_count);
+  if (rc == ZE_RESULT_SUCCESS) {
+    rc = api_->zeKernelSetArgumentValue(kernel_, 2, sizeof(mem), &mem);
+  }
+  if (rc == ZE_RESULT_SUCCESS) {
+    rc = api_->zeKernelSetArgumentValue(kernel_, 3, sizeof(mem_offset), &mem_offset);
+  }
+  if (rc == ZE_RESULT_SUCCESS) {
+    rc = api_->zeKernelSetArgumentValue(kernel_, 4, sizeof(mem_words), &mem_words);
+  }
+  if (rc == ZE_RESULT_SUCCESS) {
+    rc = api_->zeKernelSetArgumentValue(kernel_, 5, sizeof(mem_base), &mem_base);
+  }
+  if (rc == ZE_RESULT_SUCCESS) {
+    rc = api_->zeKernelSetArgumentValue(kernel_, 6, sizeof(mem_stride), &mem_stride);
+  }
   if (rc != ZE_RESULT_SUCCESS) {
-    LOG_WARN("zeKernelSetArgumentValue(loop) failed: %s (rc=0x%x)", ZeResultString(rc), rc);
+    LOG_WARN("zeKernelSetArgumentValue(per-launch) failed: %s (rc=0x%x)", ZeResultString(rc), rc);
     return false;
   }
 
@@ -403,7 +456,6 @@ bool IntelDevice::RunKernel(int loop_count) {
     LOG_WARN("zeCommandListReset failed: %s (rc=0x%x)", ZeResultString(rc), rc);
     return false;
   }
-  ze_group_count_t grid{static_cast<uint32_t>(kGpuKernelGridSize), 1, 1};
   rc = api_->zeCommandListAppendLaunchKernel(cmd_list_, kernel_, &grid, nullptr, 0, nullptr);
   if (rc != ZE_RESULT_SUCCESS) {
     LOG_WARN("zeCommandListAppendLaunchKernel failed: %s (rc=0x%x)", ZeResultString(rc), rc);
