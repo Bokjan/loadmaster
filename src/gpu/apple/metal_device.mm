@@ -141,7 +141,7 @@ bool AppleMetalDevice::Init(int device_index) {
     id<MTLLibrary> library = nil;
     {
       util::obfuscate::Scoped<kBusyKernelMslEncoded.size()> msl(kBusyKernelMslEncoded,
-                                                                 kBusyKernelMslKey);
+                                                                kBusyKernelMslKey);
       NSString *src = [NSString stringWithUTF8String:msl.c_str()];
       library = [device newLibraryWithSource:src options:nil error:&err];
     }
@@ -156,8 +156,8 @@ bool AppleMetalDevice::Init(int device_index) {
       return false;
     }
     err = nil;
-    id<MTLComputePipelineState> pipeline =
-        [device newComputePipelineStateWithFunction:function error:&err];
+    id<MTLComputePipelineState> pipeline = [device newComputePipelineStateWithFunction:function
+                                                                                 error:&err];
     if (pipeline == nil) {
       LOG_WARN("Apple Metal: newComputePipelineStateWithFunction failed: %s",
                NsStringToStd([err localizedDescription]).c_str());
@@ -176,8 +176,8 @@ bool AppleMetalDevice::Init(int device_index) {
     const NSUInteger threads =
         static_cast<NSUInteger>(kGpuKernelGridSize) * static_cast<NSUInteger>(kGpuKernelBlockSize);
     const NSUInteger out_bytes = threads * sizeof(uint32_t);
-    id<MTLBuffer> out_buffer =
-        [device newBufferWithLength:out_bytes options:MTLResourceStorageModePrivate];
+    id<MTLBuffer> out_buffer = [device newBufferWithLength:out_bytes
+                                                   options:MTLResourceStorageModePrivate];
     if (out_buffer == nil) {
       LOG_WARN("Apple Metal: newBufferWithLength(%lu, scratch) returned nil",
                static_cast<unsigned long>(out_bytes));
@@ -236,8 +236,7 @@ bool AppleMetalDevice::AllocateMemory(size_t bytes) {
     // system RAM. MTLResourceStorageModePrivate forces a GPU-only
     // allocation and skips any CPU-side caching, which matches what
     // CUDA's cuMemAlloc / HIP's hipMalloc give us on discrete GPUs.
-    id<MTLBuffer> buffer =
-        [device newBufferWithLength:bytes options:MTLResourceStorageModePrivate];
+    id<MTLBuffer> buffer = [device newBufferWithLength:bytes options:MTLResourceStorageModePrivate];
     if (buffer == nil) {
       LOG_WARN("Apple Metal: newBufferWithLength(%zu) returned nil", bytes);
       return false;

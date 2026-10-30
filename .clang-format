@@ -1,4 +1,5 @@
-Language: Cpp
+---
+# Defaults for every language: C++ and the Objective-C++ (.mm) sources.
 BasedOnStyle: Google
 ColumnLimit: 100
 
@@ -11,3 +12,7 @@ IndentPPDirectives: AfterHash
 
 PointerAlignment: Right
 DerivePointerAlignment: false
+---
+Language: Cpp
+---
+Language: ObjC
